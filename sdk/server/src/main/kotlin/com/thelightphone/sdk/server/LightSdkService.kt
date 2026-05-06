@@ -2,6 +2,7 @@ package com.thelightphone.sdk.server
 
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Binder
@@ -19,6 +20,39 @@ class LightSdkService : Service() {
         private const val TAG = "LightSdkService"
     }
 
+    // TODO something more robust
+    private val tokensByUid = mutableMapOf<Int, String>()
+
+    private fun verifyCallerIsInstalledClient(callingId: Int): Boolean {
+        val packages = packageManager.getPackagesForUid(callingId) ?: return false
+        return packages.any { packageName ->
+            try {
+                packageManager.getPackageInfo(
+                    packageName,
+                    PackageManager.GET_SIGNING_CERTIFICATES
+                )
+                val hasMarker = packageManager.queryBroadcastReceivers(
+                    Intent(LightConstants.ACTION_SDK_MARKER).setPackage(packageName),
+                    PackageManager.GET_META_DATA
+                ).isNotEmpty()
+                // TODO: verify signing certificate against known keys
+                hasMarker
+            } catch (e: PackageManager.NameNotFoundException) {
+                false
+            }
+        }
+    }
+
+    private fun issueToken(uid: Int): String {
+        val token = java.util.UUID.randomUUID().toString()
+        synchronized(tokensByUid) { tokensByUid[uid] = token }
+        return token
+    }
+
+    private fun validateToken(uid: Int, token: String?): Boolean {
+        return synchronized(tokensByUid) { tokensByUid[uid] } == token
+    }
+
     private val binder = object : Binder() {
         override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
             return when (code) {
@@ -26,6 +60,31 @@ class LightSdkService : Service() {
                     data.enforceInterface(LightConstants.ACTION_BIND_SDK_SERVICE)
                     val methodId = data.readString()
                     val payload = data.readString()
+                    val token = data.readString()
+                    val callingId = getCallingUid()
+                    val isGetToken = methodId == LightServiceMethod.GetToken.id
+                    if (isGetToken) {
+                        if (!verifyCallerIsInstalledClient(callingId)) {
+                            Log.w(TAG, "Rejected GetToken from unverified caller uid=$callingId")
+                            reply?.apply {
+                                writeNoException()
+                                writeInt(LightResult.ErrorCode.NoPermission.ordinal)
+                                writeString("caller not verified")
+                            }
+                            return true
+                        }
+                    } else {
+                        if (!validateToken(callingId, token)) {
+                            Log.w(TAG, "Rejected request with invalid token from uid=$callingId")
+                            reply?.apply {
+                                writeNoException()
+                                writeInt(LightResult.ErrorCode.NoPermission.ordinal)
+                                writeString("invalid token")
+                            }
+                            return true
+                        }
+                    }
+
                     val result = if (methodId != null) {
                         runCatching { handleRequest(methodId, payload) }
                             .getOrElse {
@@ -58,6 +117,15 @@ class LightSdkService : Service() {
 
     private fun handleRequest(methodId: String, payload: String?): LightResult<String> {
         return when (allMethods[methodId]) {
+            LightServiceMethod.GetToken -> {
+                val token = issueToken(Binder.getCallingUid())
+                LightResult.Success(
+                    LightServiceMethod.GetToken.encodeResponse(
+                        LightServiceMethod.GetToken.Response(token = token)
+                    )
+                )
+            }
+
             LightServiceMethod.GetVersion -> {
                 LightResult.Success(
                     LightServiceMethod.GetVersion.encodeResponse(

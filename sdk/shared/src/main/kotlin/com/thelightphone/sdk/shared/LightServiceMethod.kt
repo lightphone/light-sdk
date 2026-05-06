@@ -31,6 +31,15 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
     /**
      * Define all service methods below. DO NOT CHANGE EXISTING METHODS
      */
+    object GetToken : LightServiceMethod<Unit, GetToken.Response> {
+        override val id = "GetToken"
+        override val requestSerializer = serializer<Unit>()
+        override val responseSerializer = serializer<Response>()
+
+        @Serializable
+        data class Response(val token: String)
+    }
+
     object GetVersion : LightServiceMethod<Unit, GetVersion.Response> {
         override val id = "GetVersion"
         override val requestSerializer = serializer<Unit>()
@@ -51,6 +60,7 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
 }
 
 val allMethods: Map<String, LightServiceMethod<*, *>> = listOf(
+    LightServiceMethod.GetToken,
     LightServiceMethod.GetVersion,
     LightServiceMethod.SetRingtone,
 ).associateBy { it.id }

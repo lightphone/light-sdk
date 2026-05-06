@@ -19,6 +19,7 @@ internal object LightServiceConnection : ServiceConnection {
     private var serviceBinder: IBinder? = null
     private var bound = false
     private var binderReady = CompletableDeferred<IBinder>()
+    private var token: String? = null
 
     fun bind(context: Context) {
         if (bound) return
@@ -35,19 +36,24 @@ internal object LightServiceConnection : ServiceConnection {
         if (!bound) return
         try {
             context.unbindService(this)
-        } catch (_: IllegalArgumentException) {}
+        } catch (_: IllegalArgumentException) {
+        }
         bound = false
         serviceBinder = null
     }
 
     fun request(method: String, data: String): LightResult<String> {
-        val binder = serviceBinder ?: return LightResult.Error(LightResult.ErrorCode.Unknown, "not connected")
+        val binder = serviceBinder ?: return LightResult.Error(
+            LightResult.ErrorCode.Unknown,
+            "not connected"
+        )
         val parcel = Parcel.obtain()
         val reply = Parcel.obtain()
         return try {
             parcel.writeInterfaceToken(LightConstants.ACTION_BIND_SDK_SERVICE)
             parcel.writeString(method)
             parcel.writeString(data)
+            parcel.writeString(token)
             binder.transact(LightConstants.TRANSACTION_REQUEST, parcel, reply, 0)
             reply.readException()
             val errorOrdinal = reply.readInt()
@@ -55,7 +61,8 @@ internal object LightServiceConnection : ServiceConnection {
                 LightResult.Success(reply.readString() ?: "")
             } else {
                 val extra = reply.readString()
-                val errorCode = LightResult.ErrorCode.entries.getOrElse(errorOrdinal) { LightResult.ErrorCode.Unknown }
+                val errorCode =
+                    LightResult.ErrorCode.entries.getOrElse(errorOrdinal) { LightResult.ErrorCode.Unknown }
                 LightResult.Error(errorCode, extra)
             }
         } catch (e: Exception) {
@@ -78,10 +85,30 @@ internal object LightServiceConnection : ServiceConnection {
     override fun onServiceDisconnected(name: ComponentName?) {
         Log.w(TAG, "Disconnected from LightSdkService")
         serviceBinder = null
+        token = null
         binderReady = CompletableDeferred()
     }
 
     suspend fun awaitBinder(): IBinder = binderReady.await()
+
+    fun ensureToken(): Boolean {
+        if (token != null) return true
+        return when (val result = request(
+            LightServiceMethod.GetToken.id,
+            LightServiceMethod.GetToken.encodeRequest(Unit)
+        )) {
+            is LightResult.Success -> {
+                token = LightServiceMethod.GetToken.decodeResponse(result.data).token
+                Log.i(TAG, "Acquired service token")
+                true
+            }
+
+            is LightResult.Error -> {
+                Log.e(TAG, "Failed to acquire token: ${result.code} ${result.extra}")
+                false
+            }
+        }
+    }
 }
 
 suspend fun <TRequest, TResponse> callRemoteServiceMethod(
@@ -89,6 +116,7 @@ suspend fun <TRequest, TResponse> callRemoteServiceMethod(
     body: TRequest,
 ): LightResult<TResponse> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
     LightServiceConnection.awaitBinder()
+    LightServiceConnection.ensureToken()
     when (val result = LightServiceConnection.request(method.id, method.encodeRequest(body))) {
         is LightResult.Success -> LightResult.Success(method.decodeResponse(result.data))
         is LightResult.Error -> result
