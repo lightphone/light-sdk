@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,7 +37,7 @@ enum class LightTextVariant {
 @Composable
 private fun variantStyle(variant: LightTextVariant): TextStyle {
     val t = LightThemeTokens.typography
-    return when (variant) {
+    val base = when (variant) {
         LightTextVariant.Title -> t.title
         LightTextVariant.Subtitle -> t.subtitle
         LightTextVariant.Heading -> t.heading
@@ -50,6 +51,25 @@ private fun variantStyle(variant: LightTextVariant): TextStyle {
         LightTextVariant.Superfine -> t.superfine
         LightTextVariant.Micro -> t.micro
     }
+    return base.scaledForScreenHeight()
+}
+
+@Composable
+private fun TextStyle.scaledForScreenHeight(): TextStyle {
+    val fontSize = fontSize.scaledForScreenHeight()
+    val lineHeight = lineHeight.scaledForScreenHeight()
+    val letterSpacing = letterSpacing.scaledForScreenHeight()
+    return copy(
+        fontSize = fontSize,
+        lineHeight = lineHeight,
+        letterSpacing = letterSpacing,
+    )
+}
+
+@Composable
+private fun TextUnit.scaledForScreenHeight(): TextUnit {
+    if (this == TextUnit.Unspecified) return this
+    return value.designVerticalPxToSp()
 }
 
 @Composable
