@@ -10,6 +10,7 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thelightphone.lp3Keyboard.ui.*
 import com.thelightphone.sdk.ui.keyboard.LightEmbeddedLp3Keyboard
 import com.thelightphone.sdk.ui.keyboard.TextInputKeyboardCallback
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 
 @Composable
@@ -39,16 +42,16 @@ fun LightTextInputEditor(
     state: TextFieldState,
     onSubmit: (CharSequence) -> Unit,
     onBack: () -> Unit,
+    keyboardOptionsFlow: StateFlow<KeyboardOptions>,
     modifier: Modifier = Modifier,
     submitLabel: String = "SUBMIT",
     editorKey: Any = title,
 ) {
-
     val keyboardCallback = remember(state) { TextInputKeyboardCallback(state) }
 
     val keyboardViewModel: Lp3KeyboardViewModel = viewModel<DefaultLp3KeyboardViewModel>(
         key = "LightTextInputEditor-$editorKey",
-        factory = factory(keyboardCallback),
+        factory = factory(keyboardCallback, keyboardOptionsFlow),
     )
 
     LightTextInputEditor(title, state, onSubmit, onBack, keyboardViewModel, modifier, submitLabel)
@@ -96,13 +99,15 @@ fun LightTextInputEditor(
                             val down = awaitFirstDown(requireUnconsumed = false)
                             textLayout?.let { layout ->
                                 state.edit {
-                                    selection = TextRange(layout.getOffsetForPosition(down.position))
+                                    selection =
+                                        TextRange(layout.getOffsetForPosition(down.position))
                                 }
                             }
                             drag(down.id) { change ->
                                 textLayout?.let { layout ->
                                     state.edit {
-                                        selection = TextRange(layout.getOffsetForPosition(change.position))
+                                        selection =
+                                            TextRange(layout.getOffsetForPosition(change.position))
                                     }
                                 }
                                 change.consume()
@@ -144,17 +149,22 @@ fun LightTextInputEditor(
     }
 }
 
-private fun factory(callback: Lp3RepeatableKeyboardCallback): ViewModelProvider.Factory =
+private fun factory(
+    callback: Lp3RepeatableKeyboardCallback,
+    keyboardOptionsFlow: StateFlow<KeyboardOptions>
+): ViewModelProvider.Factory =
     object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return DefaultLp3KeyboardViewModel(
                 callback,
-                showCloseButtonForLayout = {
-                    when (it) {
+                keyboardOptionsFlow = keyboardOptionsFlow,
+                optionsForLayout = {
+                    val showCloseButton = when (it) {
                         EmojiLayout, is ExtendedCharKeyboard -> true
                         CapsLockedLayout, LowerCaseLayout, NumberLayout, SymbolsLayout, UpperCaseLayout -> false
                     }
+                    LayoutOptions(showCloseButton)
                 }
             ) as T
         }
@@ -181,8 +191,16 @@ private fun PreviewLightTextInputEditorDark() {
         LightTextInputEditor(
             title = "Name",
             state = state,
+            keyboardOptionsFlow = MutableStateFlow(defaultKeyboardOptions()),
             onSubmit = {},
             onBack = {},
         )
     }
 }
+
+fun defaultKeyboardOptions() = KeyboardOptions(
+    defaultEmojis,
+    displayReturn = true,
+    displayVoice = true,
+    enableKeyAnimation = true
+)

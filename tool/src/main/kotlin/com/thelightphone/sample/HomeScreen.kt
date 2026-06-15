@@ -30,10 +30,8 @@ import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.LightTheme
 import com.thelightphone.sdk.ui.LightThemeController
 import com.thelightphone.sdk.ui.LightThemeTokens
-import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.shared.error
-import com.thelightphone.sdk.shared.getOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 

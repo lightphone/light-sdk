@@ -11,7 +11,7 @@ sealed interface LightResult<out T> {
 
 fun <T> LightResult<T>.getOrNull() = when(this) {
     is LightResult.Error -> null
-    is LightResult.Success<T> -> this
+    is LightResult.Success<T> -> this.data
 }
 
 val LightResult<*>.error: LightResult.Error?

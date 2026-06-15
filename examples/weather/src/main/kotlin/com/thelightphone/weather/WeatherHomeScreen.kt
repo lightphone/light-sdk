@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
+import com.thelightphone.sdk.rememberKeyboardOptions
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
 import com.thelightphone.sdk.ui.LightFullscreenModal
@@ -48,7 +49,7 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
         val themeColors by LightThemeController.colors.collectAsState()
         val state by viewModel.uiState.collectAsState()
         val textFieldState = rememberTextFieldState("")
-
+        val keyboardOptionsFlow = rememberKeyboardOptions()
         LightTheme(colors = themeColors) {
             Box(
                 modifier = Modifier
@@ -60,6 +61,7 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
                         LightTextInputEditor(
                             title = "Location",
                             editorKey = state.locationInputSession,
+                            keyboardOptionsFlow = keyboardOptionsFlow,
                             state = textFieldState,
                             onSubmit = viewModel::submitLocation,
                             onBack = viewModel::cancelLocationInput,
@@ -156,22 +158,22 @@ private fun WeatherContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 1f.gridUnitsAsDp()),
         ) {
-            weatherLine("$dayLabel — ${day.date}")
-            weatherLine(day.weatherDescription)
-            weatherLine("High ${formatTemperature(day.tempMaxC, temperatureUnit)}")
-            weatherLine("Low ${formatTemperature(day.tempMinC, temperatureUnit)}")
-            weatherLine(
+            WeatherLine("$dayLabel — ${day.date}")
+            WeatherLine(day.weatherDescription)
+            WeatherLine("High ${formatTemperature(day.tempMaxC, temperatureUnit)}")
+            WeatherLine("Low ${formatTemperature(day.tempMinC, temperatureUnit)}")
+            WeatherLine(
                 "Feels like ${formatTemperature(day.apparentTempMaxC, temperatureUnit)}" +
                     " / ${formatTemperature(day.apparentTempMinC, temperatureUnit)}",
             )
-            weatherLine("Rain ${formatRain(day.precipitationMm, temperatureUnit)}")
+            WeatherLine("Rain ${formatRain(day.precipitationMm, temperatureUnit)}")
             day.precipitationProbabilityMax?.let { probability ->
-                weatherLine("Precip chance $probability%")
+                WeatherLine("Precip chance $probability%")
             }
-            weatherLine("Wind ${day.windSpeedMaxKmh.round1()} km/h ${day.windCompass}")
-            weatherLine("UV index ${day.uvIndexMax.round1()}")
-            weatherLine("Sunrise ${formatTime(day.sunrise)}")
-            weatherLine("Sunset ${formatTime(day.sunset)}")
+            WeatherLine("Wind ${day.windSpeedMaxKmh.round1()} km/h ${day.windCompass}")
+            WeatherLine("UV index ${day.uvIndexMax.round1()}")
+            WeatherLine("Sunrise ${formatTime(day.sunrise)}")
+            WeatherLine("Sunset ${formatTime(day.sunset)}")
         }
 
         LightBottomBar(
@@ -222,12 +224,12 @@ private fun WeeklyForecastContent(
                 Column(
                     modifier = Modifier.padding(bottom = 1.5f.gridUnitsAsDp()),
                 ) {
-                    weatherLine(formatWeeklyDayLabel(day.date))
-                    weatherLine(
+                    WeatherLine(formatWeeklyDayLabel(day.date))
+                    WeatherLine(
                         "High ${formatTemperature(day.tempMaxC, temperatureUnit)}" +
                             " · Low ${formatTemperature(day.tempMinC, temperatureUnit)}",
                     )
-                    weatherLine("Rain ${formatRain(day.precipitationMm, temperatureUnit)}")
+                    WeatherLine("Rain ${formatRain(day.precipitationMm, temperatureUnit)}")
                 }
             }
         }
@@ -285,7 +287,7 @@ private fun settingsButton(onClick: () -> Unit) = LightBarButton.LightIcon(
 )
 
 @Composable
-private fun weatherLine(text: String) {
+private fun WeatherLine(text: String) {
     LightText(
         text = text,
         variant = LightTextVariant.Copy,

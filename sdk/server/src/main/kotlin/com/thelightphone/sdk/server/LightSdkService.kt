@@ -148,6 +148,13 @@ class LightSdkService : Service() {
                 LightResult.Success(LightServiceMethod.SetRingtone.encodeResponse(Unit))
             }
 
+            LightServiceMethod.GetKeyboardOptions -> {
+                val optionsSnapshot = settings.keyboardOptions
+                LightResult.Success(
+                    LightServiceMethod.GetKeyboardOptions.encodeResponse(optionsSnapshot)
+                )
+            }
+
             null -> {
                 // The app that wraps this server may be able to handle custom methods
                 LightSdkServer.customServiceMethodResolver.invoke(callingId, methodId, payload)

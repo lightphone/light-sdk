@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import com.thelightphone.lp3Keyboard.ui.DarkKeyboardColors
 import com.thelightphone.lp3Keyboard.ui.LightKeyboardColors
@@ -16,14 +15,16 @@ import com.thelightphone.lp3Keyboard.ui.Lp3KeyboardTheme
 import com.thelightphone.lp3Keyboard.ui.Lp3KeyboardViewModel
 import com.thelightphone.lp3Keyboard.ui.LocalKeyboardColors
 import com.thelightphone.lp3Keyboard.ui.Lp3KeyboardWrapper
+import com.thelightphone.sdk.ui.LightThemeColors
 import com.thelightphone.sdk.ui.LightThemeTokens
 
 @Composable
 fun LightEmbeddedLp3Keyboard(viewModel: Lp3KeyboardViewModel) {
     val layout by viewModel.layoutFlow.collectAsState()
-    val options by viewModel.optionsFlow.collectAsState()
+    val keyboardOptions by viewModel.keyboardOptionsFlow.collectAsState()
+    val layoutOptions by viewModel.layoutOptionsFlow.collectAsState()
 
-    val keyboardColors = if (LightThemeTokens.colors.background.luminance() > 0.5f) {
+    val keyboardColors = if (LightThemeTokens.colors == LightThemeColors.Light) {
         LightKeyboardColors
     } else {
         DarkKeyboardColors
@@ -38,7 +39,8 @@ fun LightEmbeddedLp3Keyboard(viewModel: Lp3KeyboardViewModel) {
         ) {
             Lp3KeyboardWrapper(
                 layout = layout,
-                options = options,
+                keyboardOptions = keyboardOptions,
+                layoutOptions = layoutOptions,
                 callback = viewModel,
             )
         }

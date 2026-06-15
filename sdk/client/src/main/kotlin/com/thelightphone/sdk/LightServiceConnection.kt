@@ -11,10 +11,11 @@ import com.thelightphone.sdk.shared.LightConstants
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.seconds
 
+private const val TAG = "LightServiceConnection"
 internal object LightServiceConnection : ServiceConnection {
-
-    private const val TAG = "LightServiceConnection"
 
     private var serviceBinder: IBinder? = null
     private var bound = false
@@ -115,8 +116,14 @@ suspend fun <TRequest, TResponse> callRemoteServiceMethod(
     method: LightServiceMethod<TRequest, TResponse>,
     body: TRequest,
 ): LightResult<TResponse> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-    LightServiceConnection.awaitBinder()
-    LightServiceConnection.ensureToken()
+    val bound = withTimeoutOrNull(5.seconds) {
+        LightServiceConnection.awaitBinder()
+        LightServiceConnection.ensureToken()
+        true
+    }
+    if (bound != true) {
+        return@withContext LightResult.Error(LightResult.ErrorCode.Unknown, "Unable to bind to server")
+    }
     when (val result = LightServiceConnection.request(method.id, method.encodeRequest(body))) {
         is LightResult.Success -> LightResult.Success(method.decodeResponse(result.data))
         is LightResult.Error -> result
