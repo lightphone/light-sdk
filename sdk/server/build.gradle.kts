@@ -24,6 +24,10 @@ android {
         sourceCompatibility = JavaVersion.toVersion(rootProject.ext["jvmTarget"] as String)
         targetCompatibility = JavaVersion.toVersion(rootProject.ext["jvmTarget"] as String)
     }
+
+    publishing {
+        singleVariant("release") {}
+    }
 }
 
 kotlin {
