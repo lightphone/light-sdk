@@ -326,26 +326,6 @@ class WeatherViewModel(
         }
     }
 
-    fun clearLocation() {
-        viewModelScope.launch(Dispatchers.IO) {
-            dataStore.edit { prefs ->
-                prefs.remove(WeatherPreferences.LOCATION_QUERY)
-                prefs.remove(WeatherPreferences.LOCATION_NAME)
-                prefs.remove(WeatherPreferences.LATITUDE)
-                prefs.remove(WeatherPreferences.LONGITUDE)
-                prefs.remove(WeatherPreferences.FORECAST_JSON)
-            }
-            savedLocationQuery = ""
-            cachedLocationName = ""
-            locationInputSource = LocationInputSource.Initial
-            screenBeforeSettings = null
-            lastSelectedDay = WeatherDay.Today
-            _uiState.update {
-                it.openLocationInput(canCancel = false)
-            }
-        }
-    }
-
     fun cancelLocationInput() {
         if (!_uiState.value.canCancelLocationInput) return
         when (locationInputSource) {

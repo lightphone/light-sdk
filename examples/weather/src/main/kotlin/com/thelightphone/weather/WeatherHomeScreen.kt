@@ -99,7 +99,6 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
                             onBack = viewModel::closeSettings,
                             onChangeLocation = viewModel::openLocationFromSettings,
                             onToggleUnit = viewModel::toggleTemperatureUnit,
-                            onClearLocation = viewModel::clearLocation,
                         )
                     }
 
@@ -374,7 +373,6 @@ private fun SettingsContent(
     onBack: () -> Unit,
     onChangeLocation: () -> Unit,
     onToggleUnit: () -> Unit,
-    onClearLocation: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         LightTopBar(
@@ -400,13 +398,6 @@ private fun SettingsContent(
                 label = "Location",
                 value = shortLocationName(locationName),
                 onClick = onChangeLocation,
-            )
-            LightText(
-                text = "Clear Location",
-                variant = LightTextVariant.Heading,
-                modifier = Modifier
-                    .clickable(onClick = onClearLocation)
-                    .padding(vertical = 0.75f.gridUnitsAsDp()),
             )
         }
     }
