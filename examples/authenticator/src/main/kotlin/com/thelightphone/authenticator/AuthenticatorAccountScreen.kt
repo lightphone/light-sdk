@@ -15,10 +15,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.thelightphone.sdk.LightRoomDbConfig
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SimpleLightScreen
-import com.thelightphone.sdk.buildDatabase
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightText
@@ -34,12 +32,9 @@ import kotlinx.coroutines.withContext
 
 class AuthenticatorAccountScreen(
     sealedActivity: SealedLightActivity,
-    private val accountResult: Result<StoredAccount>
+    private val accountResult: Result<StoredAccount>,
+    private val repository: TotpAccountRepository
 ) : SimpleLightScreen<Unit>(sealedActivity) {
-
-    private val repository = TotpAccountRepository.getInstance {
-        buildDatabase(LightRoomDbConfig(TotpDatabase::class.java, TotpAccountRepository.DATABASE_NAME))
-    }
 
     @Composable
     override fun Content() {

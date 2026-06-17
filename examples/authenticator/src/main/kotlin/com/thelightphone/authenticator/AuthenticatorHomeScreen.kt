@@ -93,7 +93,8 @@ class AuthenticatorHomeScreen(sealedActivity: SealedLightActivity) :
                                         navigateTo(screenFactory = {
                                             AuthenticatorCodeScreen(
                                                 it,
-                                                account.id
+                                                account.id,
+                                                repository
                                             )
                                         })
                                     }
@@ -113,7 +114,8 @@ class AuthenticatorHomeScreen(sealedActivity: SealedLightActivity) :
                         navigateTo(screenFactory = {
                             AuthenticatorAccountScreen(
                                 it,
-                                scanResult
+                                scanResult,
+                                repository
                             )
                         })
                     }

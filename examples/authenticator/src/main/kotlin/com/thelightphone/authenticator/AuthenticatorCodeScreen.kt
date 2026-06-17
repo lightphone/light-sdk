@@ -14,10 +14,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.thelightphone.sdk.LightRoomDbConfig
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SimpleLightScreen
-import com.thelightphone.sdk.buildDatabase
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
 import com.thelightphone.sdk.ui.LightIcons
@@ -34,12 +32,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 
-class AuthenticatorCodeScreen(sealedActivity: SealedLightActivity, private val accountId: Long?) :
+class AuthenticatorCodeScreen(
+    sealedActivity: SealedLightActivity,
+    private val accountId: Long?,
+    private val repository: TotpAccountRepository
+) :
     SimpleLightScreen<Unit>(sealedActivity) {
-
-    private val repository = TotpAccountRepository.getInstance {
-        buildDatabase(LightRoomDbConfig(TotpDatabase::class.java, TotpAccountRepository.DATABASE_NAME))
-    }
 
     @Composable
     override fun Content() {
