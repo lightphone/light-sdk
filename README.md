@@ -7,6 +7,19 @@ This repository contains the scaffolding for building simple tools for the Light
 You can and should use current Android best practices: Kotlin for all source code, Compose for UI, Coroutines for async programming, and MVVM architecture. **Although this is appears to be a fairly standard Android dev environment, you will quickly find out that we are (gently but broadly) restricting which Android APIs and third-party libraries can be used. This is in an effort to provide a secure and distinctly _light_ experience for our users. These restrictions are _not_ set in stone and should ease up over time. If there is a stable, open-source library that you'd like us to allow, please let us know! More on this later.**
 
 ## Quickstart
+### Grabbing a token
+We're currently hosting our library builds with GitHub Pacakges so each artifact can live beside its source. The tradeoff is that you'll need to add a GitHub token with package read access to your local build environment. **We are considering migrating to Maven Central to avoid this requirement when everything goes public.**
+For now, you can either add environment variables with your username and token:
+```
+GITHUB_ACTOR=your_username
+GITHUB_TOKEN=your_token
+```
+or you can add them to your `local.properties` file:
+```
+gpr.user=your_username
+gpr.key=your_token
+```
+
 ### Running your Tool
 **You can test your tool on any Android device or emulator**, but certain functionality (receiving push notifications, requesting special permissions) can only be tested with:
 A) Real Light Phone hardware running LightOS
