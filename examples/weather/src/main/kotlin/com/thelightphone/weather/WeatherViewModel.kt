@@ -44,6 +44,7 @@ data class WeatherUiState(
     val mode: WeatherScreenMode = WeatherScreenMode.Loading,
     val canCancelLocationInput: Boolean = false,
     val locationInputSession: Int = 0,
+    val locationInputQuery: String = "",
     val temperatureUnit: TemperatureUnit = TemperatureUnit.Celsius,
     val errorModal: String? = null,
 )
@@ -86,6 +87,7 @@ class WeatherViewModel(
         mode = WeatherScreenMode.LocationInput,
         canCancelLocationInput = canCancel,
         locationInputSession = locationInputSession + 1,
+        locationInputQuery = locationInputQuery.ifBlank { savedLocationQuery },
         errorModal = null,
     )
 
@@ -174,6 +176,7 @@ class WeatherViewModel(
                         forecast = cachedForecast,
                     ),
                     canCancelLocationInput = true,
+                    locationInputQuery = query,
                     temperatureUnit = unit,
                 ),
             )
@@ -211,6 +214,7 @@ class WeatherViewModel(
             return
         }
 
+        _uiState.update { it.copy(locationInputQuery = query) }
         viewModelScope.launch(Dispatchers.IO + apiExceptionHandler) {
             runCatching {
                 updateState {
@@ -276,6 +280,7 @@ class WeatherViewModel(
                             selectedDayIndex = lastSelectedDayIndex,
                         ),
                         canCancelLocationInput = true,
+                        locationInputQuery = query,
                     )
                 }
             },
@@ -384,6 +389,10 @@ class WeatherViewModel(
         _uiState.update { it.openLocationInput(canCancel = true) }
     }
 
+    fun updateLocationInputQuery(query: String) {
+        _uiState.update { it.copy(locationInputQuery = query) }
+    }
+
     fun toggleTemperatureUnit() {
         val next = _uiState.value.temperatureUnit.toggle()
         _uiState.update { it.copy(temperatureUnit = next) }
@@ -463,6 +472,7 @@ class WeatherViewModel(
                         selectedDayIndex = lastSelectedDayIndex,
                     ),
                     canCancelLocationInput = true,
+                    locationInputQuery = query,
                     temperatureUnit = _uiState.value.temperatureUnit,
                     errorModal = errorMessage,
                 ),

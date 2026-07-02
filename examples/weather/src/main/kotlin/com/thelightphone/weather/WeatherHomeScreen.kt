@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.Text
@@ -66,7 +67,6 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
     override fun Content() {
         val themeColors by LightThemeController.colors.collectAsState()
         val state by viewModel.uiState.collectAsState()
-        val textFieldState = rememberTextFieldState("")
         val keyboardOptionsFlow = rememberKeyboardOptions()
         LightTheme(colors = themeColors) {
             Box(
@@ -76,17 +76,21 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
             ) {
                 when (val mode = state.mode) {
                     is WeatherScreenMode.LocationInput -> {
-                        LightTextInputEditor(
-                            title = "Search Location",
-                            editorKey = state.locationInputSession,
-                            keyboardOptionsFlow = keyboardOptionsFlow,
-                            state = textFieldState,
-                            onSubmit = viewModel::submitLocation,
-                            onBack = viewModel::cancelLocationInput,
-                            submitIcon = LightIcons.SEARCH,
-                            showBackButton = state.canCancelLocationInput,
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                        key(state.locationInputSession) {
+                            val textFieldState = rememberTextFieldState(state.locationInputQuery)
+                            LightTextInputEditor(
+                                title = "Search Location",
+                                editorKey = state.locationInputSession,
+                                keyboardOptionsFlow = keyboardOptionsFlow,
+                                state = textFieldState,
+                                onSubmit = viewModel::submitLocation,
+                                onBack = viewModel::cancelLocationInput,
+                                onTextChanged = viewModel::updateLocationInputQuery,
+                                submitIcon = LightIcons.SEARCH,
+                                showBackButton = state.canCancelLocationInput,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
                     }
 
                     is WeatherScreenMode.Loading -> {

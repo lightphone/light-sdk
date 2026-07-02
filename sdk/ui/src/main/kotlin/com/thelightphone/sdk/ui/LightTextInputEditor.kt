@@ -14,6 +14,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +50,7 @@ fun LightTextInputEditor(
     submitIcon: LightIconConfiguration? = null,
     showBackButton: Boolean = true,
     editorKey: Any = title,
+    onTextChanged: (String) -> Unit = {},
 ) {
     val keyboardCallback = remember(state) { TextInputKeyboardCallback(state) }
 
@@ -66,6 +69,7 @@ fun LightTextInputEditor(
         submitLabel,
         submitIcon,
         showBackButton,
+        onTextChanged,
     )
 }
 
@@ -87,10 +91,16 @@ fun LightTextInputEditor(
     submitLabel: String = "SUBMIT",
     submitIcon: LightIconConfiguration? = null,
     showBackButton: Boolean = true,
+    onTextChanged: (String) -> Unit = {},
 ) {
     val colors = LightThemeTokens.colors
     val inputStyle = lightInputTextStyle()
     var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val onTextChangedState by rememberUpdatedState(onTextChanged)
+
+    LaunchedEffect(state) {
+        snapshotFlow { state.text.toString() }.collect { onTextChangedState(it) }
+    }
 
     Surface {
         Column(modifier = modifier.fillMaxSize()) {
