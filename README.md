@@ -1,3 +1,5 @@
+This is dummy text to test our PR builder, if it has been merged into `main`, we did something dumb!
+
 # light-sdk
 or: a tool for building Tools
 
