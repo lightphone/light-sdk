@@ -37,6 +37,6 @@ jobs:
 
       - name: Run check
         env:
-          GH_PACKAGES_USER: ${{ github.actor }}
+          GH_PACKAGES_USER: ${{ secrets.GH_CI_USER }}
           GH_PACKAGES_TOKEN: ${{ secrets.GH_CI_TOKEN }}
         run: ./gradlew check --stacktrace
