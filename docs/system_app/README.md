@@ -124,3 +124,20 @@ The app will retain its system uid as long as the signing key and `sharedUserId`
 | `adb remount` says "Device must be bootloader unlocked" | Run `adb disable-verity && adb reboot`, then `adb root && adb remount`. |
 | App doesn't appear after reboot | Check that the APK was pushed to the correct path: `/system/priv-app/LightOSEmulator/LightOSEmulator.apk` (directory name and file name both matter). |
 | Signatures don't match (`dumpsys` shows different sig hashes) | Make sure you are using an AOSP `test-keys` system image, not a production-signed image. Run `adb shell getprop ro.build.description` — it should end with `test-keys`. |
+
+#### 7. Setting the LightOS emulator as the Android Launcher
+
+(This is not critical, but makes the behavior more like a real Light Phone - when you hit the Android home button, it will drop you into the LightOS emulator instead of the default Android launcher.)
+
+run:
+
+`adb shell cmd package set-home-activity com.thelightphone.sdk.emulator/.MainActivity`
+
+#### 8. Disabling Animations
+
+(This is also not critical, but LightOS uses no cross-tool animations by default. These settings will help the emulator feel similar)
+run:
+
+`adb shell settings put global window_animation_scale 0`                                                                                                                                                                                                                                                            
+`adb shell settings put global transition_animation_scale 0`                                                                                                                                                                                                                                                       
+`adb shell settings put global animator_duration_scale 0`

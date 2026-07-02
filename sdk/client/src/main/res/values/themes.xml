@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="LightSdk.Theme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
+        <item name="android:textColorPrimary">@android:color/white</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+    </style>
+
+    <!--
+        Theme applied to LightActivity at launch. installSplashScreen() reads
+        windowSplashScreenBackground for the splash colour and then switches
+        to postSplashScreenTheme once the content is ready.
+    -->
+    <style name="LightSdk.Theme.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@android:color/black</item>
+        <item name="postSplashScreenTheme">@style/LightSdk.Theme</item>
+    </style>
+</resources>

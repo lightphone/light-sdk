@@ -24,8 +24,6 @@ android {
 
     defaultConfig {
         minSdk = rootProject.ext["minSdk"] as Int
-        // TODO inject
-        buildConfigField("String", "LIGHT_SERVER_PACKAGE", "\"com.thelightphone.sdk.emulator\"")
         buildConfigField("String", "LIGHT_VAPID_KEY", "\"$vapidPublicKey\"")
     }
 

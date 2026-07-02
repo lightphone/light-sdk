@@ -1,11 +1,13 @@
 package com.thelightphone.plugin
 
+import com.android.build.api.dsl.ApplicationExtension
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.FileCollectionDependency
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.ResolvedDependency
+import java.io.File
 
 class LightSdkPlugin : Plugin<Project> {
 
@@ -109,7 +111,72 @@ class LightSdkPlugin : Plugin<Project> {
                 project.dependencies.add("ksp", project.files(pluginJar))
             }
         }
+
+        // Hook AGP for tool modules only; SDK modules don't have lighttool.toml.
+        if (project.name !in SDK_MODULES) {
+            project.pluginManager.withPlugin("com.android.application") {
+                applyToolMetadata(project)
+            }
+        }
+
         project.afterEvaluate(::validate)
+    }
+
+    /**
+     * Reads `lighttool.toml`, configures AGP's `defaultConfig` with the
+     * declared metadata, and points `sourceSets.main.manifest.srcFile` at a
+     * generated manifest. After this runs the dev does not need (and is not
+     * allowed) to provide their own AndroidManifest.xml or applicationId.
+     *
+     * When `-DlightSdk.unsigned=true` is passed (the server-side builder
+     * does this), the variant API is used to disable APK signing for every
+     * scheme so the artifact comes out unsigned and ready for the signing
+     * service to apply the per-tool key. Locally devs run without the flag
+     * and the dev keystore signs as normal.
+     */
+    private fun applyToolMetadata(project: Project) {
+        val tomlFile = File(project.projectDir, LightToolMetadata.FILE_NAME)
+        val metadata = try {
+            LightToolMetadata.parse(tomlFile)
+        } catch (e: LightToolMetadataException) {
+            throw GradleException("Light SDK: ${e.message}")
+        }
+
+        // Generated manifest path. Anchored under build/ so a clean rebuild
+        // always regenerates from current metadata.
+        val generatedManifestDir = File(project.layout.buildDirectory.asFile.get(), "generated/light-sdk")
+        val generatedManifest = File(generatedManifestDir, "AndroidManifest.xml")
+
+        val app = project.extensions.getByType(ApplicationExtension::class.java)
+        with(app) {
+            namespace = metadata.toolId
+            defaultConfig.applicationId = metadata.toolId
+            defaultConfig.versionCode = metadata.versionCode
+            defaultConfig.versionName = metadata.versionName
+            sourceSets.getByName("main").manifest.srcFile(generatedManifest.path)
+        }
+
+        // Always (re)write the manifest at configure time so it's present
+        // before AGP starts wiring up its tasks. Cheap; the file is tiny.
+        generatedManifestDir.mkdirs()
+        generatedManifest.writeText(ManifestGenerator.render(metadata))
+
+        if (System.getProperty("lightSdk.unsigned") == "true") {
+            val ac = project.extensions.getByType(
+                com.android.build.api.variant.ApplicationAndroidComponentsExtension::class.java
+            )
+            ac.onVariants { variant ->
+                project.logger.lifecycle(
+                    "Light SDK: disabling APK signing for variant ${variant.name}"
+                )
+                variant.signingConfig?.apply {
+                    enableV1Signing.set(false)
+                    enableV2Signing.set(false)
+                    enableV3Signing.set(false)
+                    enableV4Signing.set(false)
+                }
+            }
+        }
     }
 
     private fun validate(project: Project) {
@@ -119,6 +186,9 @@ class LightSdkPlugin : Plugin<Project> {
         validateSourceFiles(project, violations)
         validateDeclaredDependencies(project, violations)
         validateResolvedDependencies(project, violations)
+        if (project.name !in SDK_MODULES) {
+            validateNoUserManifest(project, violations)
+        }
 
         if (violations.isNotEmpty()) {
             throw GradleException(buildString {
@@ -156,8 +226,9 @@ class LightSdkPlugin : Plugin<Project> {
             }
         }
 
-        // Check for dangerous constructs
-        val disallowedPatterns = mapOf(
+        // Patterns that are dangerous everywhere — applied to SDK modules
+        // and consumer apps alike.
+        val universallyDisallowed = mapOf(
             Regex("""\bbuildscript\s*\{""") to "buildscript {} block not allowed",
             Regex("""\bresolutionStrategy\b""") to "resolutionStrategy not allowed",
             Regex("""\bdependencySubstitution\b""") to "dependencySubstitution not allowed",
@@ -165,11 +236,37 @@ class LightSdkPlugin : Plugin<Project> {
             Regex("""\bapply\s*\(\s*from""") to "apply(from = ...) not allowed — external scripts are not permitted",
             Regex("""\bapply\s*<""") to "apply<...>() not allowed — use the plugins {} block",
         )
+        universallyDisallowed.forEach { (pattern, message) ->
+            if (pattern.containsMatchIn(stripped)) violations.add("  $message")
+        }
 
-        disallowedPatterns.forEach { (pattern, message) ->
-            if (pattern.containsMatchIn(stripped)) {
-                violations.add("  $message")
+        // App-metadata bans apply only to consumer apps; SDK library modules
+        // legitimately set namespace/etc. themselves.
+        if (project.name !in SDK_MODULES) {
+            val consumerOnlyDisallowed = mapOf(
+                Regex("""\bapplicationId\s*=""") to "applicationId must be declared in lighttool.toml, not the build script",
+                Regex("""\bversionCode\s*=""") to "versionCode must be declared in lighttool.toml, not the build script",
+                Regex("""\bversionName\s*=""") to "versionName must be declared in lighttool.toml, not the build script",
+                Regex("""\bnamespace\s*=""") to "namespace is derived from tool.id in lighttool.toml and may not be set in the build script",
+            )
+            consumerOnlyDisallowed.forEach { (pattern, message) ->
+                if (pattern.containsMatchIn(stripped)) violations.add("  $message")
             }
+        }
+    }
+
+    /**
+     * The plugin generates the AndroidManifest.xml from lighttool.toml. A
+     * hand-written src/main/AndroidManifest.xml would be silently overridden,
+     * so reject it loudly instead of letting devs think their edits matter.
+     */
+    private fun validateNoUserManifest(project: Project, violations: MutableList<String>) {
+        val manifest = project.projectDir.resolve("src/main/AndroidManifest.xml")
+        if (manifest.isFile) {
+            violations.add(
+                "  src/main/AndroidManifest.xml is not allowed — declare your tool's" +
+                        " metadata and permissions in lighttool.toml"
+            )
         }
     }
 

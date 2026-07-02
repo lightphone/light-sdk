@@ -7,18 +7,12 @@ plugins {
     alias(libs.plugins.light.sdk)
 }
 
-val appId = "com.thelightphone.uidemo"
-
 android {
-    namespace = appId
     compileSdk = rootProject.ext["compileSdk"] as Int
 
     defaultConfig {
-        applicationId = appId
         minSdk = rootProject.ext["minSdk"] as Int
         targetSdk = rootProject.ext["targetSdk"] as Int
-        versionCode = 1
-        versionName = "1.0"
 
         manifestPlaceholders["sdkVersion"] = property("sdkVersion") as String
     }

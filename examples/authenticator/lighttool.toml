@@ -1,0 +1,9 @@
+[tool]
+id = "com.thelightphone.authenticator"
+label = "Authenticator"
+versionCode = 1
+versionName = "1.0"
+permissions = ["android.permission.CAMERA"]
+# change if you run this on the emulator!
+# serverPackage = "com.thelightphone.sdk.emulator"
+serverPackage = "com.lightos"

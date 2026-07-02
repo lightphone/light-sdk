@@ -6,7 +6,7 @@
         android:name=".EmulatorApplication"
         android:label="LightOS Emulator"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/LightEmulator.Theme">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -23,6 +23,7 @@
         <activity
             android:name=".LightSdkPermissionActivity"
             android:exported="true"
-            android:label="Light SDK Permission" />
+            android:label="Light SDK Permission"
+            android:theme="@style/LightEmulator.Theme.Permission" />
     </application>
 </manifest>

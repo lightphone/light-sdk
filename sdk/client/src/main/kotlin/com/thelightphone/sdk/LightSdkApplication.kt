@@ -1,6 +1,7 @@
 package com.thelightphone.sdk
 
 import android.app.Application
+import android.content.pm.PackageManager
 import android.util.Log
 import androidx.room.Room
 import com.thelightphone.sdk.shared.LightConstants
@@ -28,9 +29,18 @@ open class LightSdkApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        val serverPackage = readServerPackage()
         invokeEntryPoint()
-        registerWithLightServer()
-        LightServiceConnection.bind(this)
+        registerWithLightServer(serverPackage)
+        LightServiceConnection.bind(this, serverPackage)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun readServerPackage(): String {
+        val appInfo = packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+        return requireNotNull(appInfo.metaData?.getString("com.thelightphone.sdk.LIGHT_SERVER_PACKAGE")) {
+            "LIGHT_SERVER_PACKAGE not found in manifest — set tool.serverPackage in lighttool.toml"
+        }
     }
 
     // Tool may have registered an initialization function, call it
@@ -41,7 +51,7 @@ open class LightSdkApplication : Application() {
         }
     }
 
-    private fun registerWithLightServer() {
+    private fun registerWithLightServer(serverPackage: String) {
         applicationScope.launch {
             LightPushManager(this@LightSdkApplication).pushCredentialsFlow.collect { credentials ->
                 _lightOSData.update { it.copy(pushCredentials = credentials) }
@@ -49,7 +59,7 @@ open class LightSdkApplication : Application() {
         }
 
         // Force unified push to use our distributor
-        UnifiedPush.saveDistributor(this, BuildConfig.LIGHT_SERVER_PACKAGE)
+        UnifiedPush.saveDistributor(this, serverPackage)
 
         // Local channel — direct IPC between LightOS/emulator and this tool
         UnifiedPush.register(

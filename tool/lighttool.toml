@@ -1,0 +1,9 @@
+[tool]
+id = "com.thelightphone.app"
+label = "Light SDK Tool"
+versionCode = 1
+versionName = "1.0"
+permissions = ["android.permission.INTERNET"]
+# change if you run this on an LP3!
+# serverPackage = "com.lightos"
+serverPackage = "com.thelightphone.sdk.emulator"

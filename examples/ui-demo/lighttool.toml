@@ -1,0 +1,7 @@
+[tool]
+id = "com.thelightphone.uidemo"
+label = "Light UI Demo"
+versionCode = 1
+versionName = "1.0"
+permissions = ["android.permission.CAMERA"]
+serverPackage = "com.lightos"

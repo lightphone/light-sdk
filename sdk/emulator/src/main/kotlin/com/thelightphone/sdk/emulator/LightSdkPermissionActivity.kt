@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
@@ -20,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -35,6 +37,7 @@ const val TAG = "LightSdkPermissionActivity"
 // TODO - eventually we should bring this down to the server module and make it the default for servers
 class LightSdkPermissionActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
@@ -134,5 +137,15 @@ private fun RequestPermission(
                 LightBarButton.Text("ACCEPT") { onGranted() },
             )
         )
+    }
+}
+
+@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
+@Composable
+fun RequestPermissionPreview() {
+    LightTheme(colors = LightThemeColors.Dark) {
+        Surface {
+            RequestPermission("Example Tool", "com.android.CAMERA", onDenied = {}) { }
+        }
     }
 }

@@ -35,10 +35,10 @@ internal object LightServiceConnection : ServiceConnection {
     private var binderReady = CompletableDeferred<IBinder>()
     private var token: String? = null
 
-    fun bind(context: Context) {
+    fun bind(context: Context, serverPackage: String) {
         if (bound) return
         val intent = Intent(LightConstants.ACTION_BIND_SDK_SERVICE).apply {
-            setPackage(BuildConfig.LIGHT_SERVER_PACKAGE)
+            setPackage(serverPackage)
         }
         bound = context.bindService(intent, this, Context.BIND_AUTO_CREATE)
         if (!bound) {
