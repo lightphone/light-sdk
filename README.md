@@ -4,16 +4,7 @@ or: a tool for building Tools
 
 ## tl;dr
 
-This repository contains the scaffolding for building simple tools for the Light Phone III. Included are a library ([`:sdk:client`](./sdk/client)) and placeholder application ([`:tool`](./tool)) that depends on it. To create a tool that is fully compatible with LightOS, you must write your application code within the `tool` module, using the primitives provided by the SDK client library.
-
-You can and should use current Android best practices:
-
-- Kotlin for all source code
-- Compose for UI
-- Coroutines for async programming
-- MVVM architecture
-
-Although this is appears to be a fairly standard Android dev environment, you will quickly find out that we are (gently but broadly) restricting which Android APIs and third-party libraries can be used. This is in an effort to provide a secure and distinctly _light_ experience for our users. These restrictions are _not_ set in stone and should ease up over time. If there is a stable, open-source library that you'd like us to allow, please let us know! More on this later
+This repository contains the scaffolding for building simple tools for the Light Phone III. Included are a library ([`:sdk:client`](./sdk/client)) and placeholder application ([`:tool`](./tool)) that depends on it. 
 
 ## Important updates
 
@@ -28,23 +19,40 @@ The currently builds of LightOS in the wild are not yet ready to "play nice" wit
 
 We're hoping to have an update later this month. In the meantime, the best way to start working is to use an Android emulator running our new [LightOS Emulator](sdk/emulator). To get started, see [System app](docs/system_app).
 
+## About Light SDK development
+
+All tools created with the Light SDK should host its application code within the `tool` module, using the primitives provided by the SDK client library.
+
+They should also adhere to the following Android development best practices:
+
+- All source code written in [Kotlin](https://kotlinlang.org/)
+- UI components are built with [Jetpack Compose](https://developer.android.com/compose)
+- [Coroutines](https://developer.android.com/kotlin/coroutines) are used for async programming
+- Tool architecture follows [Model–view–viewmodel (MVVM)](https://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93viewmodel) best practices
+
+Although this repository looks like a standard Android development environment in many ways, you'll quickly find out that we have (gently but broadly) restricted which Android APIs and third-party libraries can be used. This is in an effort to provide a secure and distinctly _light_ experience for our users. These restrictions are _not_ set in stone and should ease up over time.
+
+If there is a stable, open-source library that you'd like us to allow, [please let us know](LINK TO OPENING AN ISSUE)!
+
 ## Quick start
 
-### Set your GitHub token
-
-We currently host our library builds with GitHub packages so each artifact can live beside its source. The trade off is that you'll need to add a GitHub token with package read access to your local build environment. 
+### Prerequisites
 
 > [!NOTE]
-> We are considering migrating to Maven Central to avoid this requirement when everything goes public.
+> Currently, library builds are hosted as GitHub packages so each artifact lives alongside its source. However, this requires using a GitHub Personal Access Token (PAT).
+>
+> In the future, we plan on migrating to Maven Central to avoid this.
 
-You can set your GitHub token using either of the following methods:
+First, [create a GitHub Personal Access Token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with `Package` permissions set to **read-only**.
 
-- To your local environment variables:
+Then use one of the following methods to add your token locally:
+
+- Using local environment variables:
     ```plaintext
     GITHUB_ACTOR=your_username
     GITHUB_TOKEN=your_token
     ```
-- To your `local.properties` file in this project:
+- Using the `local.properties` file in this project:
     ```plaintext
     gpr.user=your_username
     gpr.key=your_token
@@ -87,10 +95,11 @@ Given our relatively limited resources and desire to keep our users safe, we're 
 
 After we release a version of LightOS that supports community tools, users will have an option to choose what kind of tools they want to be able to run on their device:
 
-- **Light-approved tools**: These include tools that are either built internally by the Light team, or built by the community and officially tested/signed-off by the Light team. We don't know _exactly_ what that sign-off process is going to look like, but as a heads-up: we're going to be looking pretty hard at whether a submitted tool matches the Light ethos both functionally and aesthetically. We've included a UX/UI library to make this as easy as possible! From a technical standpoint, these approved tools are both signed by us _and_ added to an "allow-list" within LightOS. Phones with this option selected will only install and display tools that meet both criteria.
-- **SDK-built tools**: This is a slightly more permissive choice. Phones with this option selected will install and launch any tool that was built and signed by Light. These don't require any manual approval by us (though we can block them in extreme cases). If a user wants to be able to install a tool that was shared locally or somewhere outside of Light's dashboard, but they still want to be confident that it will run well and integrate nicely with LightOS, they might choose this option!
-- **Any tools**: A user will have the option to make any APK launchable from LightOS, but they will own the responsibility of getting them un/installed. When a user selects this option, we will be warning them that they are potentially opening their device up to security risks, and in doing so will limit our ability to support them if something goes wrong.
-
+| Tool Type | Description |
+|-----------|-------------|
+| **Light-approved tools** | These include tools that are either built internally by the Light team, or built by the community and officially tested/signed-off by the Light team. We don't know _exactly_ what that sign-off process is going to look like, but as a heads-up: we're going to be looking pretty hard at whether a submitted tool matches the Light ethos both functionally and aesthetically. We've included a UX/UI library to make this as easy as possible! From a technical standpoint, these approved tools are both signed by us _and_ added to an "allow-list" within LightOS. Phones with this option selected will only install and display tools that meet both criteria. |
+| **SDK-built tools** | This is a slightly more permissive choice. Phones with this option selected will install and launch any tool that was built and signed by Light. These don't require any manual approval by us (though we can block them in extreme cases). If a user wants to be able to install a tool that was shared locally or somewhere outside of Light's dashboard, but they still want to be confident that it will run well and integrate nicely with LightOS, they might choose this option! |
+| **Any tools** | A user will have the option to make any APK launchable from LightOS, but they will own the responsibility of getting them un/installed. When a user selects this option, we will be warning them that they are potentially opening their device up to security risks, and in doing so will limit our ability to support them if something goes wrong.|
 
 ## Additional resources
 
