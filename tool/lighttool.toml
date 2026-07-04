@@ -1,6 +1,6 @@
 [tool]
-id = "com.thelightphone.app"
-label = "Light SDK Tool"
+id = "dev.neoneon.flamingo"
+label = "Flamingo Chess"
 versionCode = 1
 versionName = "1.0"
 permissions = ["android.permission.INTERNET"]

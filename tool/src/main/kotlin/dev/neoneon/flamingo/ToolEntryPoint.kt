@@ -1,4 +1,4 @@
-package com.thelightphone.sample
+package dev.neoneon.flamingo
 
 import android.util.Log
 import com.thelightphone.sdk.EntryPoint
@@ -8,12 +8,10 @@ import kotlinx.coroutines.flow.StateFlow
 
 @EntryPoint
 object ToolEntryPoint : LightEntryPoint {
-    // called when Tool first launches, use to initialize dependencies etc
     override suspend fun onToolCreate(
         serverData: StateFlow<LightServerData?>,
     ) {
         serverData.collect {
-            // this is where you'd send push credentials up to your app server
             Log.d("ToolEntryPoint", "Current LightOS registration data: $it")
         }
     }
