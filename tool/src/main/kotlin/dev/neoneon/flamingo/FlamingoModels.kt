@@ -13,6 +13,11 @@ data class Game(
     val updatedAt: String,
 )
 
+/** Statuses the backend uses for a game that's still in progress; anything else is over. */
+private val activeGameStatuses = setOf("active", "waitingForOpponent")
+
+val Game.isActive: Boolean get() = status in activeGameStatuses
+
 @Serializable
 data class Move(
     val moveNumber: Int,
@@ -26,4 +31,10 @@ data class Move(
 data class GameDetail(
     val game: Game,
     val moves: List<Move>,
+)
+
+@Serializable
+data class RecordMoveResult(
+    val move: Move,
+    val game: Game,
 )

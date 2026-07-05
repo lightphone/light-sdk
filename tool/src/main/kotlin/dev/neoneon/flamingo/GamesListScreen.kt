@@ -34,11 +34,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.util.UUID
 
-// Hardcoded for iteration 1 — player identity (generate + persist a real UUID) comes later.
-internal const val HARDCODED_PLAYER_ID = "B563B9B8-D947-4B5F-9395-263F50AF0AB1"
-
-class GamesListViewModel : LightViewModel<Unit>() {
+class GamesListViewModel(private val identityStore: PlayerIdentityStore) : LightViewModel<Unit>() {
     private val api = FlamingoApi()
 
     sealed class State {
@@ -58,7 +56,8 @@ class GamesListViewModel : LightViewModel<Unit>() {
     private fun loadGames() {
         viewModelScope.launch(Dispatchers.IO) {
             _state.value = State.Loading
-            api.listGames(HARDCODED_PLAYER_ID).fold(
+            val identity = identityStore.getOrCreate()
+            api.listGames(identity.whitePlayerId).fold(
                 onSuccess = { games -> _state.value = State.Loaded(games) },
                 onFailure = { error -> _state.value = State.Error(error.message ?: "Unable to load games") },
             )
@@ -78,7 +77,7 @@ class GamesListScreen(sealedActivity: SealedLightActivity) :
     override val viewModelClass: Class<GamesListViewModel>
         get() = GamesListViewModel::class.java
 
-    override fun createViewModel() = GamesListViewModel()
+    override fun createViewModel() = GamesListViewModel(PlayerIdentityStore(lightContext.dataStore))
 
     @Composable
     override fun Content() {
@@ -95,7 +94,10 @@ class GamesListScreen(sealedActivity: SealedLightActivity) :
                     center = LightTopBarCenter.Text("Games"),
                     rightButton = LightBarButton.LightIcon(
                         icon = LightIcons.ADD,
-                        onClick = { navigateTo(screenFactory = { GameView(it) }) },
+                        onClick = {
+                            val gameId = UUID.randomUUID().toString()
+                            navigateTo(screenFactory = { GameView(it, gameId) })
+                        },
                         contentDescription = "New game",
                     ),
                     modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
@@ -153,7 +155,11 @@ class GamesListScreen(sealedActivity: SealedLightActivity) :
                                         game = game,
                                         modifier = Modifier
                                             .clickable {
-                                                navigateTo(screenFactory = { GameDetailScreen(it, game.id) })
+                                                if (game.isActive) {
+                                                    navigateTo(screenFactory = { GameView(it, game.id) })
+                                                } else {
+                                                    navigateTo(screenFactory = { GameDetailScreen(it, game.id) })
+                                                }
                                             }
                                             .padding(vertical = 0.75f.gridUnitsAsDp()),
                                     )
