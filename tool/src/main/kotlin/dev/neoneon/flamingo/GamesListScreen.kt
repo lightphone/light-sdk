@@ -19,6 +19,8 @@ import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SimpleLightScreen
+import com.thelightphone.sdk.ui.LightBarButton
+import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightScrollView
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
@@ -91,6 +93,11 @@ class GamesListScreen(sealedActivity: SealedLightActivity) :
             ) {
                 LightTopBar(
                     center = LightTopBarCenter.Text("Games"),
+                    rightButton = LightBarButton.LightIcon(
+                        icon = LightIcons.ADD,
+                        onClick = { navigateTo(screenFactory = { GameView(it) }) },
+                        contentDescription = "New game",
+                    ),
                     modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
                 )
 
