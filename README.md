@@ -17,7 +17,7 @@ are [right here](docs/system_app).
 
 ## Quickstart
 ### Grabbing a token
-We're currently hosting our library builds with GitHub Pacakges so each artifact can live beside its source. The tradeoff is that you'll need to add a GitHub token with package read access to your local build environment. **We are considering migrating to Maven Central to avoid this requirement when everything goes public.**
+We're currently hosting our library builds with GitHub Packages so each artifact can live beside its source. The tradeoff is that you'll need to add a GitHub token with package read access to your local build environment. **We are considering migrating to Maven Central to avoid this requirement when everything goes public.**
 For now, you can either add environment variables with your username and token:
 ```
 GITHUB_ACTOR=your_username
