@@ -1,6 +1,7 @@
 package com.thelightphone.weather
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.Text
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -182,6 +184,7 @@ private fun WeatherContent(
     showHourly: Boolean = true,
 ) {
     val sectionPadding = Modifier.padding(bottom = 1f.gridUnitsAsDp())
+    val swipeThresholdPx = with(LocalDensity.current) { 3f.gridUnitsAsDp().toPx() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         LightTopBar(
@@ -211,6 +214,22 @@ private fun WeatherContent(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .pointerInput(Unit) {
+                    var totalDrag = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { totalDrag = 0f },
+                        onDragEnd = {
+                            when {
+                                totalDrag <= -swipeThresholdPx -> onNextDay()
+                                totalDrag >= swipeThresholdPx -> onPreviousDay()
+                            }
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            totalDrag += dragAmount
+                            change.consume()
+                        },
+                    )
+                }
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 1f.gridUnitsAsDp()),
         ) {
