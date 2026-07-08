@@ -45,7 +45,7 @@ If there is a stable, open-source library that you'd like us to allow, [please l
 
 First, [create a GitHub Personal Access Token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with `Package` permissions set to **read-only**.
 
-Then use one of the following methods to add your token locally:
+Then add your token locally using one of the following methods:
 
 - Using local environment variables:
     ```plaintext
@@ -73,9 +73,11 @@ You can quickly [create an emulator](https://developer.android.com/studio/run/ma
 
 ### Building a tool
 
-1. Fork or clone this repository.
-2. Install Android Studio or IntelliJ IDEA and open this project.
-3. Edit the code in `HomeScreen` and `HomeScreenViewModel` to get started. `Homescreen` surfaces a `@Composable` method named `Content`. This is the UI that is shown when the tool first boots. You'll notice this UI sources data from it's `viewModel` field, which is an instance of `HomeScreenViewModel`. Edit that class with your screen's logic and expose the data to the UI using either Compose `State` or Coroutine `Flow`s. If you want to create a new screen, create a new `ViewModel` pair: your screen should extend from `LightScreen` and your VM from `LightScreenViewModel`. Your screen implementation will need:
+First, fork or clone this repository, then open it with Android Studio or Intellij IDEA.
+
+Edit the code in `HomeScreen` and `HomeScreenViewModel` to get started.
+
+`Homescreen` surfaces a `@Composable` method named `Content`. This is the UI that is shown when the tool first boots. You'll notice this UI sources data from it's `viewModel` field, which is an instance of `HomeScreenViewModel`. Edit that class with your screen's logic and expose the data to the UI using either Compose `State` or Coroutine `Flow`s. If you want to create a new screen, create a new `ViewModel` pair: your screen should extend from `LightScreen` and your VM from `LightScreenViewModel`. Your screen implementation will need:
    1. A direct reference to your `ViewModel`'s class type
    2. A factory method for creating a new instance of your `ViewModel`.
 
