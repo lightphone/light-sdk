@@ -1,7 +1,10 @@
 package com.thelightphone.sdk.emulator
 
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.util.Log
@@ -18,6 +21,8 @@ private const val LIGHTSDK_DEV_CERT_SHA256 =
 class EmulatorApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+        registerReceiver(lockReceiver, filter)
         val mollysocketUriString = BuildConfig.MOLLYSOCKET_URI
         LightSdkServer.customServiceMethodResolver = { callingId, methodId, payload ->
             if (methodId == "GetMollySocketUri" && mollysocketUriString.isNotEmpty()) {
@@ -40,6 +45,17 @@ class EmulatorApplication : Application() {
         LightSdkServer.permissionActivity = LightSdkPermissionActivity::class.java
 
         EmulatorHttpServer(this).start()
+    }
+
+    private val lockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_SCREEN_OFF) {
+                val i = Intent(context, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(SCREEN_OFF_FLAG, true)
+                context.startActivity(i)   // fires while display is off
+            }
+        }
     }
 }
 
