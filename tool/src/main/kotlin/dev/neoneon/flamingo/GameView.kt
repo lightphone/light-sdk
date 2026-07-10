@@ -6,6 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Share
@@ -22,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.delay
 import com.thelightphone.sdk.LightScreen
@@ -334,6 +339,17 @@ class GameView(
                     },
                 )
 
+                // Always-visible status strip directly beneath the nav bar. It reserves a
+                // fixed height whether or not it has a message, so surfacing or clearing the
+                // "Waiting for opponent…" text never repositions the board below it.
+                GameStatusBar(
+                    text = when {
+                        state.isLoading -> null
+                        state.position.sideToMove != Piece.Color.white -> "Waiting for opponent…"
+                        else -> null
+                    },
+                )
+
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -343,23 +359,47 @@ class GameView(
                     if (state.isLoading) {
                         LightText(text = "Loading…", variant = LightTextVariant.Copy)
                     } else {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            if (state.position.sideToMove != Piece.Color.white) {
-                                LightText(text = "Waiting for opponent…", variant = LightTextVariant.Copy)
-                            }
-                            // Tapping a square is a no-op while it's not white's turn
-                            // (GameViewViewModel.onSquareTapped guards on sideToMove),
-                            // so the board can stay on screen instead of being swapped for text.
-                            ChessBoard(
-                                position = state.position,
-                                selectedSquare = state.selectedSquare,
-                                legalTargets = state.legalTargets,
-                                onSquareTap = { viewModel.onSquareTapped(it) },
-                            )
-                        }
+                        // Tapping a square is a no-op while it's not white's turn
+                        // (GameViewViewModel.onSquareTapped guards on sideToMove),
+                        // so the board can stay on screen instead of being swapped for text.
+                        ChessBoard(
+                            position = state.position,
+                            selectedSquare = state.selectedSquare,
+                            legalTargets = state.legalTargets,
+                            onSquareTap = { viewModel.onSquareTapped(it) },
+                        )
                     }
                 }
             }
+        }
+    }
+}
+
+/** Fixed height of the status strip; large enough for one line of [LightTextVariant.Fine]. */
+private val StatusBarHeight = 28.dp
+
+/**
+ * A fixed-height strip shown directly beneath the nav bar. It always occupies [StatusBarHeight]
+ * so that showing or clearing [text] never shifts the board below it; when [text] is null it
+ * renders only the reserved space.
+ */
+@Composable
+private fun GameStatusBar(text: String?) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(StatusBarHeight)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (text != null) {
+            LightText(
+                text = text,
+                variant = LightTextVariant.Fine,
+                lighten = true,
+                align = TextAlign.Center,
+                maxLines = 1,
+            )
         }
     }
 }
