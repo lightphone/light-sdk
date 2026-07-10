@@ -25,6 +25,9 @@ class LightSdkPlugin : Plugin<Project> {
             "androidx.datastore",
             "com.squareup.okhttp3:okhttp",
             "io.ktor",
+            // WebSocket client for the live-move transport (also matched by the "io.ktor"
+            // prefix above, but listed explicitly to document that WebSockets are permitted).
+            "io.ktor:ktor-client-websockets",
             "org.jetbrains.kotlinx:kotlinx-serialization",
             "org.jetbrains.kotlinx:kotlinx-io",
             "org.unifiedpush.android:connector",

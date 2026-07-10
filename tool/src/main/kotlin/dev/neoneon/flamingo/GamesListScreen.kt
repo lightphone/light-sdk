@@ -56,8 +56,8 @@ class GamesListViewModel(private val identityStore: PlayerIdentityStore) : Light
     private fun loadGames() {
         viewModelScope.launch(Dispatchers.IO) {
             _state.value = State.Loading
-            val identity = identityStore.getOrCreate()
-            api.listGames(identity.whitePlayerId).fold(
+            val playerId = identityStore.getOrCreate()
+            api.listGames(playerId).fold(
                 onSuccess = { games -> _state.value = State.Loaded(games) },
                 onFailure = { error -> _state.value = State.Error(error.message ?: "Unable to load games") },
             )

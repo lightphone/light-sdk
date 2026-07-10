@@ -7,30 +7,21 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.first
 import java.util.UUID
 
-private val whitePlayerIdKey = stringPreferencesKey("FLAMINGO_WHITE_PLAYER_ID")
-private val blackPlayerIdKey = stringPreferencesKey("FLAMINGO_BLACK_PLAYER_ID")
+private val playerIdKey = stringPreferencesKey("FLAMINGO_PLAYER_ID")
 
-/** The two local player identities this tool installation plays as, one per color. */
-data class PlayerIdentity(val whitePlayerId: String, val blackPlayerId: String)
+// Superseded by playerIdKey once a real second player can join a game from another
+// device — a locally created game is always white, so this reuses whatever identity
+// an install already had rather than orphaning games it created before this migration.
+private val legacyWhitePlayerIdKey = stringPreferencesKey("FLAMINGO_WHITE_PLAYER_ID")
 
-/** Persists [PlayerIdentity] once per tool installation, generating it on first access. */
+/** Persists a single player ID per tool installation, generating it on first access. */
 class PlayerIdentityStore(private val dataStore: DataStore<Preferences>) {
-    suspend fun getOrCreate(): PlayerIdentity {
+    suspend fun getOrCreate(): String {
         val current = dataStore.data.first()
-        val existingWhite = current[whitePlayerIdKey]
-        val existingBlack = current[blackPlayerIdKey]
-        if (existingWhite != null && existingBlack != null) {
-            return PlayerIdentity(existingWhite, existingBlack)
-        }
+        current[playerIdKey]?.let { return it }
 
-        val resolved = PlayerIdentity(
-            whitePlayerId = existingWhite ?: UUID.randomUUID().toString(),
-            blackPlayerId = existingBlack ?: UUID.randomUUID().toString(),
-        )
-        dataStore.edit { prefs ->
-            prefs[whitePlayerIdKey] = resolved.whitePlayerId
-            prefs[blackPlayerIdKey] = resolved.blackPlayerId
-        }
+        val resolved = current[legacyWhitePlayerIdKey] ?: UUID.randomUUID().toString()
+        dataStore.edit { prefs -> prefs[playerIdKey] = resolved }
         return resolved
     }
 }

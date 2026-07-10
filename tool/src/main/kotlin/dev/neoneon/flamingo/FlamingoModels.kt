@@ -7,7 +7,7 @@ data class Game(
     val id: String,
     val fen: String,
     val whitePlayerID: String,
-    val blackPlayerID: String,
+    val blackPlayerID: String? = null,
     val status: String,
     val createdAt: String,
     val updatedAt: String,
