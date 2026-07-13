@@ -139,10 +139,12 @@ object LightToolPolicy {
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_AUDIO",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.NFC",
     )
 
     /**
@@ -158,6 +160,7 @@ object LightToolPolicy {
         "android.permission.RECORD_AUDIO" to listOf("android.hardware.microphone"),
         "android.permission.ACCESS_FINE_LOCATION" to listOf("android.hardware.location.gps"),
         "android.permission.ACCESS_COARSE_LOCATION" to listOf("android.hardware.location.network"),
+        "android.permission.NFC" to listOf("android.hardware.nfc"),
     )
 }
 

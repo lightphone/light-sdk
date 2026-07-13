@@ -16,5 +16,6 @@
     <style name="LightSdk.Theme.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@android:color/black</item>
         <item name="postSplashScreenTheme">@style/LightSdk.Theme</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/loading_text_icon</item>
     </style>
 </resources>

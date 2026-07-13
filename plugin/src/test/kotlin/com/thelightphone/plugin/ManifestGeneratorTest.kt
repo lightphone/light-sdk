@@ -70,6 +70,16 @@ class ManifestGeneratorTest {
     }
 
     @Test
+    fun `nfc permission emits nfc uses-feature`() {
+        val xml = render(permissions = listOf("android.permission.NFC"))
+        assertTrue(xml.contains("""<uses-permission android:name="android.permission.NFC" />"""))
+        assertTrue(
+            xml.contains("""<uses-feature android:name="android.hardware.nfc" android:required="false" />"""),
+            "expected android.hardware.nfc uses-feature; got:\n$xml"
+        )
+    }
+
+    @Test
     fun `permission without implied feature emits no uses-feature`() {
         val xml = render(permissions = listOf("android.permission.INTERNET"))
         assertFalse(xml.contains("uses-feature"))

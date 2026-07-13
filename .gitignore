@@ -45,3 +45,8 @@ bin/
 
 ### Clanker ###
 .claude/
+
+### Python (builder/) ###
+__pycache__/
+*.py[cod]
+.pytest_cache/

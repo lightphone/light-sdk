@@ -2,8 +2,10 @@ package com.thelightphone.sdk.server
 
 import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -31,6 +33,7 @@ enum class ClientCertType {
 
 object LightSdkServer {
     private const val TAG = "LightSdkServer"
+    const val SCREEN_OFF_FLAG = "SCREEN_OFF"
 
     val Context.runningAsSystemApp: Boolean
         get() {
@@ -46,8 +49,8 @@ object LightSdkServer {
         return true
     }
 
-    fun List<InstalledClient>.filterAllowedTools(context: Context): List<InstalledClient> {
-        val clientFilterLevel = LightSdkServerSettings(context).clientFilterLevel
+    fun List<InstalledClient>.filterAllowedTools(settings: LightSdkServerSettings): List<InstalledClient> {
+        val clientFilterLevel = settings.clientFilterLevel
         return filter { isPackageAllowed(clientFilterLevel, it.packageInfo.packageName) }
     }
 
@@ -100,11 +103,24 @@ object LightSdkServer {
         }.filterNotNull()
     }
 
-    fun Context.queryEnabledClients(): List<InstalledClient> {
+    fun Context.queryEnabledClients(settings: LightSdkServerSettings): List<InstalledClient> {
         return queryInstalledClients()
             .filter { isSdkVersionSupported(it.sdkVersion) }
-            .filterAllowedTools(this)
+            .filterAllowedTools(settings)
     }
+
+    var provideSdkSettings: (Context) -> LightSdkServerSettings = {
+        DefaultLightSdkServerSettings(it)
+    }
+
+    var defaultClientFilterLevel: ClientFilterLevel = ClientFilterLevel.AllowLightApprovedApks
+
+    /**
+     * defines the behavior for when the server app should "foreground" itself over other running apps
+     * LightOS is aggressive about this by default. It will foreground itself for all alerts, and whenever
+     * the phone is locked.
+     */
+    var defaultForceFocusLevel: ForceFocusLevel = ForceFocusLevel.Always
 
     /**
      * return the POST endpoint that the calling tool's application server should use to
@@ -143,8 +159,11 @@ object LightSdkServer {
      * Settable from enclosing application!! May be run on any thread
      */
     var androidPermissionAllowed: (callingUid: Int, permissionName: String) -> Boolean = { _, permissionName ->
-        // default, only allow camera for now
-        setOf(Manifest.permission.CAMERA).contains(permissionName)
+        // default grantable permissions; enclosing app may override
+        setOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.READ_MEDIA_AUDIO,
+        ).contains(permissionName)
     }
 
     var permissionActivity: Class<out Activity>? = null
@@ -166,5 +185,30 @@ object LightSdkServer {
                 Process.myUserHandle()
             )
         }
+    }
+
+    /**
+     * A receiver that will bring the rootActivity (MainActivity in both emulator and real LightOS)
+     * to the foreground with a new intent whenever the device's screen goes off
+     * (unless user has overridden the settings.forceFocusLevel)
+     */
+    fun Context.registerLockReceiver(rootActivityClass: Class<out Activity>, settings: LightSdkServerSettings) : BroadcastReceiver {
+        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+        val lockReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val allowForceFocus = when(settings.forceFocusLevel) {
+                    ForceFocusLevel.Always -> true
+                    ForceFocusLevel.AlertsOnly, ForceFocusLevel.Never -> false
+                }
+                if (allowForceFocus && intent.action == Intent.ACTION_SCREEN_OFF) {
+                    val i = Intent(context, rootActivityClass)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .putExtra(SCREEN_OFF_FLAG, true)
+                    context.startActivity(i)
+                }
+            }
+        }
+        registerReceiver(lockReceiver, filter)
+        return lockReceiver
     }
 }

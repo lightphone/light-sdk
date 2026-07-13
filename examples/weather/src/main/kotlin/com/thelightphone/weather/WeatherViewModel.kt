@@ -22,6 +22,7 @@ sealed class WeatherScreenMode {
     data object LocationInput : WeatherScreenMode()
     data object Loading : WeatherScreenMode()
     data class Settings(val locationName: String) : WeatherScreenMode()
+    data object Attribution : WeatherScreenMode()
     data class Weekly(
         val locationName: String,
         val days: List<WeeklyDay>,
@@ -138,12 +139,36 @@ class WeatherViewModel(
             skipRefreshOnNextScreenShow = false
             return
         }
+        resetToTodayView()
         viewModelScope.launch(Dispatchers.IO + apiExceptionHandler) {
             refreshForecastOnScreenShow()
         }
     }
 
     private var skipRefreshOnNextScreenShow = true
+
+    private fun resetToTodayView() {
+        lastSelectedDayIndex = 0
+        val state = _uiState.value
+        when (val mode = state.mode) {
+            is WeatherScreenMode.Weather -> {
+                _uiState.value = state.copy(mode = mode.copy(selectedDayIndex = 0))
+            }
+            is WeatherScreenMode.Hourly -> {
+                _uiState.value = state.copy(
+                    mode = WeatherScreenMode.Weather(
+                        locationName = mode.locationName,
+                        forecast = mode.forecast,
+                        selectedDayIndex = 0,
+                    ),
+                )
+            }
+            is WeatherScreenMode.Weekly,
+            is WeatherScreenMode.Settings,
+            is WeatherScreenMode.Attribution -> restoreWeatherScreen(selectedDayIndex = 0)
+            else -> Unit
+        }
+    }
 
     private suspend fun loadStoredState() {
         val prefs = dataStore.data.first()
@@ -350,6 +375,14 @@ class WeatherViewModel(
         }
     }
 
+    fun showDay(index: Int) {
+        val state = _uiState.value
+        val weekly = state.mode as? WeatherScreenMode.Weekly ?: return
+        if (index < 0 || index >= weekly.days.size) return
+        lastSelectedDayIndex = index
+        restoreWeatherScreen(selectedDayIndex = index)
+    }
+
     fun openHourly() {
         _uiState.update { state ->
             val weather = state.mode as? WeatherScreenMode.Weather ?: return@update state
@@ -377,6 +410,14 @@ class WeatherViewModel(
             is WeatherScreenMode.Hourly -> closeHourly()
             else -> restoreWeatherScreen(selectedDayIndex = 0)
         }
+    }
+
+    fun openAttribution() {
+        _uiState.update { it.copy(mode = WeatherScreenMode.Attribution, errorModal = null) }
+    }
+
+    fun closeAttribution() {
+        _uiState.update { it.copy(mode = settingsMode(), errorModal = null) }
     }
 
     fun openLocationFromSettings() {

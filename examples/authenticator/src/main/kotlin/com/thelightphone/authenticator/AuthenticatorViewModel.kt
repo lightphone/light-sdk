@@ -15,12 +15,23 @@ class AuthenticatorViewModel(
     private val _accounts = MutableStateFlow<List<StoredAccount>>(emptyList())
     val accounts: StateFlow<List<StoredAccount>> = _accounts.asStateFlow()
 
+    private val _errorModal = MutableStateFlow<String?>(null)
+    val errorModal: StateFlow<String?> = _errorModal.asStateFlow()
+
     init {
         reloadAccounts()
     }
 
     override fun onScreenShow(screen: SimpleLightScreen<Unit>) {
         reloadAccounts()
+    }
+
+    fun showError(message: String) {
+        _errorModal.value = message
+    }
+
+    fun dismissError() {
+        _errorModal.value = null
     }
 
     private fun reloadAccounts() {

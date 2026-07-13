@@ -25,6 +25,7 @@ android {
     defaultConfig {
         minSdk = rootProject.ext["minSdk"] as Int
         buildConfigField("String", "LIGHT_VAPID_KEY", "\"$vapidPublicKey\"")
+        consumerProguardFiles("consumer-rules.pro")
     }
 
     buildFeatures {

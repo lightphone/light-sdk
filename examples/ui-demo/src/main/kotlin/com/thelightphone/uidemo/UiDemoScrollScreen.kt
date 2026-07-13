@@ -59,7 +59,10 @@ class UiDemoScrollScreen(sealedActivity: SealedLightActivity) :
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(start = 1f.gridUnitsAsDp()),
+                        .padding(
+                            start = 1f.gridUnitsAsDp(),
+                            bottom = 1f.gridUnitsAsDp(),
+                        ),
                 ) {
                     repeat(DEMO_ROW_COUNT) { index ->
                         LightText(

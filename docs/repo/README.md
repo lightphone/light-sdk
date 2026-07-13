@@ -29,6 +29,9 @@ An Android application meant to serve as a very simple LightOS emulator. It shou
 ### [`:examples:[x]`](../../examples)
 The examples directory contains a few different tools that were built using the SDK libraries.
 
+### [`builder`](../../builder)
+(Not a Gradle module) This is the containerized build harness Light will run on our own servers to compile community tools. When you queue up a release to be signed and shared (see [Sharing Your Tool](../../README.md#sharing-your-tool)), we clone your public git commit into this image and build your `tool` module against a pinned copy of the SDK (offline and sandboxed) and we archive the extracted source alongside the APK. This is the first step toward fully reproducible builds, where anyone can rebuild a shared tool from source and verify it byte-for-byte against what we signed. See [`builder/README.md`](../../builder/README.md) for how to run it locally.
+
 ```mermaid
 ---
 config:

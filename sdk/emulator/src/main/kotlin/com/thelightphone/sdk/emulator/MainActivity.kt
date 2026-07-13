@@ -1,5 +1,6 @@
 package com.thelightphone.sdk.emulator
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -9,40 +10,33 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.sdk.server.LightSdkServer.queryEnabledClients
 import com.thelightphone.sdk.server.LightSdkServer.runningAsSystemApp
-import com.thelightphone.sdk.server.LightSdkServerSettings
-import com.thelightphone.sdk.ui.LightText
-import com.thelightphone.sdk.ui.LightTextVariant
-import com.thelightphone.sdk.ui.LightTheme
-import com.thelightphone.sdk.ui.LightThemeController
+import com.thelightphone.sdk.ui.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 class MainActivity : ComponentActivity() {
 
     enum class Nav {
-        Toolbox, Settings
+        LockScreen, Toolbox, Settings
     }
+
+    private val currentNavFlow = MutableStateFlow(Nav.LockScreen)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -57,41 +51,55 @@ class MainActivity : ComponentActivity() {
                 "WARNING: LightOS emulator is NOT running as a system app and may not work."
             )
         }
-        val serverSettings = LightSdkServerSettings(this)
+        val serverSettings = LightSdkServer.provideSdkSettings(this)
         setContent {
             val themeColors by LightThemeController.colors.collectAsState()
-            var currentNav by remember { mutableStateOf(Nav.Toolbox) }
-            LightTheme(colors = themeColors){
-                when(currentNav) {
+            val currentNav by currentNavFlow.collectAsState()
+            LightTheme(colors = themeColors) {
+                when (currentNav) {
+                    Nav.LockScreen -> {
+                        LightLockscreen {
+                            currentNavFlow.value = Nav.Toolbox
+                        }
+                    }
                     Nav.Toolbox -> {
                         ToolList(
                             fetchExternalTools = {
-                                queryEnabledClients().map {
+                                queryEnabledClients(serverSettings).map {
                                     val appInfo = it.packageInfo.applicationInfo!!
-                                    val label = packageManager.getApplicationLabel(appInfo).toString()
+                                    val label =
+                                        packageManager.getApplicationLabel(appInfo).toString()
                                     ExternalTool(label, it.packageInfo.packageName)
                                 }
                             }, launchPackage = {
                                 packageManager.getLaunchIntentForPackage(it)?.let { intent ->
-                                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                                    intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
                                     val options =
                                         android.app.ActivityOptions.makeCustomAnimation(this, 0, 0)
                                     startActivity(intent, options.toBundle())
                                 }
                             }, launchDefaultTool = {
-                                when(it) {
-                                    DefaultTool.Settings -> currentNav = Nav.Settings
+                                when (it) {
+                                    DefaultTool.Settings -> currentNavFlow.value = Nav.Settings
                                 }
                             })
                     }
+
                     Nav.Settings -> {
                         EmulatorSettings(serverSettings) {
-                            currentNav = Nav.Toolbox
+                            currentNavFlow.value = Nav.Toolbox
                         }
                     }
                 }
-
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val screenTurnedOff = intent.extras?.getBoolean(LightSdkServer.SCREEN_OFF_FLAG, false) == true
+        if (screenTurnedOff) {
+            currentNavFlow.value = Nav.LockScreen
         }
     }
 }
@@ -147,7 +155,7 @@ private fun ToolList(
                     text = tool.label,
                     variant = LightTextVariant.Subtitle,
                     modifier = Modifier.clickable {
-                        when(tool) {
+                        when (tool) {
                             is DefaultTool -> launchDefaultTool(tool)
                             is ExternalTool -> launchPackage(tool.packageName)
                         }
@@ -155,5 +163,60 @@ private fun ToolList(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LightLockscreen(onUnlockClicked: () -> Unit) {
+    Surface {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(1f.gridUnitsAsDp())
+        ) {
+            Row(Modifier.fillMaxWidth()) {
+                LightIcon(icon = LightIcons.WIFI, size = 1f)
+                Spacer(Modifier.width(0.5f.gridUnitsAsDp()))
+                LightIcon(icon = LightIcons.BLUETOOTH, size = 1f)
+                Spacer(Modifier.weight(1f))
+                LightIcon(icon = LightIcons.BATTERY_CHARGING, size = 1f)
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                var time by remember { mutableStateOf(LocalTime.now()) }
+
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        time = LocalTime.now()
+                        delay(1000)
+                    }
+                }
+
+                val formatter = remember { DateTimeFormatter.ofPattern("h:mm") }
+                LightText(
+                    time.format(formatter),
+                    variant = LightTextVariant.Title,
+                    modifier = Modifier.align(BiasAlignment(0f, -0.1f))
+                )
+            }
+            Box(Modifier.clickable(onClick = onUnlockClicked)) {
+                LightIcon(
+                    icon = LightIcons.CIRCLE,
+                    size = 2f
+                )
+            }
+        }
+    }
+}
+
+@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
+@Composable
+fun LockScreenPreview() {
+    LightTheme(colors = LightThemeColors.Dark) {
+        LightLockscreen { }
     }
 }

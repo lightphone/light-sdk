@@ -71,7 +71,10 @@ class UiDemoIconsScreen(sealedActivity: SealedLightActivity) :
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(start = 1f.gridUnitsAsDp()),
+                        .padding(
+                            start = 1f.gridUnitsAsDp(),
+                            bottom = 1f.gridUnitsAsDp(),
+                        ),
                     uniformItemHeightGridUnits = ICON_GALLERY_ROW_HEIGHT_GRID,
                 ) {
                     items(icons, key = { it.first }) { (id, icon) ->

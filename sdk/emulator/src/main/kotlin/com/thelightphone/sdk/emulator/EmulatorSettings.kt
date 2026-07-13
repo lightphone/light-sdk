@@ -1,35 +1,21 @@
 package com.thelightphone.sdk.emulator
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.thelightphone.sdk.server.ClientFilterLevel
+import com.thelightphone.sdk.server.ForceFocusLevel
 import com.thelightphone.sdk.server.LightSdkServerSettings
 import com.thelightphone.sdk.shared.LightServiceMethod
-import com.thelightphone.sdk.ui.LightBarButton
-import com.thelightphone.sdk.ui.LightBarButton.*
-import com.thelightphone.sdk.ui.LightIcons
-import com.thelightphone.sdk.ui.LightText
-import com.thelightphone.sdk.ui.LightTextVariant
-import com.thelightphone.sdk.ui.LightTopBar
-import com.thelightphone.sdk.ui.LightTopBarCenter
-import com.thelightphone.sdk.ui.LightTopBarCenter.*
-import com.thelightphone.sdk.ui.gridUnitsAsDp
+import com.thelightphone.sdk.ui.*
+import com.thelightphone.sdk.ui.LightBarButton.LightIcon
 
 private enum class EmulatorSettingsNav {
-    Root, FilterLevel, Keyboard
+    Root, FilterLevel, Keyboard, ForceFocus
 }
 
 val ClientFilterLevel.label: String
@@ -38,6 +24,13 @@ val ClientFilterLevel.label: String
         ClientFilterLevel.AllowLightApprovedApks -> "Community Tools"
         ClientFilterLevel.AllowLightSignedApks -> "Built with SDK"
         ClientFilterLevel.AllowAllApks -> "All Tools"
+    }
+
+val ForceFocusLevel.label: String
+    get() = when (this) {
+        ForceFocusLevel.Always -> "Always Foreground Emulator"
+        ForceFocusLevel.AlertsOnly -> "Foreground Alerts Only"
+        ForceFocusLevel.Never -> "Never Foreground Emulator"
     }
 
 @Composable
@@ -72,6 +65,20 @@ fun EmulatorSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit
                     Row(
                         Modifier
                             .fillMaxWidth()
+                            .clickable { nav = EmulatorSettingsNav.ForceFocus }
+                            .padding(16.dp)
+                    ) {
+                        Column {
+                            LightText("Force Focus", variant = LightTextVariant.Superfine)
+                            LightText(
+                                settings.forceFocusLevel.label,
+                                variant = LightTextVariant.Subheading
+                            )
+                        }
+                    }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
                             .clickable { nav = EmulatorSettingsNav.Keyboard }
                             .padding(16.dp)
                     ) {
@@ -86,6 +93,10 @@ fun EmulatorSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit
             }
 
             EmulatorSettingsNav.FilterLevel -> ClientFilterLevelSettings(settings) {
+                nav = EmulatorSettingsNav.Root
+            }
+
+            EmulatorSettingsNav.ForceFocus -> ForceFocusLevelSettings(settings) {
                 nav = EmulatorSettingsNav.Root
             }
 
@@ -120,6 +131,38 @@ fun ClientFilterLevelSettings(settings: LightSdkServerSettings, onBackPressed: (
                 ) {
                     LightText(
                         clientFilterLevel.label,
+                        variant = LightTextVariant.Subheading
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ForceFocusLevelSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit) {
+    Surface(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            LightTopBar(
+                leftButton = LightBarButton.LightIcon(
+                    icon = LightIcons.BACK,
+                    onClick = onBackPressed
+                ),
+                center = LightTopBarCenter.Text("Force Focus Level"),
+                modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
+            )
+            for (forceFocusLevel in ForceFocusLevel.entries) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            settings.forceFocusLevel = forceFocusLevel
+                            onBackPressed()
+                        }
+                        .padding(16.dp)
+                ) {
+                    LightText(
+                        forceFocusLevel.label,
                         variant = LightTextVariant.Subheading
                     )
                 }
@@ -173,5 +216,21 @@ fun KeyboardSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit
                 )
             }
         }
+    }
+}
+
+@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
+@Composable
+fun EmulatorSettingsPreview() {
+    val settings = object : LightSdkServerSettings {
+        override var clientFilterLevel: ClientFilterLevel = ClientFilterLevel.AllowAllApks
+        override var keyboardOptions: LightServiceMethod.GetKeyboardOptions.Response =
+            LightServiceMethod.GetKeyboardOptions.Response(null, true, true)
+        override var userPreferences: LightServiceMethod.GetUserPreferences.Response =
+            LightServiceMethod.GetUserPreferences.Response(hapticsEnabled = true)
+        override var forceFocusLevel: ForceFocusLevel = ForceFocusLevel.Always
+    }
+    LightTheme {
+        EmulatorSettings(settings) { }
     }
 }

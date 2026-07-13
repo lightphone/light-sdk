@@ -16,7 +16,7 @@ private const val BOTTOMBAR_HEIGHT_UNITS = 4f
 private const val HORIZONTAL_PADDING_MULTI_UNITS = 2f
 private const val TOP_MARGIN_UNITS = 1f
 
-private val BOTTOMBAR_TEXT_VARIANT = LightTextVariant.Fine
+private val BOTTOMBAR_TEXT_VARIANT = LightTextVariant.Button
 
 /**
  * Bottom action bar matching LightOS ActionBar

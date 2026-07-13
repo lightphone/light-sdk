@@ -33,6 +33,9 @@ android {
             signingConfig = signingConfigs.getByName("lightsdkDev")
         }
         release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             signingConfig = signingConfigs.getByName("lightsdkDev")
         }
     }

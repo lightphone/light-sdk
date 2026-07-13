@@ -7,6 +7,7 @@ import android.content.pm.Signature
 import android.util.Log
 import com.thelightphone.sdk.emulator.http.EmulatorHttpServer
 import com.thelightphone.sdk.server.ClientCertType
+import com.thelightphone.sdk.server.DefaultLightSdkServerSettings
 import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.sdk.shared.LightResult
 import java.security.MessageDigest
@@ -18,26 +19,29 @@ private const val LIGHTSDK_DEV_CERT_SHA256 =
 class EmulatorApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        val mollysocketUriString = BuildConfig.MOLLYSOCKET_URI
-        LightSdkServer.customServiceMethodResolver = { callingId, methodId, payload ->
-            if (methodId == "GetMollySocketUri" && mollysocketUriString.isNotEmpty()) {
-                val json = "{\"mollySocketUri\":\"$mollysocketUriString\"}"
-                LightResult.Success(json)
-            } else {
-                LightResult.Error(LightResult.ErrorCode.Unknown)
+        val mollySocketUriString = BuildConfig.MOLLYSOCKET_URI
+        val settings = DefaultLightSdkServerSettings(this)
+        with(LightSdkServer) {
+            registerLockReceiver(MainActivity::class.java, settings)
+            customServiceMethodResolver = { callingId, methodId, payload ->
+                if (methodId == "GetMollySocketUri" && mollySocketUriString.isNotEmpty()) {
+                    val json = "{\"mollySocketUri\":\"$mollySocketUriString\"}"
+                    LightResult.Success(json)
+                } else {
+                    LightResult.Error(LightResult.ErrorCode.Unknown)
+                }
             }
+            val pushDomain = BuildConfig.PUSH_DOMAIN.ifEmpty { "http://localhost:8090" }
+            pushEndpointFetcher = { callingPackage, token, vapid ->
+                Log.d("LightEmulator", "getting push endpoint for token: $token, vapid: $vapid")
+                "$pushDomain/push/$token"
+            }
+            checkCert = { callingPackage ->
+                checkLightSdkCert(callingPackage)
+            }
+            provideSdkSettings = { settings }
+            permissionActivity = LightSdkPermissionActivity::class.java
         }
-        val pushDomain = BuildConfig.PUSH_DOMAIN.ifEmpty { "http://localhost:8090" }
-        LightSdkServer.pushEndpointFetcher = { callingPackage, token, vapid ->
-            Log.d("LightEmulator", "getting push endpoint for token: $token, vapid: $vapid")
-            "$pushDomain/push/$token"
-        }
-
-        LightSdkServer.checkCert = { callingPackage ->
-            checkLightSdkCert(callingPackage)
-        }
-
-        LightSdkServer.permissionActivity = LightSdkPermissionActivity::class.java
 
         EmulatorHttpServer(this).start()
     }
