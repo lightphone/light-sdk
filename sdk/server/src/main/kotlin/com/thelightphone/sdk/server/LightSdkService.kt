@@ -81,7 +81,7 @@ class LightSdkService : Service() {
                             Log.w(TAG, "Rejected request with invalid token from uid=$callingUid")
                             reply?.apply {
                                 writeNoException()
-                                writeInt(LightResult.ErrorCode.NoPermission.ordinal)
+                                writeInt(LightResult.ErrorCode.InvalidToken.ordinal)
                                 writeString("invalid token")
                             }
                             return true
@@ -198,11 +198,6 @@ class LightSdkService : Service() {
                         "Server has not defined a component to allow permission acceptance."
                     )
                 } else {
-                    startActivity(
-                        Intent(this@LightSdkService, component).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                    )
                     val componentName =
                         ComponentName(
                             this@LightSdkService,
@@ -222,6 +217,14 @@ class LightSdkService : Service() {
                 val preferencesSnapshot = settings.userPreferences
                 LightResult.Success(
                     LightServiceMethod.GetUserPreferences.encodeResponse(preferencesSnapshot)
+                )
+            }
+
+            LightServiceMethod.DeviceKeyEvent -> {
+                val request = LightServiceMethod.DeviceKeyEvent.decodeRequest(payload!!)
+                LightSdkServer.onDeviceKeyEvent(callingUid, request)
+                LightResult.Success(
+                    LightServiceMethod.DeviceKeyEvent.encodeResponse(Unit)
                 )
             }
 

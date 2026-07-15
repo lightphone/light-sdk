@@ -2,8 +2,8 @@ package com.thelightphone.sdk.shared
 
 sealed interface LightResult<out T> {
     enum class ErrorCode {
-        // DO NOT REORDER/REMOVE
-        Unknown, Removed, InvalidParameters, NoPermission;
+        // DO NOT REORDER/REMOVE — ordinals are sent over the binder wire. Append new codes only.
+        Unknown, Removed, InvalidParameters, NoPermission, InvalidToken;
     }
     data class Success<T>(val data: T) : LightResult<T>
     data class Error(val code: ErrorCode, val extra: String? = null) : LightResult<Nothing>

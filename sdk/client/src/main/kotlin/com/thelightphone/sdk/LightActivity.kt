@@ -2,6 +2,7 @@ package com.thelightphone.sdk
 
 import android.content.Context
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -12,10 +13,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -23,6 +24,12 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import com.thelightphone.sdk.shared.LightServiceMethod
+import com.thelightphone.sdk.ui.LightModalManager
+import kotlinx.coroutines.launch
 import java.io.File
 
 private class BackStackEntry<T>(
@@ -88,25 +95,30 @@ class LightActivity internal constructor() : ComponentActivity() {
 
         setContent {
             androidx.compose.runtime.LaunchedEffect(Unit) { contentReady = true }
-            val screen = currentScreen.value?.screen
-            if (screen != null) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                    ) {
-                        val content: @Composable () -> Unit = { screen.Content() }
-                        if (screen is ViewModelStoreOwner) {
-                            CompositionLocalProvider(
-                                LocalViewModelStoreOwner provides screen,
-                                content = content,
-                            )
-                        } else {
-                            content()
+            Box(modifier = Modifier.fillMaxSize()) {
+                val screen = currentScreen.value?.screen
+                if (screen != null) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                        ) {
+                            val content: @Composable () -> Unit = { screen.Content() }
+                            if (screen is ViewModelStoreOwner) {
+                                CompositionLocalProvider(
+                                    LocalViewModelStoreOwner provides screen,
+                                    content = content,
+                                )
+                            } else {
+                                content()
+                            }
                         }
                     }
                 }
+                // Transient modals draw on top of the current screen.
+                val activeModal by LightModalManager.activeModal.collectAsState()
+                activeModal?.Content()
             }
         }
 
@@ -118,6 +130,69 @@ class LightActivity internal constructor() : ComponentActivity() {
                 }
             }
         )
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            return super.onKeyDown(keyCode, event)
+        }
+        if (currentScreen.value?.screen?.onKeyDown(keyCode, event) == true) {
+            return true
+        }
+        forwardKeyEventToServer(LightServiceMethod.DeviceKeyEvent.EventType.KeyDown, keyCode, event)
+        return true
+    }
+
+    override fun onKeyMultiple(
+        keyCode: Int,
+        repeatCount: Int,
+        event: KeyEvent?
+    ): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            return super.onKeyMultiple(keyCode, repeatCount, event)
+        }
+        if (event != null && currentScreen.value?.screen?.onKeyMultiple(keyCode, repeatCount, event) == true) {
+            return true
+        }
+        forwardKeyEventToServer(LightServiceMethod.DeviceKeyEvent.EventType.KeyMultiple, keyCode, event)
+        return true
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            return super.onKeyUp(keyCode, event)
+        }
+        if (event != null && currentScreen.value?.screen?.onKeyUp(keyCode, event) == true) {
+            return true
+        }
+        forwardKeyEventToServer(LightServiceMethod.DeviceKeyEvent.EventType.KeyUp, keyCode, event)
+        return true
+    }
+
+    private fun forwardKeyEventToServer(
+        eventType: LightServiceMethod.DeviceKeyEvent.EventType,
+        keyCode: Int,
+        event: KeyEvent?,
+    ) {
+        val action = event?.action ?: when (eventType) {
+            LightServiceMethod.DeviceKeyEvent.EventType.KeyDown -> KeyEvent.ACTION_DOWN
+            LightServiceMethod.DeviceKeyEvent.EventType.KeyUp -> KeyEvent.ACTION_UP
+            LightServiceMethod.DeviceKeyEvent.EventType.KeyMultiple -> KeyEvent.ACTION_MULTIPLE
+        }
+        lifecycleScope.launch {
+            callRemoteServiceMethod(
+                LightServiceMethod.DeviceKeyEvent,
+                LightServiceMethod.DeviceKeyEvent.Request(
+                    eventType = eventType,
+                    keyCode = keyCode,
+                    repeatCount = event?.repeatCount,
+                    action = action,
+                    characters = event?.characters,
+                    unicodeChar = event?.unicodeChar ?: 0,
+                    componentToRelaunch = componentName.flattenToString()
+                )
+            )
+        }
     }
 
     override fun onPause() {

@@ -1,7 +1,9 @@
 package com.thelightphone.sdk.emulator
 
 import android.app.Application
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.util.Log
@@ -10,6 +12,8 @@ import com.thelightphone.sdk.server.ClientCertType
 import com.thelightphone.sdk.server.DefaultLightSdkServerSettings
 import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.sdk.shared.LightResult
+import com.thelightphone.sdk.shared.LightServiceMethod
+import com.thelightphone.sdk.ui.LightModalManager
 import java.security.MessageDigest
 
 // SHA-256 fingerprint of sdk/keys/lightsdk-dev.jks (alias: lightsdk-dev).
@@ -17,10 +21,14 @@ private const val LIGHTSDK_DEV_CERT_SHA256 =
     "B9C33E29B0CCAD2BFF11ACAB55F65A3C517EF4BC92CD9C77785366FA353D5F28"
 
 class EmulatorApplication : Application() {
+    val lightAudioManager by lazy { LightAudioManager(this) }
+    val deviceKeyHandler by lazy { EmulatorDeviceKeyHandler(lightAudioManager) }
+
     override fun onCreate() {
         super.onCreate()
         val mollySocketUriString = BuildConfig.MOLLYSOCKET_URI
         val settings = DefaultLightSdkServerSettings(this)
+
         with(LightSdkServer) {
             registerLockReceiver(MainActivity::class.java, settings)
             customServiceMethodResolver = { callingId, methodId, payload ->
@@ -41,9 +49,44 @@ class EmulatorApplication : Application() {
             }
             provideSdkSettings = { settings }
             permissionActivity = LightSdkPermissionActivity::class.java
+            rootActivity = MainActivity::class.java
+            onDeviceKeyEvent = { _, request -> handleDeviceKeyEvent(request) }
         }
 
         EmulatorHttpServer(this).start()
+    }
+
+    private fun handleDeviceKeyEvent(request: LightServiceMethod.DeviceKeyEvent.Request) {
+        deviceKeyHandler.onDeviceKeyEventRequest(request)?.let { modal ->
+            // when the server is done handling the key press, server should re-launch the component that was foregrounded
+            // at the time of key event
+            fun relaunchSender() {
+                val componentToRelaunch =
+                    request.componentToRelaunch?.let(ComponentName::unflattenFromString)
+                startActivity(
+                    Intent().setComponent(componentToRelaunch)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+                EmulatorNavController.navigateTo(Nav.Toolbox)
+            }
+
+            val keyModal = DeviceKeyModal(
+                modal,
+                onMoreClick = {
+                    EmulatorNavController.navigateTo(Nav.Settings(backButtonOverride = ::relaunchSender))
+                },
+                onExpired = { relaunchSender() }
+            )
+            // show the modal, and then pull this app into focus over the client
+            LightModalManager.show(keyModal)
+            foregroundApp()
+        }
+    }
+
+    private fun foregroundApp() {
+        val intent = Intent(this.applicationContext, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
     }
 }
 
@@ -63,7 +106,8 @@ private fun Context.checkLightSdkCert(callingPackage: String): ClientCertType {
     }
     val md = MessageDigest.getInstance("SHA-256")
     val matches = signers.any { sig ->
-        md.digest(sig.toByteArray()).toHexString().equals(LIGHTSDK_DEV_CERT_SHA256, ignoreCase = true)
+        md.digest(sig.toByteArray()).toHexString()
+            .equals(LIGHTSDK_DEV_CERT_SHA256, ignoreCase = true)
     }
     return if (matches) ClientCertType.LightSdkSignedUnverified else ClientCertType.Unknown
 }

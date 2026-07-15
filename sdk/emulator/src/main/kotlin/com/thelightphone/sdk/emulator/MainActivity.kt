@@ -3,6 +3,7 @@ package com.thelightphone.sdk.emulator
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -24,19 +25,19 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.sdk.server.LightSdkServer.queryEnabledClients
 import com.thelightphone.sdk.server.LightSdkServer.runningAsSystemApp
+import com.thelightphone.sdk.server.LightSdkServerSettings
+import com.thelightphone.sdk.shared.LightKeys.VOLUME_UP
+import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.ui.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 class MainActivity : ComponentActivity() {
 
-    enum class Nav {
-        LockScreen, Toolbox, Settings
-    }
-
-    private val currentNavFlow = MutableStateFlow(Nav.LockScreen)
+    val lightAudioManager get() = (application as EmulatorApplication).lightAudioManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -54,42 +55,65 @@ class MainActivity : ComponentActivity() {
         val serverSettings = LightSdkServer.provideSdkSettings(this)
         setContent {
             val themeColors by LightThemeController.colors.collectAsState()
-            val currentNav by currentNavFlow.collectAsState()
             LightTheme(colors = themeColors) {
-                when (currentNav) {
-                    Nav.LockScreen -> {
-                        LightLockscreen {
-                            currentNavFlow.value = Nav.Toolbox
-                        }
-                    }
-                    Nav.Toolbox -> {
-                        ToolList(
-                            fetchExternalTools = {
-                                queryEnabledClients(serverSettings).map {
-                                    val appInfo = it.packageInfo.applicationInfo!!
-                                    val label =
-                                        packageManager.getApplicationLabel(appInfo).toString()
-                                    ExternalTool(label, it.packageInfo.packageName)
-                                }
-                            }, launchPackage = {
-                                packageManager.getLaunchIntentForPackage(it)?.let { intent ->
-                                    intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-                                    val options =
-                                        android.app.ActivityOptions.makeCustomAnimation(this, 0, 0)
-                                    startActivity(intent, options.toBundle())
-                                }
-                            }, launchDefaultTool = {
-                                when (it) {
-                                    DefaultTool.Settings -> currentNavFlow.value = Nav.Settings
-                                }
-                            })
-                    }
+                Box(Modifier.fillMaxSize()) {
+                    PrimaryUI(serverSettings, lightAudioManager)
+                    val modal by LightModalManager.activeModal.collectAsState()
+                    modal?.Content()
+                }
+            }
+        }
+    }
 
-                    Nav.Settings -> {
-                        EmulatorSettings(serverSettings) {
-                            currentNavFlow.value = Nav.Toolbox
+    @Composable
+    private fun PrimaryUI(
+        serverSettings: LightSdkServerSettings,
+        lightAudioManager: LightAudioManager
+    ) {
+        val currentNav by EmulatorNavController.currentNav.collectAsState()
+        when (val navSnapshot = currentNav) {
+            Nav.LockScreen -> {
+                LightLockscreen {
+                    EmulatorNavController.navigateTo(Nav.Toolbox)
+                }
+            }
+
+            Nav.Toolbox -> {
+                ToolList(
+                    fetchExternalTools = {
+                        queryEnabledClients(serverSettings).map {
+                            val appInfo = it.packageInfo.applicationInfo!!
+                            val label =
+                                packageManager.getApplicationLabel(appInfo).toString()
+                            ExternalTool(label, it.packageInfo.packageName)
                         }
-                    }
+                    }, launchPackage = {
+                        packageManager.getLaunchIntentForPackage(it)?.let { intent ->
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                            val options =
+                                android.app.ActivityOptions.makeCustomAnimation(
+                                    this@MainActivity,
+                                    0,
+                                    0
+                                )
+                            startActivity(intent, options.toBundle())
+                        }
+                    }, launchDefaultTool = {
+                        when (it) {
+                            DefaultTool.Settings -> EmulatorNavController.navigateTo(Nav.Settings())
+                        }
+                    })
+            }
+
+            is Nav.Settings -> {
+                val emulatorSettingsAudio = object : EmulatorSettingsAudio {
+                    override fun setRingerVolume(normalized: Float) =
+                        lightAudioManager.setRingerVolume(normalized)
+
+                    override val ringerVolume: StateFlow<Float> = lightAudioManager.ringerVolume
+                }
+                EmulatorSettings(serverSettings, emulatorSettingsAudio, navSnapshot) {
+                    EmulatorNavController.navigateTo(Nav.Toolbox)
                 }
             }
         }
@@ -97,9 +121,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        val screenTurnedOff = intent.extras?.getBoolean(LightSdkServer.SCREEN_OFF_FLAG, false) == true
+        val screenTurnedOff =
+            intent.extras?.getBoolean(LightSdkServer.SCREEN_OFF_FLAG, false) == true
         if (screenTurnedOff) {
-            currentNavFlow.value = Nav.LockScreen
+            EmulatorNavController.navigateTo(Nav.LockScreen)
         }
     }
 }

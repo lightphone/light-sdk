@@ -39,6 +39,7 @@ object ManifestGenerator {
         appendLine("""            android:value="${xmlAttr(metadata.serverPackage)}" />""")
         appendLine("""        <activity""")
         appendLine("""            android:name="com.thelightphone.sdk.LightActivity"""")
+        appendLine("""            android:launchMode="singleTask"""")
         metadata.orientation?.let {
             appendLine("""            android:screenOrientation="${xmlAttr(it)}"""")
         }

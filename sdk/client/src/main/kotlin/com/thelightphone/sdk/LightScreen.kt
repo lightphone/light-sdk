@@ -1,16 +1,15 @@
 package com.thelightphone.sdk
 
+import android.view.KeyEvent
 import androidx.compose.runtime.Composable
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
-import java.io.File
-import kotlin.text.clear
+import com.thelightphone.sdk.ui.LightKeyHandler
 
-abstract class SimpleLightScreen<ResultType>(sealedActivity: SealedLightActivity) {
+abstract class SimpleLightScreen<ResultType>(sealedActivity: SealedLightActivity) :
+    LightKeyHandler {
     internal val activity = sealedActivity.activity
     internal var result: ResultType? = null
     protected val lightContext = SealedLightContext(sealedActivity.activity)
@@ -92,4 +91,14 @@ abstract class LightScreen<ResultType, VM : LightViewModel<ResultType>>(
             super.goBack(result)
         }
     }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent) = viewModel.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent)= viewModel.onKeyUp(keyCode, event)
+
+    override fun onKeyMultiple(
+        keyCode: Int,
+        repeatCount: Int,
+        event: KeyEvent
+    ) = viewModel.onKeyMultiple(keyCode, repeatCount, event)
 }
