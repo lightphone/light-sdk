@@ -58,8 +58,8 @@ class EmulatorApplication : Application() {
 
     private fun handleDeviceKeyEvent(request: LightServiceMethod.DeviceKeyEvent.Request) {
         deviceKeyHandler.onDeviceKeyEventRequest(request)?.let { modal ->
-            // when the server is done handling the key press, server should re-launch the component that was foregrounded
-            // at the time of key event
+            // when the server is done handling the key press, server should re-foreground
+            // the app that sent it, if desired
             fun relaunchSender() {
                 val componentToRelaunch =
                     request.componentToRelaunch?.let(ComponentName::unflattenFromString)
@@ -79,11 +79,11 @@ class EmulatorApplication : Application() {
             )
             // show the modal, and then pull this app into focus over the client
             LightModalManager.show(keyModal)
-            foregroundApp()
+            foregroundEmulator()
         }
     }
 
-    private fun foregroundApp() {
+    private fun foregroundEmulator() {
         val intent = Intent(this.applicationContext, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent)

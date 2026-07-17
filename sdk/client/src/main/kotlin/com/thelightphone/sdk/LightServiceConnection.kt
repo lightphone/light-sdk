@@ -105,7 +105,7 @@ internal object LightServiceConnection : ServiceConnection {
     override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
         Log.i(TAG, "Connected to LightSdkService")
         serviceBinder = binder
-        // force re-auth if re-connected
+        // force re-auth if re-connected, token is likely invalid server-side now
         clearToken()
         if (binder != null) {
             binderReady.complete(binder)
@@ -120,7 +120,6 @@ internal object LightServiceConnection : ServiceConnection {
     override fun onBindingDied(name: ComponentName?) {
         Log.w(TAG, "Binding to LightSdkService died, rebinding")
         resetConnection()
-        // BIND_AUTO_CREATE does not recover a dead binding on its own; unbind and rebind.
         val ctx = appContext ?: return
         val pkg = serverPackage ?: return
         runCatching { ctx.unbindService(this) }
@@ -171,9 +170,7 @@ suspend fun <TRequest, TResponse> callRemoteServiceMethod(
     val encoded = method.encodeRequest(body)
     var result = LightServiceConnection.request(method.id, encoded)
     if (result is LightResult.Error && result.code == LightResult.ErrorCode.InvalidToken) {
-        // The server no longer recognizes our token (e.g. it restarted and lost its token
-        // store). Drop it, re-authenticate, and retry the request exactly once. GetToken is
-        // gated by caller verification rather than the token, so this cannot loop.
+        // Case where the app is "allowed", but the token is no longer valid, allow one retry
         Log.i(TAG, "Token rejected calling remote method, re-auth + retry")
         LightServiceConnection.clearToken()
         LightServiceConnection.ensureToken()

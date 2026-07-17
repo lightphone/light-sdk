@@ -112,19 +112,15 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
     }
 
     object DeviceKeyEvent : LightServiceMethod<DeviceKeyEvent.Request, Unit> {
-        enum class EventType {
-            KeyUp, KeyDown, KeyMultiple
-        }
         override val id = "DeviceKeyEvent"
         override val requestSerializer = serializer<Request>()
         override val responseSerializer = serializer<Unit>()
 
         @Serializable
         data class Request(
-            val eventType: EventType,
             val keyCode: Int,
             val repeatCount: Int?,
-            val action: Int,
+            val action: Int, // Android KeyEvent actions
             val characters: String?,
             val unicodeChar: Int,
             // if this key event will trigger the server to take over the screen
@@ -143,4 +139,5 @@ val allMethods: Map<String, LightServiceMethod<*, *>> = listOf(
     LightServiceMethod.GetPermission,
     LightServiceMethod.RequestPermissionComponent,
     LightServiceMethod.DeviceKeyEvent,
+    LightServiceMethod.GetUserPreferences,
 ).associateBy { it.id }

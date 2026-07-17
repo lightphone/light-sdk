@@ -20,7 +20,7 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * A transient overlay drawn on top of the current screen..
- * Implementations own their own appearance and positioning.
+ * Implementations own their own appearance
  */
 interface LightModal {
     @Composable
@@ -43,9 +43,9 @@ interface LightModal {
 }
 
 /**
- * Process-wide bus for transient modals. Any SDK code can [show] a modal;
+ * Show/dismiss transient modal overlays
  *
- * At most one modal is active at a time — showing a new one immediately replaces the
+ * At most one modal is active at a time, showing a new one immediately replaces the
  * current one. The active modal auto-dismisses after [DEFAULT_DURATION] unless it is
  * replaced first.
  */
@@ -68,7 +68,7 @@ object LightModalManager {
         dismissJob?.cancel()
         _activeModal.value = modal
         dismissJob = scope.launch {
-            // null return means the timeout elapsed; non-null means modal dismissed itself first.
+            // null return means the timeout elapsed, non-null means modal dismissed itself first.
             val timedOut = withTimeoutOrNull(duration) {
                 modal.awaitDismiss()
                 false

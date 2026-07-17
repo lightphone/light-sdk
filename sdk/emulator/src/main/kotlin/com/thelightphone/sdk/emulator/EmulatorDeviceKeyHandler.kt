@@ -1,6 +1,7 @@
 package com.thelightphone.sdk.emulator
 
 import android.util.Log
+import android.view.KeyEvent.ACTION_DOWN
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,7 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.thelightphone.sdk.shared.LightKeys
+import com.thelightphone.lp3Keyboard.ui.LightDeviceKeys
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.ui.LightIcon
 import com.thelightphone.sdk.ui.LightIcons
@@ -37,10 +38,10 @@ class EmulatorDeviceKeyHandler(private val audioManager: LightAudioManager) {
     }
 
     fun onDeviceKeyEventRequest(request: LightServiceMethod.DeviceKeyEvent.Request): AudioModal? {
-        if (request.eventType != LightServiceMethod.DeviceKeyEvent.EventType.KeyDown) return null
-        return when (request.keyCode) {
-            LightKeys.VOLUME_UP -> audioManager.stepUp()
-            LightKeys.VOLUME_DOWN -> audioManager.stepDown()
+        if (request.action != ACTION_DOWN) return null
+        return when (LightDeviceKeys.mapping[request.keyCode]) {
+            LightDeviceKeys.VolumeUp -> audioManager.stepUp()
+            LightDeviceKeys.VolumeDown -> audioManager.stepDown()
             else -> {
                 Log.d(TAG, "Unhandled keyCode: ${request.keyCode}")
                 null
@@ -49,6 +50,8 @@ class EmulatorDeviceKeyHandler(private val audioManager: LightAudioManager) {
     }
 }
 
+// Modeled after LightOS volume rocker modal
+// In ideal world, this will be used directly in LightOS
 class DeviceKeyModal(
     private val audioModal: AudioModal,
     private val onMoreClick: () -> Unit,
