@@ -43,7 +43,13 @@ class NowPlayingReader(context: Context) {
     private var controller: MediaController? = null
 
     private val controllerCallback = object : MediaController.Callback() {
-        override fun onPlaybackStateChanged(state: PlaybackState?) = publish()
+        override fun onPlaybackStateChanged(state: PlaybackState?) {
+            // While the selected session keeps playing, just refresh. Once it
+            // stops/pauses, another tool may now be the "current" one, so
+            // re-evaluate selection (which prefers a playing session).
+            if (state?.state == PlaybackState.STATE_PLAYING) publish()
+            else selectController(activeSessions())
+        }
         override fun onMetadataChanged(metadata: MediaMetadata?) = publish()
         override fun onSessionDestroyed() = selectController(activeSessions())
     }
