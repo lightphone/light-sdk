@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:sharedUserId="android.uid.system">
 
     <!-- Lets the lock screen read active MediaSessions published by tools
-         (e.g. via LightMediaSession). Signature|privileged permission, granted
-         because the emulator is platform-signed and runs as uid 1000. -->
-    <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" />
+         (e.g. via LightMediaSession). Signature|privileged permission, which
+         the emulator legitimately holds as a platform-signed system app (uid
+         1000); tools:ignore silences lint's system-app-only check. -->
+    <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:name=".EmulatorApplication"

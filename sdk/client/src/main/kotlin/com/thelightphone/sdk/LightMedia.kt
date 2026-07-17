@@ -1,10 +1,12 @@
 package com.thelightphone.sdk
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
@@ -142,7 +144,16 @@ object LightMediaSession {
             val key = notificationKey(nowPlaying, status)
             if (key != lastNotifiedKey) {
                 lastNotifiedKey = key
-                notificationManager(appContext).notify(NOTIFICATION_ID, buildNotification(appContext))
+                // Best-effort: only a tool that declared POST_NOTIFICATIONS shows
+                // it. The guard is also what satisfies lint's NotificationPermission
+                // check, so linking the SDK never forces the permission on tools
+                // that don't publish media. (The foreground-service notification
+                // posted by startForeground is exempt and needs no guard.)
+                if (appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED
+                ) {
+                    notificationManager(appContext).notify(NOTIFICATION_ID, buildNotification(appContext))
+                }
             }
         }
     }
