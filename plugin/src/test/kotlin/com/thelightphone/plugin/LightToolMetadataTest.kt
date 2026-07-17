@@ -78,6 +78,34 @@ class LightToolMetadataTest {
     }
 
     @Test
+    fun `foreground media playback permissions are allowed`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "X"
+            versionCode = 1
+            versionName = "1.0"
+            serverPackage = "com.lightos"
+            permissions = [
+                "android.permission.FOREGROUND_SERVICE",
+                "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+                "android.permission.POST_NOTIFICATIONS",
+            ]
+        """.trimIndent())
+
+        val meta = LightToolMetadata.parse(file)
+
+        assertEquals(
+            listOf(
+                "android.permission.FOREGROUND_SERVICE",
+                "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+                "android.permission.POST_NOTIFICATIONS",
+            ),
+            meta.permissions,
+        )
+    }
+
+    @Test
     fun `unlisted permission fails`(@TempDir dir: Path) {
         val file = writeToml(dir, """
             [tool]
