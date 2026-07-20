@@ -113,6 +113,13 @@ class UiDemoHomeScreen(sealedActivity: SealedLightActivity) :
                                 .lightClickable { LightThemeController.toggle() }
                                 .padding(vertical = 0.75f.gridUnitsAsDp()),
                         )
+                        LightText(
+                            text = "PROGRESS BAR",
+                            variant = LightTextVariant.Copy,
+                            modifier = Modifier
+                                .lightClickable { navigateTo(::UiDemoProgressBarScreen) }
+                                .padding(vertical = 0.75f.gridUnitsAsDp()),
+                        )
                     }
                 }
 
