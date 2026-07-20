@@ -220,3 +220,11 @@ fun LockScreenPreview() {
         LightLockscreen { }
     }
 }
+
+@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
+@Composable
+fun LockScreenPreviewLight() {
+    LightTheme(colors = LightThemeColors.Light) {
+        LightLockscreen { }
+    }
+}
