@@ -1,0 +1,111 @@
+version: 2.1
+
+jobs:
+  build-and-push-light-builder:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: xlarge
+    steps:
+      - checkout
+
+      - run:
+          name: resolve sdk version
+          command: |
+            set -euo pipefail
+
+            SDK_VERSION="$(
+              awk -F= '/^[[:space:]]*sdkVersion[[:space:]]*=/ {
+                value = $2
+                gsub(/^[[:space:]]+|[[:space:]\r]+$/, "", value)
+                print value
+                exit
+              }' gradle.properties
+            )"
+
+            if [[ -z "$SDK_VERSION" ]]; then
+              echo "sdkVersion is missing from gradle.properties" >&2
+              exit 1
+            fi
+            if [[ ! "$SDK_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]]; then
+              echo "sdkVersion '$SDK_VERSION' is not a valid Docker tag" >&2
+              exit 1
+            fi
+
+            if [[ -z "${CIRCLE_TAG:-}" ]]; then
+              echo "this job only runs on git tags" >&2
+              exit 1
+            fi
+            if [[ "$CIRCLE_TAG" != "$SDK_VERSION" && "$CIRCLE_TAG" != "v$SDK_VERSION" ]]; then
+              echo "tag '$CIRCLE_TAG' does not match sdkVersion '$SDK_VERSION' (or v$SDK_VERSION)" >&2
+              exit 1
+            fi
+
+            echo "SDK_GIT_URL=https://github.com/lightphone/light-sdk"
+            echo "SDK_GIT_REF=$CIRCLE_SHA1"
+            echo "CIRCLE_TAG=$CIRCLE_TAG"
+            echo "SDK_VERSION=$SDK_VERSION"
+            echo "export SDK_VERSION='$SDK_VERSION'" >> "$BASH_ENV"
+
+      - run:
+          name: install docker buildx
+          command: |
+            set -euo pipefail
+            if ! docker buildx version >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y docker-buildx-plugin || true
+            fi
+            docker buildx version
+            docker buildx create --use --name light-builder-builder || docker buildx use light-builder-builder
+
+      - run:
+          name: build light-builder image
+          no_output_timeout: 60m
+          command: |
+            set -euo pipefail
+            : "${GH_PACKAGES_USER:?GH_PACKAGES_USER must be set}"
+            : "${GH_PACKAGES_TOKEN:?GH_PACKAGES_TOKEN must be set}"
+
+            export DOCKER_BUILDKIT=1
+            docker build \
+              -f builder/Dockerfile \
+              --platform=linux/amd64 \
+              --build-arg "SDK_GIT_URL=https://github.com/lightphone/light-sdk" \
+              --build-arg "SDK_GIT_REF=${CIRCLE_SHA1}" \
+              --secret id=github_token,env=GH_PACKAGES_TOKEN \
+              --secret id=gh_packages_user,env=GH_PACKAGES_USER \
+              -t "thelightphone/light-sdk-builder:${SDK_VERSION}" \
+              builder/
+
+      - run:
+          name: docker hub login
+          command: |
+            set -euo pipefail
+            echo "$LIGHT_DOCKER_HUB_PASSWORD" | \
+              docker login -u "$LIGHT_DOCKER_HUB_USERNAME" --password-stdin
+
+      - run:
+          name: push image tags
+          command: |
+            set -euo pipefail
+            docker push "thelightphone/light-sdk-builder:${SDK_VERSION}"
+            echo "pushed thelightphone/light-sdk-builder:${SDK_VERSION}"
+
+            docker tag \
+              "thelightphone/light-sdk-builder:${SDK_VERSION}" \
+              "thelightphone/light-sdk-builder:latest"
+            docker push "thelightphone/light-sdk-builder:latest"
+            echo "pushed thelightphone/light-sdk-builder:latest"
+
+            docker image inspect \
+              "thelightphone/light-sdk-builder:${SDK_VERSION}" \
+              --format '{{index .RepoDigests 0}}'
+
+workflows:
+  build-light-builder:
+    jobs:
+      - build-and-push-light-builder:
+          filters:
+            tags:
+              only: /^v?\d+\.\d+\.\d+$/
+            branches:
+              ignore: /.*/
