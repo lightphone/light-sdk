@@ -2,7 +2,7 @@
 id = "com.thelightphone.authenticator"
 label = "Authenticator"
 versionCode = 2
-versionName = "2.0"
+versionName = "2.0.0"
 permissions = ["android.permission.CAMERA"]
 # change if you run this on the emulator!
 # serverPackage = "com.thelightphone.sdk.emulator"

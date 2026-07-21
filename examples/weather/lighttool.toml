@@ -2,7 +2,7 @@
 id = "com.thelightphone.weather"
 label = "Weather"
 versionCode = 3
-versionName = "3.0"
+versionName = "3.0.0"
 permissions = ["android.permission.INTERNET"]
 # change if you run this on the emulator!
 # serverPackage = "com.thelightphone.sdk.emulator"

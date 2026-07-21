@@ -182,7 +182,7 @@ refuse to sign if the artifact's hash doesn't match.
 id            = "com.example.mytool"  # Java package id, dotted, lowercase
 label         = "My Tool"             # 1–50 printable chars, no <, >, control chars
 versionCode   = 1                     # positive integer
-versionName   = "1.0.0"               # [A-Za-z0-9._+-], ≤30 chars
+versionName   = "1.0.0"               # ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
 permissions   = []                    # array of allowlisted permissions
 ```
 
