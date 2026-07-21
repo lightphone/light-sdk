@@ -1,0 +1,10 @@
+[tool]
+id = "com.thelightphone.audiodemo"
+label = "Light Audio Demo"
+versionCode = 1
+versionName = "0.1"
+permissions = ["android.permission.INTERNET", "android.permission.RECORD_AUDIO"]
+# change if you run this on an LP3!
+serverPackage = "com.lightos"
+orientation = "portrait"
+# serverPackage = "com.thelightphone.sdk.emulator"

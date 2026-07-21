@@ -135,6 +135,7 @@ class SealedLightContext(internal val androidContext: Context) {
     val dataStore: DataStore<Preferences> by lazy{ androidContext.dataStore }
     val filesDir: File by lazy{ androidContext.filesDir }
     val fileShare: LightFileShare by lazy { LightFileShare(androidContext) }
+    fun readAsset(path: String): ByteArray = androidContext.assets.open(path).use { it.readBytes() }
 }
 /**
  * Wrapper class to pass around an instance of LightActivity without exposing it to

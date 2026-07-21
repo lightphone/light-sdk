@@ -71,6 +71,125 @@ Every screen gets:
 - `filesDir: File` — the standard app private files directory.
 - `fileShare: LightFileShare` — files written here can be read by LightOS via a content provider (e.g., ringtones, wallpapers).
 
+### Audio
+
+`LightAudio` provides a minimal and opinionated API for dealing with sound input and output, both at the file (`LightAudioPlayer`,  `LightAudioRecorder`) and buffer levels (`LightAudioVoice`, `LightAudioCapture`).
+[`:examples:audio-demo`](../../examples/audio-demo) has a complete app demo of the current functionality.
+
+_NOTE: The SDK only supports foreground audio at the moment. Background audio requires some work on LightOS, and is planned._
+
+#### Setup and lifecycle
+
+`rememberLightAudio()` provides a Compose-scoped factory for foreground audio. Create players, recorders, capture sources, and PCM voices from it, then release the components when their owning screen or view model is destroyed. The factory itself does not need to be released.
+
+```kotlin
+class PlayerViewModel : LightViewModel<Unit>() {
+    private var player: LightAudioPlayer? = null
+
+    fun attachAudio(audio: LightAudio) {
+        if (player == null) player = audio.newPlayer()
+    }
+
+    fun shutdown() {
+        player?.release()
+        player = null
+    }
+}
+
+@Composable
+override fun Content() {
+    viewModel.attachAudio(rememberLightAudio())
+    // your UI
+}
+
+override fun onScreenDestroy() {
+    viewModel.shutdown()
+}
+```
+
+#### Player
+
+`LightAudioPlayer` plays files, bundled assets, and local or remote URLs. A player owns one queue and exposes position, duration, playback state, and queue index through `StateFlow` objects.
+
+```kotlin
+player.setMediaQueue(
+    listOf(
+        LightAudioItem(
+            source = LightAudioSource.AssetSource("audio/example.mp3"),
+            metadata = LightMediaMetadata(title = "Example"),
+        ),
+    ),
+)
+player.play()
+```
+
+- Use `pause`, `stop`, `seekTo`, or the skip methods for transport controls.
+- Playback requests audio focus automatically.
+- If focus is unavailable, `play()` does nothing.
+- Observe `isPlaying` for the actual state.
+- Transient focus loss pauses and later resumes playback, while duckable loss lowers the volume.
+
+#### PCM voice
+
+`LightAudioVoice` plays short mono signed 16-bit PCM buffers.
+Use it for synthesized sounds or short samples that don't require playback controls.
+
+```kotlin
+val voice = audio.newVoice()
+voice.play(pcm)
+```
+
+- One voice is monophonic: calling `play()` re-triggers it.
+- Create and release multiple voices when sounds need to overlap.
+- Generate or resample buffers for the voice's sample rate. The preferred output rate is available from `audio.capabilities.sampleRate`.
+
+#### Recorder
+
+`LightAudioRecorder` writes microphone input to an MPEG-4 file containing AAC audio.
+Add `android.permission.RECORD_AUDIO` to `lighttool.toml` and request the runtime permission before recording:
+
+```toml
+permissions = ["android.permission.RECORD_AUDIO"]
+```
+
+```kotlin
+try {
+    recorder.start(File(filesDir, "recording.m4a"))
+} catch (error: LightAudioException) {
+    // show error.message
+}
+
+val durationMs = recorder.stop()
+```
+
+- Starting a recording cancels any active recording.
+- `stop()` finalizes the file and returns its elapsed duration, or `0` if no valid recording was produced.
+- `cancel()` stops recording and deletes its output.
+- Set `RecorderConfig.source` to `Unprocessed` to request raw input when supported; `Mic` uses the standard processed microphone path.
+
+#### Capture
+
+`LightAudioCapture` provides microphone input as a `Flow<ShortArray>` of mono signed 16-bit PCM buffers.
+It also requires the record-audio permission.
+
+Use it for functionality that requires real-time processing of audio input, rather than recording it to a file.
+
+```toml
+permissions = ["android.permission.RECORD_AUDIO"]
+```
+
+```kotlin
+val capture = audio.newCapture()
+capture.asFlow().collect { pcm ->
+    // analyze the newest PCM buffer
+}
+```
+
+- Collection owns the microphone lifetime: starting collection starts capture, and cancelling stops it.
+- Use one active collector per capture instance.
+- A capture startup failure throws `LightAudioCaptureException` from collection.
+- Set `CaptureConfig.source` to `Unprocessed` to request raw input when supported; `Mic` uses the standard processed microphone path.
+
 ### Talking to LightOS
 
 `callRemoteServiceMethod(method, payload)` sends a typed request to the LightOS server (or to `:sdk:emulator` in dev) and returns a `LightResult<Response>`. The set of available methods lives in `:sdk:shared`'s `LightServiceMethod`. Example:

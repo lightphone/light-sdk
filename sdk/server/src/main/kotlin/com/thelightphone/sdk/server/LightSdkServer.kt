@@ -163,40 +163,45 @@ object LightSdkServer {
         setOf(
             Manifest.permission.CAMERA,
             Manifest.permission.READ_MEDIA_AUDIO,
+            Manifest.permission.RECORD_AUDIO,
         ).contains(permissionName)
     }
 
     var permissionActivity: Class<out Activity>? = null
 
 
-    var grantPermission: (context: Context, packageName: String, permission: String) -> Result<Unit> = { context, packageName, permission ->
-        runCatching {
-            // Fine for emulator, can avoid reflection on real system apps
-            val grant = PackageManager::class.java.getMethod(
-                "grantRuntimePermission",
-                String::class.java,
-                String::class.java,
-                UserHandle::class.java
-            )
-            grant.invoke(
-                context.packageManager,
-                packageName,
-                permission,
-                Process.myUserHandle()
-            )
+    var grantPermission: (context: Context, packageName: String, permission: String) -> Result<Unit> =
+        { context, packageName, permission ->
+            runCatching {
+                // Fine for emulator, can avoid reflection on real system apps
+                val grant = PackageManager::class.java.getMethod(
+                    "grantRuntimePermission",
+                    String::class.java,
+                    String::class.java,
+                    UserHandle::class.java
+                )
+                grant.invoke(
+                    context.packageManager,
+                    packageName,
+                    permission,
+                    Process.myUserHandle()
+                )
+            }
         }
-    }
 
     /**
      * A receiver that will bring the rootActivity (MainActivity in both emulator and real LightOS)
      * to the foreground with a new intent whenever the device's screen goes off
      * (unless user has overridden the settings.forceFocusLevel)
      */
-    fun Context.registerLockReceiver(rootActivityClass: Class<out Activity>, settings: LightSdkServerSettings) : BroadcastReceiver {
+    fun Context.registerLockReceiver(
+        rootActivityClass: Class<out Activity>,
+        settings: LightSdkServerSettings
+    ): BroadcastReceiver {
         val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
         val lockReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                val allowForceFocus = when(settings.forceFocusLevel) {
+                val allowForceFocus = when (settings.forceFocusLevel) {
                     ForceFocusLevel.Always -> true
                     ForceFocusLevel.AlertsOnly, ForceFocusLevel.Never -> false
                 }
