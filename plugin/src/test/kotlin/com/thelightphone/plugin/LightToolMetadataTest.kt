@@ -25,6 +25,7 @@ class LightToolMetadataTest {
             versionName = "1.2.0"
             permissions = ["android.permission.INTERNET"]
             serverPackage = "com.lightos"
+            orientation = "portrait"
         """.trimIndent())
 
         val meta = LightToolMetadata.parse(file)
@@ -35,6 +36,53 @@ class LightToolMetadataTest {
         assertEquals("1.2.0", meta.versionName)
         assertEquals(listOf("android.permission.INTERNET"), meta.permissions)
         assertEquals("com.lightos", meta.serverPackage)
+        assertEquals("portrait", meta.orientation)
+    }
+
+    @Test
+    fun `orientation is optional`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "My Tool"
+            versionCode = 1
+            versionName = "1.0"
+            serverPackage = "com.lightos"
+        """.trimIndent())
+
+        assertEquals(null, LightToolMetadata.parse(file).orientation)
+    }
+
+    @Test
+    fun `unsupported orientation fails`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "My Tool"
+            versionCode = 1
+            versionName = "1.0"
+            serverPackage = "com.lightos"
+            orientation = "landscape"
+        """.trimIndent())
+
+        val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+        assert(ex.message!!.contains("orientation"))
+    }
+
+    @Test
+    fun `foreground service permission is not allowed`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "X"
+            versionCode = 1
+            versionName = "1.0"
+            serverPackage = "com.lightos"
+            permissions = ["android.permission.FOREGROUND_SERVICE"]
+        """.trimIndent())
+
+        val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+        assert(ex.message!!.contains("not allowed"))
     }
 
     @Test

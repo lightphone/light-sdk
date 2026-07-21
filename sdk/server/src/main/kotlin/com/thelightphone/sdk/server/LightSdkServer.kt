@@ -143,28 +143,31 @@ object LightSdkServer {
      * Settable from enclosing application!! May be run on any thread
      */
     var androidPermissionAllowed: (callingUid: Int, permissionName: String) -> Boolean = { _, permissionName ->
-        // default, only allow camera for now
-        setOf(Manifest.permission.CAMERA).contains(permissionName)
+        setOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.RECORD_AUDIO,
+        ).contains(permissionName)
     }
 
     var permissionActivity: Class<out Activity>? = null
 
 
-    var grantPermission: (context: Context, packageName: String, permission: String) -> Result<Unit> = { context, packageName, permission ->
-        runCatching {
-            // Fine for emulator, can avoid reflection on real system apps
-            val grant = PackageManager::class.java.getMethod(
-                "grantRuntimePermission",
-                String::class.java,
-                String::class.java,
-                UserHandle::class.java
-            )
-            grant.invoke(
-                context.packageManager,
-                packageName,
-                permission,
-                Process.myUserHandle()
-            )
+    var grantPermission: (context: Context, packageName: String, permission: String) -> Result<Unit> =
+        { context, packageName, permission ->
+            runCatching {
+                // Fine for emulator, can avoid reflection on real system apps
+                val grant = PackageManager::class.java.getMethod(
+                    "grantRuntimePermission",
+                    String::class.java,
+                    String::class.java,
+                    UserHandle::class.java
+                )
+                grant.invoke(
+                    context.packageManager,
+                    packageName,
+                    permission,
+                    Process.myUserHandle()
+                )
+            }
         }
-    }
 }

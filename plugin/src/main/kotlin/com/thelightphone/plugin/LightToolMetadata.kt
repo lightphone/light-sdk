@@ -21,6 +21,7 @@ data class LightToolMetadata(
     val versionName: String,
     val permissions: List<String>,
     val serverPackage: String,
+    val orientation: String? = null,
 ) {
     companion object {
         const val FILE_NAME: String = "lighttool.toml"
@@ -58,6 +59,7 @@ data class LightToolMetadata(
                 versionName = validateVersionName(tool.tomlString("versionName")),
                 permissions = validatePermissions(tool.tomlStringList("permissions")),
                 serverPackage = validateServerPackage(tool.tomlString("serverPackage")),
+                orientation = validateOrientation(tool.tomlString("orientation")),
             )
         }
 
@@ -104,6 +106,15 @@ data class LightToolMetadata(
             return v
         }
 
+        private fun validateOrientation(value: String?): String? {
+            if (value == null) return null
+            require(value in LightToolPolicy.ALLOWED_ORIENTATIONS) {
+                "tool.orientation must be one of: " +
+                    LightToolPolicy.ALLOWED_ORIENTATIONS.sorted().joinToString() + "; got '$value'"
+            }
+            return value
+        }
+
         private fun validatePermissions(values: List<String>?): List<String> {
             val list = values ?: emptyList()
             val seen = mutableSetOf<String>()
@@ -130,6 +141,7 @@ object LightToolPolicy {
     val VERSION_NAME_PATTERN: Regex = Regex("^[A-Za-z0-9._\\-+]{1,30}$")
     val TOOL_LABEL_PATTERN: Regex = Regex("^[^\\x00-\\x1f<>]{1,50}$")
     const val MAX_VERSION_CODE: Int = 2_100_000_000
+    val ALLOWED_ORIENTATIONS: Set<String> = setOf("portrait")
 
     val ALLOWED_PERMISSIONS: Set<String> = setOf(
         "android.permission.INTERNET",

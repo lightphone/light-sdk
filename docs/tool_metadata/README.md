@@ -16,6 +16,7 @@ label       = "My Tool"                        # Your tool's display name
 versionCode = 1                                # monotonically-increasing integer
 versionName = "1.0.0"                          # user-visible version string
 permissions = ["android.permission.CAMERA"]  # allowlisted permissions only
+orientation = "portrait"                    # optional; omit for no orientation lock
 ```
 
 ## Fields
@@ -35,7 +36,10 @@ Any combination of letters, digits, `.`, `_`, `+`, or `-`, up to 30 characters. 
 ### `permissions` — Android permissions your tool needs
 An array of permission strings, each one from the allowlist below. Anything not on the list will fail the build. Each entry becomes a `<uses-permission>` element in the generated manifest.
 
+### `orientation` — optional screen orientation lock
+Set to `"portrait"` to keep the tool in portrait orientation. Omit this field to
+let the system choose the orientation.
+
 ## Permission allowlist
 
 To keep tools focused and the platform safe, only a curated set of permissions is currently accepted. The current list lives in [`LightToolMetadata.kt`](../../plugin/src/main/kotlin/com/thelightphone/plugin/LightToolMetadata.kt) under `LightToolPolicy.ALLOWED_PERMISSIONS` (though keep in mind that a user's current install of LightOS may have a slightly different list!). If you need a permission that isn't on the list, please get in touch — we're happy to expand the list when there's a real use case for it.
-

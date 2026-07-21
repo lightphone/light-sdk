@@ -10,6 +10,7 @@ class ManifestGeneratorTest {
         label: String = "My App",
         permissions: List<String> = emptyList(),
         serverPackage: String = "com.lightos",
+        orientation: String? = null,
     ): String = ManifestGenerator.render(
         LightToolMetadata(
             toolId = "com.example.mytool",
@@ -18,6 +19,7 @@ class ManifestGeneratorTest {
             versionName = "1.0",
             permissions = permissions,
             serverPackage = serverPackage,
+            orientation = orientation,
         )
     )
 
@@ -54,6 +56,16 @@ class ManifestGeneratorTest {
     }
 
     @Test
+    fun `orientation is omitted by default`() {
+        assertFalse(render().contains("screenOrientation"))
+    }
+
+    @Test
+    fun `portrait orientation is emitted on activity`() {
+        assertTrue(render(orientation = "portrait").contains("""android:screenOrientation="portrait"""))
+    }
+
+    @Test
     fun `camera permission emits a matching uses-feature`() {
         // Without this, lint trips PermissionImpliesUnsupportedChromeOsHardware.
         val xml = render(permissions = listOf("android.permission.CAMERA"))
@@ -86,5 +98,16 @@ class ManifestGeneratorTest {
             xml.contains("""android:value="com.lightos""""),
             "expected com.lightos as meta-data value; got:\n$xml"
         )
+    }
+
+    @Test
+    fun `manifest emits no service or foreground-service permissions`() {
+        // Background audio was removed for the MVP; the manifest must never
+        // declare a media service or foreground-service permissions.
+        val xml = render(permissions = listOf("android.permission.RECORD_AUDIO"))
+
+        assertFalse(xml.contains("<service"))
+        assertFalse(xml.contains("android.permission.FOREGROUND_SERVICE"))
+        assertFalse(xml.contains("foregroundServiceType"))
     }
 }

@@ -15,14 +15,15 @@ object ManifestGenerator {
     fun render(metadata: LightToolMetadata): String = buildString {
         appendLine("""<?xml version="1.0" encoding="utf-8"?>""")
         appendLine("""<manifest xmlns:android="http://schemas.android.com/apk/res/android">""")
-        for (perm in metadata.permissions) {
+        val permissions = metadata.permissions
+        for (perm in permissions) {
             appendLine("""    <uses-permission android:name="${xmlAttr(perm)}" />""")
         }
         // Emit Play-Store-inferred hardware features as required="false" so
         // PermissionImpliesUnsupportedChromeOsHardware lint stays quiet and
         // we don't accidentally narrow the install pool. Deduped because
         // distinct permissions can map to overlapping feature sets.
-        val features = metadata.permissions
+        val features = permissions
             .flatMap { LightToolPolicy.PERMISSION_IMPLIED_FEATURES[it].orEmpty() }
             .toSet()
         for (feature in features) {
@@ -38,6 +39,9 @@ object ManifestGenerator {
         appendLine("""            android:value="${xmlAttr(metadata.serverPackage)}" />""")
         appendLine("""        <activity""")
         appendLine("""            android:name="com.thelightphone.sdk.LightActivity"""")
+        metadata.orientation?.let {
+            appendLine("""            android:screenOrientation="${xmlAttr(it)}"""")
+        }
         appendLine("""            android:exported="true">""")
         appendLine("""            <intent-filter>""")
         appendLine("""                <action android:name="android.intent.action.MAIN" />""")

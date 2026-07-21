@@ -62,6 +62,8 @@ dependencies {
     api(libs.androidx.room.runtime)
     api(libs.androidx.room.ktx)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.media3.common)
+    implementation(libs.androidx.media3.exoplayer)
     lintChecks(project(":lint-rules"))
 
     testImplementation(libs.kotlin.test)
