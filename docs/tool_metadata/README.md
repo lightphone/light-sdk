@@ -14,7 +14,7 @@ Drop a `lighttool.toml` at the root of your `tool/` module:
 id          = "com.example.mytool"             # Java package id, dotted, lowercase
 label       = "My Tool"                        # Your tool's display name
 versionCode = 1                                # monotonically-increasing integer
-versionName = "1.0.0"                          # user-visible version string
+versionName = "1.0.0"                          # ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
 permissions = ["android.permission.CAMERA"]  # allowlisted permissions only
 ```
 
@@ -30,7 +30,8 @@ A dotted, lowercase Java package identifier with at least two segments — e.g. 
 Android refuses updates whose `versionCode` does not strictly exceed the installed one. The Light build server will reject a submission whose `versionCode` is not greater than the previous published build, so always bump this when shipping a new version.
 
 ### `versionName` — user-visible version string
-Any combination of letters, digits, `.`, `_`, `+`, or `-`, up to 30 characters. This is the version string a user sees ("1.2.0", "2024.06", "0.3.0-rc1", etc.). It has no semantic meaning to Android beyond display — `versionCode` is what controls update ordering.
+Strict `major.minor.patch` semver only (e.g. `1.2.3`). No leading zeros, no
+pre-release (`1.2.3-rc.1`), and no build metadata (`1.2.3+build`). This will be the version string we'll use to refer to the build internally, and display on the dashboard and in LightOS. `versionCode` is what controls Android update ordering.
 
 ### `permissions` — Android permissions your tool needs
 An array of permission strings, each one from the allowlist below. Anything not on the list will fail the build. Each entry becomes a `<uses-permission>` element in the generated manifest.
