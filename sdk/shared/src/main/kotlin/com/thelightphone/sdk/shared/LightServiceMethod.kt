@@ -69,7 +69,8 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
             // "😅😅😅😅😅😅" -> keyboard will parse out emoji code points
             val emojisAsString: String?,
             val displayVoice: Boolean,
-            val enableKeyAnimation: Boolean
+            val enableKeyAnimation: Boolean,
+            val swipeEnabled: Boolean?
         )
     }
 

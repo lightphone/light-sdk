@@ -41,7 +41,7 @@ suspend fun refreshKeyboardOptions(): KeyboardOptions? {
         displayReturn = true,
         displayVoice = result.displayVoice,
         enableKeyAnimation = result.enableKeyAnimation,
-        swipeEnabled = false
+        swipeEnabled = result.swipeEnabled == true // nullable
     )
 }
 

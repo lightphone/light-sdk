@@ -5,10 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.thelightphone.sdk.ui.LightTouchableProgressBar
 import com.thelightphone.sdk.server.ClientFilterLevel
 import com.thelightphone.sdk.server.ForceFocusLevel
 import com.thelightphone.sdk.server.LightSdkServerSettings
@@ -291,7 +289,8 @@ fun EmulatorSettingsPreview() {
         override var keyboardOptions: LightServiceMethod.GetKeyboardOptions.Response =
             LightServiceMethod.GetKeyboardOptions.Response(null,
                 displayVoice = true,
-                enableKeyAnimation = true
+                enableKeyAnimation = true,
+                swipeEnabled = true
             )
         override var userPreferences: LightServiceMethod.GetUserPreferences.Response =
             LightServiceMethod.GetUserPreferences.Response(hapticsEnabled = true)
