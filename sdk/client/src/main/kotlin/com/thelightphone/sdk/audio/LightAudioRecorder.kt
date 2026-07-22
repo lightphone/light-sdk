@@ -1,10 +1,8 @@
 package com.thelightphone.sdk.audio
 
-import android.Manifest
 import android.content.Context
 import android.media.MediaRecorder
 import android.os.SystemClock
-import androidx.annotation.RequiresPermission
 import java.io.File
 
 /**
@@ -28,7 +26,6 @@ class LightAudioRecorder internal constructor(
      * @throws LightAudioRecorderException when the platform cannot prepare or
      *   start recording
      */
-    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun start(file: File) {
         cancel()
         file.parentFile?.mkdirs()
