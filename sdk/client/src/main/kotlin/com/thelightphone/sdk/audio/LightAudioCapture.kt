@@ -1,5 +1,6 @@
 package com.thelightphone.sdk.audio
 
+import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.os.Process
@@ -25,6 +26,10 @@ class LightAudioCapture internal constructor(
     private var audioRecord: AudioRecord? = null
     private var captureThread: Thread? = null
 
+    // LightOS ensures RECORD_AUDIO is granted before this method is called.
+    // Lint cannot detect that external check. Catch SecurityException in case
+    // the permission is revoked before AudioRecord starts.
+    @SuppressLint("MissingPermission")
     private fun start(onBuffer: (ShortArray, Int) -> Unit) {
         stop()
         val minBufferBytes = AudioRecord.getMinBufferSize(
@@ -46,6 +51,8 @@ class LightAudioCapture internal constructor(
                 .setAudioFormat(config.toAudioFormat())
                 .setBufferSizeInBytes(bufferBytes)
                 .build()
+        } catch (e: SecurityException) {
+            throw LightAudioCaptureException("Microphone permission was denied", e)
         } catch (e: Exception) {
             throw LightAudioCaptureException("Could not create the audio recorder", e)
         }
@@ -56,6 +63,9 @@ class LightAudioCapture internal constructor(
 
         try {
             record.startRecording()
+        } catch (e: SecurityException) {
+            record.release()
+            throw LightAudioCaptureException("Microphone permission was denied", e)
         } catch (e: Exception) {
             record.release()
             throw LightAudioCaptureException("Could not start the microphone", e)
@@ -97,7 +107,8 @@ class LightAudioCapture internal constructor(
     /**
      * Returns a conflated cold flow of PCM buffers at the configured sample
      * rate. Each collection starts microphone capture and cancellation stops it.
-     * Slow collectors receive the newest available buffer.
+     * Slow collectors receive the newest available buffer. The tool must hold
+     * `android.permission.RECORD_AUDIO` while collecting.
      *
      * @throws LightAudioCaptureException from collection when the format is
      *   unsupported or the microphone cannot be created or started

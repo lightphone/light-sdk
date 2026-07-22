@@ -1,8 +1,10 @@
 package com.thelightphone.sdk.audio
 
+import android.Manifest
 import android.content.Context
 import android.media.MediaRecorder
 import android.os.SystemClock
+import androidx.annotation.RequiresPermission
 import java.io.File
 
 /**
@@ -21,11 +23,12 @@ class LightAudioRecorder internal constructor(
     /**
      * Starts a new recording at [file], cancelling any active recording first.
      * Parent directories are created as needed and partial output is deleted on
-     * failure.
+     * failure. The tool must hold `android.permission.RECORD_AUDIO`.
      *
      * @throws LightAudioRecorderException when the platform cannot prepare or
      *   start recording
      */
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun start(file: File) {
         cancel()
         file.parentFile?.mkdirs()
@@ -48,6 +51,12 @@ class LightAudioRecorder internal constructor(
                 start()
             }
             recorder = newRecorder
+        } catch (e: SecurityException) {
+            runCatching { newRecorder.release() }
+            outputFile?.delete()
+            outputFile = null
+            startedAtMs = 0L
+            throw LightAudioRecorderException("Microphone permission was denied", e)
         } catch (e: Exception) {
             runCatching { newRecorder.release() }
             outputFile?.delete()
