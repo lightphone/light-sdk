@@ -31,12 +31,8 @@ fun LightIcon(
     val resolvedWidth = size ?: width
     val resolvedHeight = size ?: height
     val contentColor = LightThemeTokens.colors.content
-    val drawableId = when (LightThemeTokens.surfaceScheme) {
-        LightSurfaceScheme.Dark -> icon.darkModeResource
-        LightSurfaceScheme.Light -> icon.lightModeResource
-    }
     Icon(
-        painter = painterResource(drawableId),
+        painter = painterResource(icon.drawableResource),
         contentDescription = contentDescription,
         tint = contentColor,
         modifier = modifier

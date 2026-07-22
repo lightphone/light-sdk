@@ -25,7 +25,7 @@ class LightSdkService : Service() {
 
     // TODO something more robust
     private val tokensByUid = mutableMapOf<Int, String>()
-    private val settings by lazy { LightSdkServerSettings(this) }
+    private val settings by lazy { LightSdkServer.provideSdkSettings(this) }
 
     private fun verifyCallerIsInstalledClient(callingId: Int): Boolean {
         val packages = packageManager.getPackagesForUid(callingId) ?: return false
@@ -216,6 +216,13 @@ class LightSdkService : Service() {
                         )
                     )
                 }
+            }
+
+            LightServiceMethod.GetUserPreferences -> {
+                val preferencesSnapshot = settings.userPreferences
+                LightResult.Success(
+                    LightServiceMethod.GetUserPreferences.encodeResponse(preferencesSnapshot)
+                )
             }
 
             null -> {

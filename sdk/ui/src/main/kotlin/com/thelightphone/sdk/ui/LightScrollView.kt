@@ -1,5 +1,6 @@
 package com.thelightphone.sdk.ui
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -92,9 +93,9 @@ fun scrollViewContentWidthUnits(totalWidthUnits: Float, position: LightScrollBar
 fun LightScrollView(
     modifier: Modifier = Modifier,
     scrollBarPosition: LightScrollBarPosition = LightScrollBarPosition.Outside,
+    scrollState: ScrollState = rememberScrollState(),
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val scrollOffsetPx by remember { derivedStateOf { scrollState.value.toFloat() } }
     val showScrollBar = scrollState.maxValue > 0

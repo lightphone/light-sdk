@@ -8,6 +8,8 @@ import com.thelightphone.lp3Keyboard.ui.SpecialKey
 
 internal class TextInputKeyboardCallback(
     private val state: TextFieldState,
+    private val singleLine: Boolean = false,
+    private val onReturn: () -> Unit = {},
 ) : Lp3RepeatableKeyboardCallback {
 
     override fun onKeyPressed(code: Int) = Unit
@@ -26,7 +28,7 @@ internal class TextInputKeyboardCallback(
                 val before = state.text.subSequence(0, state.selection.min)
                 deleteBeforeCursor(surrogateAwareDeleteCount(before, 1))
             }
-            SpecialKey.Return -> insertAtCursor("\n")
+            SpecialKey.Return -> if (singleLine) onReturn() else insertAtCursor("\n")
             else -> Unit
         }
     }

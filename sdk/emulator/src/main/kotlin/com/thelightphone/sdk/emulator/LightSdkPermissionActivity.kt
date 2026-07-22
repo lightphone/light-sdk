@@ -2,8 +2,6 @@ package com.thelightphone.sdk.emulator
 
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.Process
-import android.os.UserHandle
 import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -26,7 +24,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.thelightphone.sdk.server.LightSdkServer
-import com.thelightphone.sdk.server.LightSdkServerSettings
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.ui.*
 import kotlinx.coroutines.Dispatchers
@@ -72,7 +69,7 @@ class LightSdkPermissionActivity : ComponentActivity() {
             var packageAllowed by remember { mutableStateOf(false) }
             LaunchedEffect(Unit) {
                 withContext(Dispatchers.IO) {
-                    val clientFilterLevel = LightSdkServerSettings(this@LightSdkPermissionActivity).clientFilterLevel
+                    val clientFilterLevel = LightSdkServer.provideSdkSettings(this@LightSdkPermissionActivity).clientFilterLevel
                     packageAllowed = permissionAllowed && LightSdkServer.isPackageAllowed(clientFilterLevel, requester)
                     loading = false
                 }

@@ -20,8 +20,13 @@ import kotlinx.serialization.json.Json
 
 sealed class WeatherScreenMode {
     data object LocationInput : WeatherScreenMode()
+    data class LocationSearchResults(
+        val query: String,
+        val results: List<GeocodingResult>,
+    ) : WeatherScreenMode()
     data object Loading : WeatherScreenMode()
     data class Settings(val locationName: String) : WeatherScreenMode()
+    data object Attribution : WeatherScreenMode()
     data class Weekly(
         val locationName: String,
         val days: List<WeeklyDay>,
@@ -138,12 +143,37 @@ class WeatherViewModel(
             skipRefreshOnNextScreenShow = false
             return
         }
+        resetToTodayView()
         viewModelScope.launch(Dispatchers.IO + apiExceptionHandler) {
             refreshForecastOnScreenShow()
         }
     }
 
     private var skipRefreshOnNextScreenShow = true
+
+    private fun resetToTodayView() {
+        lastSelectedDayIndex = 0
+        val state = _uiState.value
+        when (val mode = state.mode) {
+            is WeatherScreenMode.Weather -> {
+                _uiState.value = state.copy(mode = mode.copy(selectedDayIndex = 0))
+            }
+            is WeatherScreenMode.Hourly -> {
+                _uiState.value = state.copy(
+                    mode = WeatherScreenMode.Weather(
+                        locationName = mode.locationName,
+                        forecast = mode.forecast,
+                        selectedDayIndex = 0,
+                    ),
+                )
+            }
+            is WeatherScreenMode.Weekly,
+            is WeatherScreenMode.Settings,
+            is WeatherScreenMode.Attribution,
+            is WeatherScreenMode.LocationSearchResults -> restoreWeatherScreen(selectedDayIndex = 0)
+            else -> Unit
+        }
+    }
 
     private suspend fun loadStoredState() {
         val prefs = dataStore.data.first()
@@ -220,16 +250,17 @@ class WeatherViewModel(
                     )
                 }
 
-                val geoResult = api.resolveLocation(query)
-                geoResult.fold(
-                    onSuccess = { geo ->
-                        refreshForecast(
-                            query = query,
-                            locationName = geo.displayName(),
-                            latitude = geo.latitude,
-                            longitude = geo.longitude,
-                            showLoadingScreen = true,
-                        )
+                val searchResult = api.searchLocations(query)
+                searchResult.fold(
+                    onSuccess = { results ->
+                        updateState {
+                            it.copy(
+                                mode = WeatherScreenMode.LocationSearchResults(
+                                    query = query,
+                                    results = results,
+                                ),
+                            )
+                        }
                     },
                     onFailure = { error ->
                         showApiFailure(error)
@@ -239,6 +270,29 @@ class WeatherViewModel(
                 showApiFailure()
             }
         }
+    }
+
+    fun selectLocationResult(result: GeocodingResult) {
+        val query = (_uiState.value.mode as? WeatherScreenMode.LocationSearchResults)?.query
+            ?: return
+
+        viewModelScope.launch(Dispatchers.IO + apiExceptionHandler) {
+            runCatching {
+                refreshForecast(
+                    query = query,
+                    locationName = result.displayName(),
+                    latitude = result.latitude,
+                    longitude = result.longitude,
+                    showLoadingScreen = true,
+                )
+            }.onFailure {
+                showApiFailure()
+            }
+        }
+    }
+
+    fun cancelLocationSearchResults() {
+        _uiState.update { it.openLocationInput(canCancel = it.canCancelLocationInput) }
     }
 
     private suspend fun refreshForecast(
@@ -350,6 +404,14 @@ class WeatherViewModel(
         }
     }
 
+    fun showDay(index: Int) {
+        val state = _uiState.value
+        val weekly = state.mode as? WeatherScreenMode.Weekly ?: return
+        if (index < 0 || index >= weekly.days.size) return
+        lastSelectedDayIndex = index
+        restoreWeatherScreen(selectedDayIndex = index)
+    }
+
     fun openHourly() {
         _uiState.update { state ->
             val weather = state.mode as? WeatherScreenMode.Weather ?: return@update state
@@ -377,6 +439,14 @@ class WeatherViewModel(
             is WeatherScreenMode.Hourly -> closeHourly()
             else -> restoreWeatherScreen(selectedDayIndex = 0)
         }
+    }
+
+    fun openAttribution() {
+        _uiState.update { it.copy(mode = WeatherScreenMode.Attribution, errorModal = null) }
+    }
+
+    fun closeAttribution() {
+        _uiState.update { it.copy(mode = settingsMode(), errorModal = null) }
     }
 
     fun openLocationFromSettings() {

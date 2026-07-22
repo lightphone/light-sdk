@@ -273,18 +273,24 @@ class LightSdkPlugin : Plugin<Project> {
         generatedManifest.writeText(ManifestGenerator.render(metadata))
 
         if (System.getProperty("lightSdk.unsigned") == "true") {
+            // finalizeDsl runs after the dev's build script body has evaluated
+            // but before AGP creates variants from the DSL. Nulling the
+            // signing config here means AGP never wires a signing path into
+            // any variant — neither the validateSigning* task nor the package
+            // task have anything to do with keystores. Doing this in
+            // afterEvaluate is too late because AGP has already snapshotted
+            // the build types into variants.
             val ac = project.extensions.getByType(
                 com.android.build.api.variant.ApplicationAndroidComponentsExtension::class.java
             )
-            ac.onVariants { variant ->
-                project.logger.lifecycle(
-                    "Light SDK: disabling APK signing for variant ${variant.name}"
-                )
-                variant.signingConfig?.apply {
-                    enableV1Signing.set(false)
-                    enableV2Signing.set(false)
-                    enableV3Signing.set(false)
-                    enableV4Signing.set(false)
+            ac.finalizeDsl { ext ->
+                ext.buildTypes.configureEach { bt ->
+                    if (bt.signingConfig != null) {
+                        project.logger.lifecycle(
+                            "Light SDK: clearing signingConfig on buildType ${bt.name}"
+                        )
+                        bt.signingConfig = null
+                    }
                 }
             }
         }

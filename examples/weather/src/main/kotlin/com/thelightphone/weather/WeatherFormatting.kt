@@ -98,12 +98,16 @@ fun formatRain(mm: Double, unit: TemperatureUnit): String = when (unit) {
     TemperatureUnit.Fahrenheit -> "${(mm / 25.4).round1()} in"
 }
 
-fun formatWeeklySummaryLine(day: WeeklyDay, unit: TemperatureUnit): String {
-    val temps = "${formatTemperature(day.tempMaxC, unit)} / ${formatTemperature(day.tempMinC, unit)}"
-    val rain = formatRain(day.precipitationMm, unit)
+fun formatWeeklyHighLowLine(day: WeeklyDay, unit: TemperatureUnit): String {
+    val high = formatTemperature(day.tempMaxC, unit)
+    val low = formatTemperature(day.tempMinC, unit)
+    return "$high / $low"
+}
+
+fun formatWeeklyPrecipitationDetail(day: WeeklyDay, unit: TemperatureUnit): String {
+    val amount = formatRain(day.precipitationMm, unit)
     val probability = day.precipitationProbabilityMax
-    val rainPart = if (probability != null) "Rain: $rain ($probability%)" else "Rain: $rain"
-    return "$temps - $rainPart"
+    return if (probability != null) "$amount ($probability%)" else amount
 }
 
 fun formatHourLabel(isoDateTime: String): String {

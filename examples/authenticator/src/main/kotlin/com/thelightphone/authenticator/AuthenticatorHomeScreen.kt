@@ -18,6 +18,7 @@ import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.buildDatabase
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
+import com.thelightphone.sdk.ui.LightFullscreenModal
 import com.thelightphone.sdk.ui.LightScrollView
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
@@ -49,83 +50,100 @@ class AuthenticatorHomeScreen(sealedActivity: SealedLightActivity) :
     override fun Content() {
         val themeColors by LightThemeController.colors.collectAsState()
         val accounts by viewModel.accounts.collectAsState()
+        val errorModal by viewModel.errorModal.collectAsState()
 
         LightTheme(colors = themeColors) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(LightThemeTokens.colors.background),
-            ) {
-                LightTopBar(
-                    center = LightTopBarCenter.Text("Authenticator"),
-                    modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
-                )
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(LightThemeTokens.colors.background),
+                ) {
+                    LightTopBar(
+                        center = LightTopBarCenter.Text("Authenticator"),
+                        modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
+                    )
 
-                if (accounts.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        LightText(
-                            text = "no accounts added",
-                            variant = LightTextVariant.Copy,
-                            align = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
-                        )
-                    }
-                } else {
-                    LightScrollView(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .padding(start = 1f.gridUnitsAsDp()),
-                    ) {
-                        accounts.forEach { account ->
-                            AccountListRow(
-                                account = account,
-                                modifier = Modifier
-                                    .lightClickable {
-                                        navigateTo(screenFactory = {
-                                            AuthenticatorCodeScreen(
-                                                it,
-                                                account.id,
-                                                repository
-                                            )
-                                        })
-                                    }
-                                    .padding(vertical = 0.75f.gridUnitsAsDp()),
+                    if (accounts.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            LightText(
+                                text = "no accounts added",
+                                variant = LightTextVariant.Copy,
+                                align = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
                             )
                         }
+                    } else {
+                        LightScrollView(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(start = 1f.gridUnitsAsDp()),
+                        ) {
+                            accounts.forEach { account ->
+                                AccountListRow(
+                                    account = account,
+                                    modifier = Modifier
+                                        .lightClickable {
+                                            navigateTo(screenFactory = {
+                                                AuthenticatorCodeScreen(
+                                                    it,
+                                                    account.id,
+                                                    repository
+                                                )
+                                            })
+                                        }
+                                        .padding(vertical = 0.75f.gridUnitsAsDp()),
+                                )
+                            }
+                        }
                     }
-                }
 
-                fun goToAddNew() {
-                    navigateTo(screenFactory = {
-                        AuthenticatorQrScannerScreen(
-                            it,
-                            repository
-                        )
-                    }) { scanResult ->
+                    fun goToAddNew() {
                         navigateTo(screenFactory = {
-                            AuthenticatorAccountScreen(
+                            AuthenticatorQrScannerScreen(
                                 it,
-                                scanResult,
                                 repository
                             )
-                        })
+                        }) { scanResult ->
+                            val account = scanResult.getOrNull()
+                            if (account == null) {
+                                viewModel.showError(
+                                    scanResult.exceptionOrNull()?.message ?: "Invalid QR Code",
+                                )
+                                return@navigateTo
+                            }
+                            navigateTo(screenFactory = {
+                                AuthenticatorCodeScreen(
+                                    it,
+                                    account.id,
+                                    repository
+                                )
+                            })
+                        }
                     }
+
+                    LightBottomBar(
+                        listOf(
+                            LightBarButton.Text(
+                                text = "ADD NEW",
+                                onClick = ::goToAddNew
+                            )
+                        ),
+                    )
                 }
 
-                LightBottomBar(
-                    listOf(
-                        LightBarButton.Text(
-                            text = "ADD NEW",
-                            onClick = ::goToAddNew
-                        )
-                    ),
-                )
+                errorModal?.let { message ->
+                    LightFullscreenModal(
+                        message = message,
+                        onClose = viewModel::dismissError,
+                    )
+                }
             }
         }
     }

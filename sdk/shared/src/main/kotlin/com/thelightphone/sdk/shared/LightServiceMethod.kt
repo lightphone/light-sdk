@@ -73,6 +73,17 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
         )
     }
 
+    object GetUserPreferences : LightServiceMethod<Unit, GetUserPreferences.Response> {
+        override val id = "GetUserPreferences"
+        override val requestSerializer = serializer<Unit>()
+        override val responseSerializer = serializer<Response>()
+
+        @Serializable
+        data class Response(
+            val hapticsEnabled: Boolean,
+        )
+    }
+
     object GetPermission : LightServiceMethod<GetPermission.Request, GetPermission.Response> {
         enum class Result {
             Unknown, BlockedByServer, Granted, Denied

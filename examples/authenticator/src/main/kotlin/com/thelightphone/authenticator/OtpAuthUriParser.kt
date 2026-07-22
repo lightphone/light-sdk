@@ -13,7 +13,7 @@ object OtpAuthUriParser {
 
         val uri = URI(trimmed)
         if (uri.scheme?.equals("otpauth", ignoreCase = true) != true) {
-            return Result.failure(IllegalArgumentException("Not an otpauth URI"))
+            return Result.failure(IllegalArgumentException("Invalid QR Code"))
         }
 
         val type = uri.host?.lowercase()
