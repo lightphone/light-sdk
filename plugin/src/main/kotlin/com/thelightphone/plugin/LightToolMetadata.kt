@@ -143,6 +143,8 @@ object LightToolPolicy {
         "android.permission.READ_MEDIA_AUDIO",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
         "android.permission.NFC",
     )
 
