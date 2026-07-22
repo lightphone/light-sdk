@@ -179,7 +179,7 @@ class LightActivity internal constructor() : ComponentActivity() {
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         return if (keyCode.isSystemKeyCode) {
-            super.onKeyDown(keyCode, event)
+            super.onKeyUp(keyCode, event)
         } else if (currentScreen.value?.screen?.onKeyUp(keyCode, event) == true) {
             true
         } else if (LightDeviceKeys.mapping.containsKey(keyCode)) {
