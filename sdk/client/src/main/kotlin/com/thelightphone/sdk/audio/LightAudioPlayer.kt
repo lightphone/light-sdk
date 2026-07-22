@@ -8,6 +8,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -100,6 +101,7 @@ class LightAudioPlayer internal constructor(
 
     /** Enables the platform player's silence-skipping behavior. */
     var skipSilence: Boolean = false
+        @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
         set(value) {
             field = value
             player.skipSilenceEnabled = value
@@ -107,6 +109,7 @@ class LightAudioPlayer internal constructor(
 
     /** When `true`, playback pauses at the end of each queue item instead of advancing. */
     var pauseAtEndOfMediaItems: Boolean = false
+        @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
         set(value) {
             field = value
             player.pauseAtEndOfMediaItems = value
