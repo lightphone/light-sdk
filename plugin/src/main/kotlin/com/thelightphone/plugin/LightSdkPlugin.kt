@@ -264,6 +264,13 @@ class LightSdkPlugin : Plugin<Project> {
             defaultConfig.versionCode = metadata.versionCode
             defaultConfig.versionName = metadata.versionName
             sourceSets.getByName("main").manifest.srcFile(generatedManifest.path)
+            // A tool's only route to posting a notification is the SDK's
+            // LightMediaSession (the sandbox blocks direct NotificationManager
+            // access), and that call is guarded + gated on the tool opting into
+            // POST_NOTIFICATIONS. So the manifest-level NotificationPermission
+            // check — which every tool would otherwise inherit merely by linking
+            // the SDK — is always a false positive here.
+            lint { disable.add("NotificationPermission") }
         }
 
         // Always (re)write the manifest at configure time so it's present

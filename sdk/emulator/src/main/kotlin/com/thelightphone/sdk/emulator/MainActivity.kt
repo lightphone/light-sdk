@@ -38,6 +38,8 @@ class MainActivity : ComponentActivity() {
 
     private val currentNavFlow = MutableStateFlow(Nav.LockScreen)
 
+    private val nowPlayingReader by lazy { NowPlayingReader(this) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -52,15 +54,21 @@ class MainActivity : ComponentActivity() {
             )
         }
         val serverSettings = LightSdkServer.provideSdkSettings(this)
+        nowPlayingReader.start()
         setContent {
             val themeColors by LightThemeController.colors.collectAsState()
             val currentNav by currentNavFlow.collectAsState()
             LightTheme(colors = themeColors) {
                 when (currentNav) {
                     Nav.LockScreen -> {
-                        LightLockscreen {
-                            currentNavFlow.value = Nav.Toolbox
-                        }
+                        val nowPlaying by nowPlayingReader.state.collectAsState()
+                        LightLockscreen(
+                            nowPlaying = nowPlaying,
+                            onPlayPause = nowPlayingReader::playPause,
+                            onNext = nowPlayingReader::next,
+                            onPrevious = nowPlayingReader::previous,
+                            onUnlockClicked = { currentNavFlow.value = Nav.Toolbox },
+                        )
                     }
                     Nav.Toolbox -> {
                         ToolList(
@@ -101,6 +109,11 @@ class MainActivity : ComponentActivity() {
         if (screenTurnedOff) {
             currentNavFlow.value = Nav.LockScreen
         }
+    }
+
+    override fun onDestroy() {
+        nowPlayingReader.stop()
+        super.onDestroy()
     }
 }
 
@@ -167,7 +180,13 @@ private fun ToolList(
 }
 
 @Composable
-private fun LightLockscreen(onUnlockClicked: () -> Unit) {
+private fun LightLockscreen(
+    nowPlaying: LightNowPlayingState? = null,
+    onPlayPause: () -> Unit = {},
+    onNext: () -> Unit = {},
+    onPrevious: () -> Unit = {},
+    onUnlockClicked: () -> Unit,
+) {
     Surface {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -203,10 +222,68 @@ private fun LightLockscreen(onUnlockClicked: () -> Unit) {
                     modifier = Modifier.align(BiasAlignment(0f, -0.1f))
                 )
             }
+            if (nowPlaying != null) {
+                NowPlayingControls(
+                    nowPlaying = nowPlaying,
+                    onPlayPause = onPlayPause,
+                    onNext = onNext,
+                    onPrevious = onPrevious,
+                )
+                Spacer(Modifier.height(1f.gridUnitsAsDp()))
+            }
             Box(Modifier.clickable(onClick = onUnlockClicked)) {
                 LightIcon(
                     icon = LightIcons.CIRCLE,
                     size = 2f
+                )
+            }
+        }
+    }
+}
+
+/** Lock-screen media widget: track title/artist + transport controls, driven by
+ *  whatever tool currently owns an active MediaSession. */
+@Composable
+private fun NowPlayingControls(
+    nowPlaying: LightNowPlayingState,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        LightText(nowPlaying.title, variant = LightTextVariant.Subheading)
+        nowPlaying.artist?.let {
+            LightText(it, variant = LightTextVariant.Detail)
+        }
+        Spacer(Modifier.height(0.5f.gridUnitsAsDp()))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(
+                1.5f.gridUnitsAsDp(),
+                Alignment.CenterHorizontally,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (nowPlaying.hasPrevious) {
+                LightIcon(
+                    icon = LightIcons.REWIND,
+                    size = 1.5f,
+                    modifier = Modifier.clickable(onClick = onPrevious),
+                )
+            }
+            LightIcon(
+                icon = if (nowPlaying.isPlaying) LightIcons.PAUSE else LightIcons.PLAY,
+                size = 2f,
+                modifier = Modifier.clickable(onClick = onPlayPause),
+            )
+            if (nowPlaying.hasNext) {
+                LightIcon(
+                    icon = LightIcons.FAST_FORWARD,
+                    size = 1.5f,
+                    modifier = Modifier.clickable(onClick = onNext),
                 )
             }
         }

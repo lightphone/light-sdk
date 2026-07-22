@@ -144,6 +144,11 @@ object LightToolPolicy {
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.NFC",
+        // Lets a tool keep audio playing in the background and publish a
+        // MediaSession that LightOS surfaces on the lock screen. Pair with
+        // POST_NOTIFICATIONS and the SDK's LightMediaSession API.
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
     )
 
     /**

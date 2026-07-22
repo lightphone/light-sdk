@@ -14,5 +14,11 @@
                 <action android:name="org.unifiedpush.android.connector.PUSH_EVENT"/>
             </intent-filter>
         </service>
+        <!-- Backs LightMediaSession. Inert unless a tool declares the
+             FOREGROUND_SERVICE_MEDIA_PLAYBACK permission and starts it. -->
+        <service
+            android:name="com.thelightphone.sdk.LightMediaService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 </manifest>
