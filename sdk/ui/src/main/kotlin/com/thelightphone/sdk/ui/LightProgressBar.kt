@@ -75,10 +75,6 @@ fun LightTouchableProgressBar(
                         }
                     }
                 }
-                .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        currentOnValueChange(xToProgress(offset.x))
-                    }
                 }
         )
     }
