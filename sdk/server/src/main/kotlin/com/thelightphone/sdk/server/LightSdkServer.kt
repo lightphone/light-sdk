@@ -188,7 +188,6 @@ object LightSdkServer {
                 )
             }
         }
-    }
 
     /**
      * A receiver that will bring the rootActivity (MainActivity in both emulator and real LightOS)
