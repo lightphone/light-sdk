@@ -30,7 +30,7 @@ VALID_LIGHTTOOL_TOML = """\
 id = "com.example.mytool"
 label = "My Tool"
 versionCode = 1
-versionName = "1.0"
+versionName = "1.0.0"
 """
 
 

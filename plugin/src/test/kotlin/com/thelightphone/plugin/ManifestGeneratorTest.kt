@@ -15,7 +15,7 @@ class ManifestGeneratorTest {
             toolId = "com.example.mytool",
             label = label,
             versionCode = 1,
-            versionName = "1.0",
+            versionName = "1.0.0",
             permissions = permissions,
             serverPackage = serverPackage,
         )
