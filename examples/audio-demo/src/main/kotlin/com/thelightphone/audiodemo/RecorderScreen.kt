@@ -19,11 +19,11 @@ import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SimpleLightScreen
+import com.thelightphone.sdk.audio.DefaultLightAudio
 import com.thelightphone.sdk.audio.LightAudio
 import com.thelightphone.sdk.audio.LightAudioException
 import com.thelightphone.sdk.audio.LightAudioPlayer
 import com.thelightphone.sdk.audio.LightAudioRecorder
-import com.thelightphone.sdk.audio.rememberLightAudio
 import com.thelightphone.sdk.checkPermission
 import com.thelightphone.sdk.rememberPermissionRequestLauncher
 import com.thelightphone.sdk.shared.LightServiceMethod
@@ -54,7 +54,7 @@ enum class RecorderScreenState {
     ConfirmDiscard,
 }
 
-class RecorderViewModel(filesDir: File) : LightViewModel<Unit>() {
+class RecorderViewModel(filesDir: File, audio: LightAudio) : LightViewModel<Unit>() {
     val screenState = MutableStateFlow(RecorderScreenState.PermissionRequired)
     val elapsedMs = MutableStateFlow(0L)
     val reviewPositionMs = MutableStateFlow(0L)
@@ -63,17 +63,18 @@ class RecorderViewModel(filesDir: File) : LightViewModel<Unit>() {
     val error = MutableStateFlow<String?>(null)
 
     private val library = AudioLibraryRepository(filesDir)
-    private var recorder: LightAudioRecorder? = null
-    private var player: LightAudioPlayer? = null
+    private val recorder: LightAudioRecorder = audio.newRecorder()
+    private val player: LightAudioPlayer = audio.newPlayer()
     private var recordingFile: File? = null
     private var recordingStartedAtMs = 0L
     private var elapsedJob: Job? = null
     private var playerJob: Job? = null
 
-    fun attachAudio(audio: LightAudio) {
-        if (recorder == null) recorder = audio.newRecorder()
-        if (player == null) {
-            player = audio.newPlayer().also(::observePlayer)
+    init {
+        playerJob = viewModelScope.launch {
+            launch { player.positionMs.collect(reviewPositionMs::emit) }
+            launch { player.durationMs.collect(reviewDurationMs::emit) }
+            launch { player.isPlaying.collect(reviewPlaying::emit) }
         }
     }
 
@@ -86,10 +87,9 @@ class RecorderViewModel(filesDir: File) : LightViewModel<Unit>() {
     }
 
     fun startRecording() {
-        val recorder = recorder ?: return
         if (screenState.value != RecorderScreenState.Ready) return
         error.value = null
-        player?.stop()
+        player.stop()
         val file = library.newRecordingFile()
         try {
             recorder.start(file)
@@ -111,7 +111,6 @@ class RecorderViewModel(filesDir: File) : LightViewModel<Unit>() {
     }
 
     fun toggleReviewPlayback() {
-        val player = player ?: return
         if (reviewPlaying.value) {
             player.pause()
         } else {
@@ -123,14 +122,14 @@ class RecorderViewModel(filesDir: File) : LightViewModel<Unit>() {
     }
 
     fun save() {
-        player?.stop()
+        player.stop()
         recordingFile = null
         clearReview()
         screenState.value = RecorderScreenState.Ready
     }
 
     fun requestDiscard() {
-        player?.pause()
+        player.pause()
         screenState.value = RecorderScreenState.ConfirmDiscard
     }
 
@@ -139,25 +138,19 @@ class RecorderViewModel(filesDir: File) : LightViewModel<Unit>() {
     }
 
     fun confirmDiscard() {
-        player?.stop()
+        player.stop()
         recordingFile?.delete()
         recordingFile = null
         clearReview()
         screenState.value = RecorderScreenState.Ready
     }
 
-    fun shutdown() {
+    override fun onCleared() {
         stopRecordingForLifecycle()
         elapsedJob?.cancel()
         playerJob?.cancel()
-        recorder?.release()
-        recorder = null
-        player?.release()
-        player = null
-    }
-
-    override fun onCleared() {
-        shutdown()
+        recorder.release()
+        player.release()
         super.onCleared()
     }
 
@@ -183,7 +176,7 @@ class RecorderViewModel(filesDir: File) : LightViewModel<Unit>() {
     private fun finishRecording(review: Boolean) {
         elapsedJob?.cancel()
         elapsedJob = null
-        val duration = recorder?.stop() ?: 0L
+        val duration = recorder.stop()
         elapsedMs.value = duration
         val validFile = recordingFile?.takeIf { duration > 0L && it.exists() }
         if (validFile == null) {
@@ -191,22 +184,14 @@ class RecorderViewModel(filesDir: File) : LightViewModel<Unit>() {
             recordingFile = null
             screenState.value = RecorderScreenState.Ready
         } else {
-            if (review) player?.setSource(validFile)
+            if (review) player.setSource(validFile)
             screenState.value = if (review) RecorderScreenState.Review else RecorderScreenState.Ready
         }
     }
 
     private fun stopRecordingForLifecycle() {
         if (screenState.value == RecorderScreenState.Recording) finishRecording(review = false)
-        player?.pause()
-    }
-
-    private fun observePlayer(value: LightAudioPlayer) {
-        playerJob = viewModelScope.launch {
-            launch { value.positionMs.collect(reviewPositionMs::emit) }
-            launch { value.durationMs.collect(reviewDurationMs::emit) }
-            launch { value.isPlaying.collect(reviewPlaying::emit) }
-        }
+        player.pause()
     }
 
     private fun clearReview() {
@@ -221,17 +206,12 @@ class RecorderViewModel(filesDir: File) : LightViewModel<Unit>() {
     }
 }
 
-class RecorderScreen(activity: SealedLightActivity) : LightScreen<Unit, RecorderViewModel>(activity) {
+class RecorderScreen(private val sealedActivity: SealedLightActivity) : LightScreen<Unit, RecorderViewModel>(sealedActivity) {
     override val viewModelClass = RecorderViewModel::class.java
-    override fun createViewModel() = RecorderViewModel(lightContext.filesDir)
-
-    override fun onScreenDestroy() {
-        viewModel.shutdown()
-    }
+    override fun createViewModel() = RecorderViewModel(lightContext.filesDir, DefaultLightAudio(sealedActivity))
 
     @Composable
     override fun Content() {
-        viewModel.attachAudio(rememberLightAudio())
         val permissionLauncher = rememberPermissionRequestLauncher(Manifest.permission.RECORD_AUDIO)
         val colors by LightThemeController.colors.collectAsState()
         val state by viewModel.screenState.collectAsState()

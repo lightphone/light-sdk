@@ -24,9 +24,9 @@ import androidx.compose.ui.unit.dp
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
+import com.thelightphone.sdk.audio.DefaultLightAudio
 import com.thelightphone.sdk.audio.LightAudio
 import com.thelightphone.sdk.audio.LightAudioVoice
-import com.thelightphone.sdk.audio.rememberLightAudio
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightText
@@ -59,7 +59,7 @@ data class OneShotSample(
     val assetPath: String,
 )
 
-class ToneViewModel : LightViewModel<Unit>() {
+class ToneViewModel(audio: LightAudio, readAsset: (String) -> ByteArray) : LightViewModel<Unit>() {
     val whiteKeys = PIANO_WHITE_KEYS
     val blackKeys = PIANO_BLACK_KEYS
     val oneShots = ONE_SHOT_SAMPLES
@@ -67,53 +67,40 @@ class ToneViewModel : LightViewModel<Unit>() {
     val lastOneShot = MutableStateFlow<OneShotSample?>(null)
     val sampleError = MutableStateFlow<String?>(null)
 
+    private val sampleRate = audio.capabilities.sampleRate.takeIf { it > 0 } ?: DEFAULT_SAMPLE_RATE
+
     // A pool of monophonic voices; rotating across them lets overlapping taps
     // ring together — polyphony composed on the app side, mixed by the platform.
-    private val voices = mutableListOf<LightAudioVoice>()
+    private val voices by lazy { List(VOICE_COUNT) { audio.newVoice(sampleRate = sampleRate) } }
     private var nextVoice = 0
-    private var sampleRate = DEFAULT_SAMPLE_RATE
-    private var oneShotPcm = emptyMap<OneShotSample, ShortArray>()
-
-    fun attachAudio(audio: LightAudio, readAsset: (String) -> ByteArray) {
-        if (voices.isNotEmpty()) return
-        sampleRate = audio.capabilities.sampleRate.takeIf { it > 0 } ?: DEFAULT_SAMPLE_RATE
-        repeat(VOICE_COUNT) { voices += audio.newVoice(sampleRate = sampleRate) }
-        oneShotPcm = oneShots.mapNotNull { sample ->
-            runCatching {
-                val wav = decodePcmWav(readAsset(sample.assetPath))
-                sample to resampleMonoPcm(wav.samples, wav.sampleRate, sampleRate)
-            }.onFailure { sampleError.value = it.message ?: "Failed to decode ${sample.label}" }
-                .getOrNull()
-        }.toMap()
-    }
+    private val oneShotPcm: Map<OneShotSample, ShortArray> = oneShots.mapNotNull { sample ->
+        runCatching {
+            val wav = decodePcmWav(readAsset(sample.assetPath))
+            sample to resampleMonoPcm(wav.samples, wav.sampleRate, sampleRate)
+        }.onFailure { sampleError.value = it.message ?: "Failed to decode ${sample.label}" }
+            .getOrNull()
+    }.toMap()
 
     fun play(note: SoundboardNote) {
         lastNote.value = note
         lastOneShot.value = null
-        nextVoice()?.play(synthesizeSine(sampleRate, note.frequencyHz, TONE_DURATION_MS))
+        nextVoice().play(synthesizeSine(sampleRate, note.frequencyHz, TONE_DURATION_MS))
     }
 
     fun play(sample: OneShotSample) {
         val pcm = oneShotPcm[sample] ?: return
         lastNote.value = null
         lastOneShot.value = sample
-        nextVoice()?.play(pcm)
-    }
-
-    fun shutdown() {
-        voices.forEach(LightAudioVoice::release)
-        voices.clear()
-        nextVoice = 0
-        oneShotPcm = emptyMap()
+        nextVoice().play(pcm)
     }
 
     override fun onCleared() {
-        shutdown()
+        voices.forEach(LightAudioVoice::release)
         super.onCleared()
     }
 
-    private fun nextVoice(): LightAudioVoice? {
-        val voice = voices.getOrNull(nextVoice) ?: return null
+    private fun nextVoice(): LightAudioVoice {
+        val voice = voices[nextVoice]
         nextVoice = (nextVoice + 1) % voices.size
         return voice
     }
@@ -125,17 +112,12 @@ class ToneViewModel : LightViewModel<Unit>() {
     }
 }
 
-class ToneScreen(activity: SealedLightActivity) : LightScreen<Unit, ToneViewModel>(activity) {
+class ToneScreen(private val sealedActivity: SealedLightActivity) : LightScreen<Unit, ToneViewModel>(sealedActivity) {
     override val viewModelClass = ToneViewModel::class.java
-    override fun createViewModel() = ToneViewModel()
-
-    override fun onScreenDestroy() {
-        viewModel.shutdown()
-    }
+    override fun createViewModel() = ToneViewModel(DefaultLightAudio(sealedActivity), lightContext::readAsset)
 
     @Composable
     override fun Content() {
-        viewModel.attachAudio(rememberLightAudio(), lightContext::readAsset)
         val colors by LightThemeController.colors.collectAsState()
         val lastNote by viewModel.lastNote.collectAsState()
         val lastOneShot by viewModel.lastOneShot.collectAsState()

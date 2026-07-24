@@ -80,30 +80,26 @@ _NOTE: The SDK only supports foreground audio at the moment. Background audio re
 
 #### Setup and lifecycle
 
-`rememberLightAudio()` provides a Compose-scoped factory for foreground audio. Create players, recorders, capture sources, and PCM voices from it, then release the components when their owning screen or view model is destroyed. The factory itself does not need to be released.
+`LightAudio` is a factory for foreground audio, constructed from the `SealedLightActivity` your screen already receives. Pass it into your view model's constructor, create players, recorders, capture sources, and PCM voices from it there, and release them in `onCleared()`.
 
 ```kotlin
-class PlayerViewModel : LightViewModel<Unit>() {
-    private var player: LightAudioPlayer? = null
+class PlayerViewModel(audio: LightAudio) : LightViewModel<Unit>() {
+    private val player: LightAudioPlayer = audio.newPlayer()
 
-    fun attachAudio(audio: LightAudio) {
-        if (player == null) player = audio.newPlayer()
-    }
-
-    fun shutdown() {
-        player?.release()
-        player = null
+    override fun onCleared() {
+        player.release()
+        super.onCleared()
     }
 }
 
-@Composable
-override fun Content() {
-    viewModel.attachAudio(rememberLightAudio())
-    // your UI
-}
+class PlayerScreen(private val sealedActivity: SealedLightActivity) : LightScreen<Unit, PlayerViewModel>(sealedActivity) {
+    override val viewModelClass = PlayerViewModel::class.java
+    override fun createViewModel() = PlayerViewModel(DefaultLightAudio(sealedActivity))
 
-override fun onScreenDestroy() {
-    viewModel.shutdown()
+    @Composable
+    override fun Content() {
+        // your UI
+    }
 }
 ```
 

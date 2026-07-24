@@ -15,12 +15,12 @@ import androidx.lifecycle.viewModelScope
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
+import com.thelightphone.sdk.audio.DefaultLightAudio
 import com.thelightphone.sdk.audio.LightAudio
 import com.thelightphone.sdk.audio.LightAudioItem
 import com.thelightphone.sdk.audio.LightAudioPlayer
 import com.thelightphone.sdk.audio.LightAudioSource
 import com.thelightphone.sdk.audio.LightMediaMetadata
-import com.thelightphone.sdk.audio.rememberLightAudio
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
 import com.thelightphone.sdk.ui.LightIcons
@@ -35,43 +35,30 @@ import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
 import java.io.File
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
-class PlayerViewModel(filesDir: File) : LightViewModel<Unit>() {
+class PlayerViewModel(
+    filesDir: File,
+    audio: LightAudio
+) : LightViewModel<Unit>() {
+    private val player: LightAudioPlayer = audio.newPlayer()
     val clips = AudioLibraryRepository(filesDir).list()
-    val currentClip = MutableStateFlow<AudioClip?>(null)
-    val positionMs = MutableStateFlow(0L)
-    val durationMs = MutableStateFlow(0L)
-    val isPlaying = MutableStateFlow(false)
+    val currentClip: StateFlow<AudioClip?> = player.currentMediaItemIndex
+        .map(clips::getOrNull)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, clips.getOrNull(player.currentMediaItemIndex.value))
+    val positionMs = player.positionMs
+    val durationMs = player.durationMs
+    val isPlaying = player.isPlaying
     val speed = MutableStateFlow(1f)
     val skipSilence = MutableStateFlow(false)
     val playNext = MutableStateFlow(true)
 
-    private var player: LightAudioPlayer? = null
-    private var stateJob: Job? = null
-
-    fun attachAudio(value: LightAudio) {
-        if (player != null) return
-        val newPlayer = value.newPlayer()
-        player = newPlayer
-        stateJob = viewModelScope.launch {
-            launch { newPlayer.positionMs.collect(positionMs::emit) }
-            launch { newPlayer.durationMs.collect(durationMs::emit) }
-            launch { newPlayer.isPlaying.collect(isPlaying::emit) }
-            launch {
-                newPlayer.currentMediaItemIndex.collect { index ->
-                    currentClip.value = clips.getOrNull(index)
-                }
-            }
-        }
-    }
-
     fun play(clip: AudioClip) {
-        val player = player ?: return
         val selection = playbackSelectionFor(clip, clips)
-        currentClip.value = clip
         player.speed = speed.value
         player.skipSilence = skipSilence.value
         player.pauseAtEndOfMediaItems = pauseAtEndOfMediaItemsFor(playNext.value)
@@ -80,42 +67,34 @@ class PlayerViewModel(filesDir: File) : LightViewModel<Unit>() {
     }
 
     fun togglePlayPause() {
-        player?.let { if (isPlaying.value) it.pause() else it.play() }
+        if (isPlaying.value) player.pause() else player.play()
     }
 
-    fun skipBack() = player?.skipBack() ?: Unit
-    fun skipForward() = player?.skipForward() ?: Unit
-    fun skipToPrevious() = player?.skipToPrevious() ?: Unit
-    fun skipToNext() = player?.skipToNext() ?: Unit
+    fun skipBack() = player.skipBack()
+    fun skipForward() = player.skipForward()
+    fun skipToPrevious() = player.skipToPrevious()
+    fun skipToNext() = player.skipToNext()
 
     fun cycleSpeed() {
         val next = SPEEDS[(SPEEDS.indexOf(speed.value) + 1).mod(SPEEDS.size)]
         speed.value = next
-        player?.speed = next
+        player.speed = next
     }
 
     fun toggleSkipSilence() {
         val enabled = !skipSilence.value
         skipSilence.value = enabled
-        player?.skipSilence = enabled
+        player.skipSilence = enabled
     }
 
     fun togglePlayNext() {
         val enabled = !playNext.value
         playNext.value = enabled
-        player?.pauseAtEndOfMediaItems = pauseAtEndOfMediaItemsFor(enabled)
-    }
-
-    fun shutdown() {
-        stateJob?.cancel()
-        stateJob = null
-        player?.release()
-        player = null
-        currentClip.value = null
+        player.pauseAtEndOfMediaItems = pauseAtEndOfMediaItemsFor(enabled)
     }
 
     override fun onCleared() {
-        shutdown()
+        player.release()
         super.onCleared()
     }
 
@@ -156,17 +135,13 @@ internal fun playbackSelectionFor(
     return PlaybackSelection(clips, startIndex)
 }
 
-class PlayerScreen(activity: SealedLightActivity) : LightScreen<Unit, PlayerViewModel>(activity) {
+class PlayerScreen(private val sealedActivity: SealedLightActivity) :
+    LightScreen<Unit, PlayerViewModel>(sealedActivity) {
     override val viewModelClass = PlayerViewModel::class.java
-    override fun createViewModel() = PlayerViewModel(lightContext.filesDir)
-
-    override fun onScreenDestroy() {
-        viewModel.shutdown()
-    }
+    override fun createViewModel() = PlayerViewModel(lightContext.filesDir, DefaultLightAudio(sealedActivity))
 
     @Composable
     override fun Content() {
-        viewModel.attachAudio(rememberLightAudio())
         val colors by LightThemeController.colors.collectAsState()
         val current by viewModel.currentClip.collectAsState()
         val position by viewModel.positionMs.collectAsState()
@@ -178,13 +153,17 @@ class PlayerScreen(activity: SealedLightActivity) : LightScreen<Unit, PlayerView
         val durationDisplay = playerDurationDisplay(duration)
 
         LightTheme(colors = colors) {
-            Column(Modifier.fillMaxSize().background(LightThemeTokens.colors.background)) {
+            Column(Modifier
+                .fillMaxSize()
+                .background(LightThemeTokens.colors.background)) {
                 LightTopBar(
                     leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                     center = LightTopBarCenter.Text("Player"),
                 )
                 LightScrollView(
-                    modifier = Modifier.weight(1f).padding(horizontal = 1f.gridUnitsAsDp()),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 1f.gridUnitsAsDp()),
                 ) {
                     viewModel.clips.forEachIndexed { index, clip ->
                         AudioClipRow(index + 1, clip, selected = clip == current) { viewModel.play(clip) }
@@ -199,7 +178,9 @@ class PlayerScreen(activity: SealedLightActivity) : LightScreen<Unit, PlayerView
                         .fillMaxWidth()
                         .padding(bottom = 0.5f.gridUnitsAsDp()),
                 )
-                Row(Modifier.fillMaxWidth().padding(horizontal = 1f.gridUnitsAsDp())) {
+                Row(Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 1f.gridUnitsAsDp())) {
                     PlayerOption("SPEED", "${speed}x", Modifier.weight(1f), viewModel::cycleSpeed)
                     PlayerOption(
                         "SKIP SILENCE",
@@ -248,7 +229,9 @@ class PlayerScreen(activity: SealedLightActivity) : LightScreen<Unit, PlayerView
 @Composable
 private fun AudioClipRow(number: Int, clip: AudioClip, selected: Boolean, onClick: () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().lightClickable(onClick = onClick)
+        Modifier
+            .fillMaxWidth()
+            .lightClickable(onClick = onClick)
             .padding(vertical = 0.5f.gridUnitsAsDp()),
     ) {
         LightText(
@@ -267,7 +250,9 @@ private fun AudioClipRow(number: Int, clip: AudioClip, selected: Boolean, onClic
 @Composable
 private fun PlayerOption(label: String, value: String, modifier: Modifier, onClick: () -> Unit) {
     Column(
-        modifier.lightClickable(onClick = onClick).padding(vertical = 0.5f.gridUnitsAsDp()),
+        modifier
+            .lightClickable(onClick = onClick)
+            .padding(vertical = 0.5f.gridUnitsAsDp()),
     ) {
         LightText(
             text = label,
