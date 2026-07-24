@@ -7,8 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import com.thelightphone.lp3Keyboard.ui.KeyboardOptions
-import com.thelightphone.lp3Keyboard.ui.defaultEmojis
 import com.thelightphone.lp3Keyboard.ui.parseEmojiString
+import com.thelightphone.lp3Keyboard.ui.viewmodel.defaultEmojis
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.shared.error
 import com.thelightphone.sdk.shared.getOrNull
@@ -40,7 +40,8 @@ suspend fun refreshKeyboardOptions(): KeyboardOptions? {
         // not using currently - may want to move into LayoutOptions in Lp3Keyboard source
         displayReturn = true,
         displayVoice = result.displayVoice,
-        enableKeyAnimation = result.enableKeyAnimation
+        enableKeyAnimation = result.enableKeyAnimation,
+        swipeEnabled = result.swipeEnabled == true // nullable
     )
 }
 

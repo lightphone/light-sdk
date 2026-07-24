@@ -29,44 +29,48 @@ object ManifestGenerator {
         for (feature in features) {
             appendLine("""    <uses-feature android:name="${xmlAttr(feature)}" android:required="false" />""")
         }
-        appendLine("""    <application""")
-        appendLine("""        android:name="com.thelightphone.sdk.LightSdkApplication"""")
-        appendLine("""        android:label="${xmlAttr(metadata.label)}"""")
-        appendLine("""        android:supportsRtl="true"""")
-        appendLine("""        android:theme="@style/LightSdk.Theme.Splash">""")
-        appendLine("""        <meta-data""")
-        appendLine("""            android:name="com.thelightphone.sdk.LIGHT_SERVER_PACKAGE"""")
-        appendLine("""            android:value="${xmlAttr(metadata.serverPackage)}" />""")
-        appendLine("""        <activity""")
-        appendLine("""            android:name="com.thelightphone.sdk.LightActivity"""")
-        metadata.orientation?.let {
-            appendLine("""            android:screenOrientation="${xmlAttr(it)}"""")
-        }
-        appendLine("""            android:exported="true">""")
-        appendLine("""            <intent-filter>""")
-        appendLine("""                <action android:name="android.intent.action.MAIN" />""")
-        appendLine("""                <category android:name="android.intent.category.LAUNCHER" />""")
-        appendLine("""            </intent-filter>""")
-        appendLine("""        </activity>""")
-        appendLine("""        <receiver""")
-        appendLine("""            android:name="com.thelightphone.sdk.LightSdkReceiver"""")
-        appendLine("""            android:enabled="true"""")
-        appendLine("""            android:exported="true"""")
-        appendLine("""            android:permission="normal">""")
-        appendLine("""            <intent-filter>""")
-        appendLine("""                <action android:name="com.thelightphone.sdk.ACTION_SDK_MARKER" />""")
-        appendLine("""            </intent-filter>""")
-        appendLine("""            <meta-data""")
-        appendLine("""                android:name="com.thelightphone.sdk.SDK_VERSION"""")
-        appendLine("""                android:value="${'$'}{sdkVersion}" />""")
-        appendLine("""        </receiver>""")
-        appendLine("""    </application>""")
-        appendLine("""    <queries>""")
-        appendLine("""        <intent>""")
-        appendLine("""            <action android:name="com.thelightphone.sdk.ACTION_SDK_MARKER" />""")
-        appendLine("""        </intent>""")
-        appendLine("""    </queries>""")
-        appendLine("""</manifest>""")
+        val screenOrientation = metadata.orientation?.let {
+            "\n            |            android:screenOrientation=\"${xmlAttr(it)}\""
+        }.orEmpty()
+        appendLine(
+            """
+            |    <application
+            |        android:name="com.thelightphone.sdk.LightSdkApplication"
+            |        android:label="${xmlAttr(metadata.label)}"
+            |        android:supportsRtl="true"
+            |        android:theme="@style/LightSdk.Theme.Splash">
+            |        <meta-data
+            |            android:name="com.thelightphone.sdk.LIGHT_SERVER_PACKAGE"
+            |            android:value="${xmlAttr(metadata.serverPackage)}" />
+            |        <activity
+            |            android:name="com.thelightphone.sdk.LightActivity"
+            |            android:launchMode="singleTask"$screenOrientation
+            |            android:exported="true">
+            |            <intent-filter>
+            |                <action android:name="android.intent.action.MAIN" />
+            |                <category android:name="android.intent.category.LAUNCHER" />
+            |            </intent-filter>
+            |        </activity>
+            |        <receiver
+            |            android:name="com.thelightphone.sdk.LightSdkReceiver"
+            |            android:enabled="true"
+            |            android:exported="true"
+            |            android:permission="normal">
+            |            <intent-filter>
+            |                <action android:name="com.thelightphone.sdk.ACTION_SDK_MARKER" />
+            |            </intent-filter>
+            |            <meta-data
+            |                android:name="com.thelightphone.sdk.SDK_VERSION"
+            |                android:value="${'$'}{sdkVersion}" />
+            |        </receiver>
+            |    </application>
+            |    <queries>
+            |        <intent>
+            |            <action android:name="com.thelightphone.sdk.ACTION_SDK_MARKER" />
+            |        </intent>
+            |    </queries>
+            |</manifest>""".trimMargin()
+        )
     }
 
     private fun xmlAttr(value: String): String = buildString(value.length) {

@@ -56,6 +56,7 @@ class DefaultLightSdkServerSettings(context: Context) : LightSdkServerSettings {
         private const val KEYBOARD_EMOJIS = "lp3_keyboard_emojis"
         private const val KEYBOARD_SHOW_VOICE = "lp3_keyboard_show_voice"
         private const val KEYBOARD_ENABLE_KEY_ANIMATION = "lp3_keyboard_enable_key_animation"
+        private const val KEYBOARD_ENABLE_SWIPE = "lp3_keyboard_enable_swipe"
     }
 
     private val contentResolver = context.contentResolver
@@ -106,6 +107,7 @@ class DefaultLightSdkServerSettings(context: Context) : LightSdkServerSettings {
             return LightServiceMethod.GetKeyboardOptions.Response(
                 emojisAsString = Settings.System.getString(contentResolver, KEYBOARD_EMOJIS),
                 displayVoice = Settings.System.getInt(contentResolver, KEYBOARD_SHOW_VOICE, 1) == 1,
+                swipeEnabled = Settings.System.getInt(contentResolver, KEYBOARD_ENABLE_SWIPE, 1) == 1,
                 enableKeyAnimation = Settings.System.getInt(
                     contentResolver,
                     KEYBOARD_ENABLE_KEY_ANIMATION,

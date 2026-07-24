@@ -69,7 +69,8 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
             // "😅😅😅😅😅😅" -> keyboard will parse out emoji code points
             val emojisAsString: String?,
             val displayVoice: Boolean,
-            val enableKeyAnimation: Boolean
+            val enableKeyAnimation: Boolean,
+            val swipeEnabled: Boolean?
         )
     }
 
@@ -110,6 +111,24 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
         @Serializable
         data class Response(val componentName: String)
     }
+
+    object DeviceKeyEvent : LightServiceMethod<DeviceKeyEvent.Request, Unit> {
+        override val id = "DeviceKeyEvent"
+        override val requestSerializer = serializer<Request>()
+        override val responseSerializer = serializer<Unit>()
+
+        @Serializable
+        data class Request(
+            val keyCode: Int,
+            val repeatCount: Int?,
+            val action: Int, // Android KeyEvent actions
+            val characters: String?,
+            val unicodeChar: Int,
+            // if this key event will trigger the server to take over the screen
+            // optionally pass the flattened component to re-launch when it is done
+            val componentToRelaunch: String?,
+        )
+    }
 }
 
 // TODO we're gonna forget to add manually, maybe use reflection?
@@ -120,4 +139,6 @@ val allMethods: Map<String, LightServiceMethod<*, *>> = listOf(
     LightServiceMethod.GetKeyboardOptions,
     LightServiceMethod.GetPermission,
     LightServiceMethod.RequestPermissionComponent,
+    LightServiceMethod.DeviceKeyEvent,
+    LightServiceMethod.GetUserPreferences,
 ).associateBy { it.id }

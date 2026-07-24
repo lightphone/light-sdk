@@ -13,9 +13,12 @@ import com.thelightphone.sdk.server.LightSdkServerSettings
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.ui.*
 import com.thelightphone.sdk.ui.LightBarButton.LightIcon
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
-private enum class EmulatorSettingsNav {
-    Root, FilterLevel, Keyboard, ForceFocus
+enum class EmulatorSettingsNav {
+    Root, FilterLevel, Keyboard, ForceFocus, Notifications
 }
 
 val ClientFilterLevel.label: String
@@ -34,8 +37,17 @@ val ForceFocusLevel.label: String
     }
 
 @Composable
-fun EmulatorSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit) {
-    var nav by remember { mutableStateOf(EmulatorSettingsNav.Root) }
+fun EmulatorSettings(
+    settings: LightSdkServerSettings,
+    emulatorSettingsAudio: EmulatorSettingsAudio,
+    startingNav: Nav.Settings,
+    onRootBackPressed: () -> Unit,
+) {
+    var nav by remember { mutableStateOf(startingNav.startingScreen) }
+    val subscreenBackPressed = startingNav.backButtonOverride ?: {
+        nav = EmulatorSettingsNav.Root
+    }
+    val rowPadding = Modifier.padding(1f.gridUnitsAsDp())
     Surface(Modifier.fillMaxSize()) {
         when (nav) {
             EmulatorSettingsNav.Root -> {
@@ -43,7 +55,7 @@ fun EmulatorSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit
                     LightTopBar(
                         leftButton = LightIcon(
                             icon = LightIcons.BACK,
-                            onClick = onBackPressed
+                            onClick = startingNav.backButtonOverride ?: onRootBackPressed
                         ),
                         center = LightTopBarCenter.Text("Settings"),
                         modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
@@ -52,13 +64,13 @@ fun EmulatorSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit
                         Modifier
                             .fillMaxWidth()
                             .clickable { nav = EmulatorSettingsNav.FilterLevel }
-                            .padding(16.dp)
+                            .then(rowPadding)
                     ) {
                         Column {
                             LightText("Allowed Tools", variant = LightTextVariant.Superfine)
                             LightText(
                                 settings.clientFilterLevel.label,
-                                variant = LightTextVariant.Subheading
+                                variant = LightTextVariant.Copy
                             )
                         }
                     }
@@ -66,13 +78,13 @@ fun EmulatorSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit
                         Modifier
                             .fillMaxWidth()
                             .clickable { nav = EmulatorSettingsNav.ForceFocus }
-                            .padding(16.dp)
+                            .then(rowPadding)
                     ) {
                         Column {
                             LightText("Force Focus", variant = LightTextVariant.Superfine)
                             LightText(
                                 settings.forceFocusLevel.label,
-                                variant = LightTextVariant.Subheading
+                                variant = LightTextVariant.Copy
                             )
                         }
                     }
@@ -80,28 +92,47 @@ fun EmulatorSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit
                         Modifier
                             .fillMaxWidth()
                             .clickable { nav = EmulatorSettingsNav.Keyboard }
-                            .padding(16.dp)
+                            .then(rowPadding)
                     ) {
                         Column {
                             LightText(
                                 "Keyboard Settings",
-                                variant = LightTextVariant.Subheading
+                                variant = LightTextVariant.Copy
                             )
+                        }
+                    }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { nav = EmulatorSettingsNav.Notifications }
+                            .then(rowPadding)
+                    ) {
+                        Column {
+                            LightText("Notifications", variant = LightTextVariant.Copy)
                         }
                     }
                 }
             }
 
-            EmulatorSettingsNav.FilterLevel -> ClientFilterLevelSettings(settings) {
-                nav = EmulatorSettingsNav.Root
-            }
+            EmulatorSettingsNav.FilterLevel -> ClientFilterLevelSettings(
+                settings,
+                subscreenBackPressed
+            )
 
-            EmulatorSettingsNav.ForceFocus -> ForceFocusLevelSettings(settings) {
-                nav = EmulatorSettingsNav.Root
-            }
+            EmulatorSettingsNav.ForceFocus -> ForceFocusLevelSettings(
+                settings,
+                subscreenBackPressed
+            )
 
-            EmulatorSettingsNav.Keyboard -> KeyboardSettings(settings) {
-                nav = EmulatorSettingsNav.Root
+            EmulatorSettingsNav.Keyboard -> KeyboardSettings(settings, subscreenBackPressed)
+
+            EmulatorSettingsNav.Notifications -> {
+                val volume by emulatorSettingsAudio.ringerVolume.collectAsState()
+                NotificationSettings(
+                    volume = volume,
+                    onVolumeChange = emulatorSettingsAudio::setRingerVolume,
+                    onBackPressed = subscreenBackPressed,
+                )
             }
         }
     }
@@ -112,7 +143,7 @@ fun ClientFilterLevelSettings(settings: LightSdkServerSettings, onBackPressed: (
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             LightTopBar(
-                leftButton = LightBarButton.LightIcon(
+                leftButton = LightIcon(
                     icon = LightIcons.BACK,
                     onClick = onBackPressed
                 ),
@@ -172,6 +203,32 @@ fun ForceFocusLevelSettings(settings: LightSdkServerSettings, onBackPressed: () 
 }
 
 @Composable
+fun NotificationSettings(
+    volume: Float,
+    onVolumeChange: (Float) -> Unit,
+    onBackPressed: () -> Unit,
+) {
+    val themeColors = LightThemeController.colors.collectAsState().value
+    Surface(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            LightTopBar(
+                leftButton = LightIcon(icon = LightIcons.BACK, onClick = onBackPressed),
+                center = LightTopBarCenter.Text("Notifications"),
+                modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
+            )
+            Column(Modifier.padding(horizontal = 3.5f.gridUnitsAsDp())) {
+                LightText("Ringer volume", variant = LightTextVariant.Superfine)
+                LightTouchableProgressBar(
+                    colors = themeColors,
+                    progress = volume,
+                    onValueChange = onVolumeChange,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun KeyboardSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit) {
     var keyboardOptions by remember { mutableStateOf(settings.keyboardOptions) }
     fun updateOptions(newOptions: LightServiceMethod.GetKeyboardOptions.Response) {
@@ -219,18 +276,35 @@ fun KeyboardSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit
     }
 }
 
+interface EmulatorSettingsAudio {
+    fun setRingerVolume(normalized: Float)
+    val ringerVolume: StateFlow<Float>
+}
+
 @Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
 @Composable
 fun EmulatorSettingsPreview() {
     val settings = object : LightSdkServerSettings {
         override var clientFilterLevel: ClientFilterLevel = ClientFilterLevel.AllowAllApks
         override var keyboardOptions: LightServiceMethod.GetKeyboardOptions.Response =
-            LightServiceMethod.GetKeyboardOptions.Response(null, true, true)
+            LightServiceMethod.GetKeyboardOptions.Response(null,
+                displayVoice = true,
+                enableKeyAnimation = true,
+                swipeEnabled = true
+            )
         override var userPreferences: LightServiceMethod.GetUserPreferences.Response =
             LightServiceMethod.GetUserPreferences.Response(hapticsEnabled = true)
         override var forceFocusLevel: ForceFocusLevel = ForceFocusLevel.Always
     }
+    val emulatorAudioWrapper = object : EmulatorSettingsAudio {
+        private val currentVolume = MutableStateFlow(0.5f)
+        override fun setRingerVolume(normalized: Float) {
+            currentVolume.value = normalized
+        }
+
+        override val ringerVolume: StateFlow<Float> = currentVolume.asStateFlow()
+    }
     LightTheme {
-        EmulatorSettings(settings) { }
+        EmulatorSettings(settings, emulatorAudioWrapper, Nav.Settings()) { }
     }
 }
