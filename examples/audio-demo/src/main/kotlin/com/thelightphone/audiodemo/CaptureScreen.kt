@@ -28,7 +28,6 @@ import com.thelightphone.sdk.audio.CaptureConfig
 import com.thelightphone.sdk.audio.LightAudio
 import com.thelightphone.sdk.audio.LightAudioCapture
 import com.thelightphone.sdk.audio.MicSource
-import com.thelightphone.sdk.audio.rememberLightAudio
 import com.thelightphone.sdk.checkPermission
 import com.thelightphone.sdk.rememberPermissionRequestLauncher
 import com.thelightphone.sdk.shared.LightServiceMethod
@@ -46,6 +45,7 @@ import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
 import androidx.compose.ui.unit.dp
+import com.thelightphone.sdk.audio.DefaultLightAudio
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,23 +61,20 @@ enum class CaptureScreenState {
     Capturing,
 }
 
-class CaptureViewModel : LightViewModel<Unit>() {
+class CaptureViewModel(private val audio: LightAudio) : LightViewModel<Unit>() {
     val screenState = MutableStateFlow(CaptureScreenState.PermissionRequired)
     val spectrum = MutableStateFlow(FloatArray(SPECTRUM_BANDS))
-    val sampleRate = MutableStateFlow(DEFAULT_SAMPLE_RATE)
+    val sampleRate: MutableStateFlow<Int>
     val source = MutableStateFlow(MicSource.Unprocessed)
     val error = MutableStateFlow<String?>(null)
 
     private val analyzer = SpectrumAnalyzer(bandCount = SPECTRUM_BANDS)
-    private var audio: LightAudio? = null
-    private var capture: LightAudioCapture? = null
+    private var capture: LightAudioCapture
     private var captureJob: Job? = null
 
-    fun attachAudio(audio: LightAudio) {
-        this.audio = audio
-        if (capture != null) return
+    init {
         val rate = audio.capabilities.sampleRate.takeIf { it > 0 } ?: DEFAULT_SAMPLE_RATE
-        sampleRate.value = rate
+        sampleRate = MutableStateFlow(rate)
         capture = newCapture()
     }
 
@@ -88,7 +85,7 @@ class CaptureViewModel : LightViewModel<Unit>() {
         capture = newCapture()
     }
 
-    private fun newCapture(): LightAudioCapture? = audio?.newCapture(
+    private fun newCapture(): LightAudioCapture = audio.newCapture(
         CaptureConfig(sampleRate = sampleRate.value, bufferFrames = FFT_SIZE, source = source.value),
     )
 
@@ -101,7 +98,6 @@ class CaptureViewModel : LightViewModel<Unit>() {
     }
 
     fun startCapture() {
-        val capture = capture ?: return
         if (screenState.value != CaptureScreenState.Ready) return
         error.value = null
         analyzer.reset()
@@ -136,13 +132,8 @@ class CaptureViewModel : LightViewModel<Unit>() {
         }
     }
 
-    fun shutdown() {
-        stopCapture()
-        capture = null
-    }
-
     override fun onCleared() {
-        shutdown()
+        stopCapture()
         super.onCleared()
     }
 
@@ -163,17 +154,13 @@ class CaptureViewModel : LightViewModel<Unit>() {
     }
 }
 
-class CaptureScreen(activity: SealedLightActivity) : LightScreen<Unit, CaptureViewModel>(activity) {
+class CaptureScreen(private val sealedActivity: SealedLightActivity) :
+    LightScreen<Unit, CaptureViewModel>(sealedActivity) {
     override val viewModelClass = CaptureViewModel::class.java
-    override fun createViewModel() = CaptureViewModel()
-
-    override fun onScreenDestroy() {
-        viewModel.shutdown()
-    }
+    override fun createViewModel() = CaptureViewModel(DefaultLightAudio(sealedActivity))
 
     @Composable
     override fun Content() {
-        viewModel.attachAudio(rememberLightAudio())
         val permissionLauncher = rememberPermissionRequestLauncher(Manifest.permission.RECORD_AUDIO)
         val colors by LightThemeController.colors.collectAsState()
         val state by viewModel.screenState.collectAsState()
@@ -184,13 +171,18 @@ class CaptureScreen(activity: SealedLightActivity) : LightScreen<Unit, CaptureVi
         val sourceLabel = if (source == MicSource.Unprocessed) "RAW" else "MIC"
 
         LightTheme(colors = colors) {
-            Column(Modifier.fillMaxSize().background(LightThemeTokens.colors.background)) {
+            Column(Modifier
+                .fillMaxSize()
+                .background(LightThemeTokens.colors.background)) {
                 LightTopBar(
                     leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                     center = LightTopBarCenter.Text("Capture"),
                 )
                 Box(
-                    Modifier.fillMaxWidth().weight(1f).padding(1f.gridUnitsAsDp()),
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(1f.gridUnitsAsDp()),
                     contentAlignment = Alignment.Center,
                 ) {
                     when (state) {
@@ -199,10 +191,12 @@ class CaptureScreen(activity: SealedLightActivity) : LightScreen<Unit, CaptureVi
                             LightTextVariant.Copy,
                             align = TextAlign.Center,
                         )
+
                         CaptureScreenState.Ready -> SourceSelector(
                             selected = source,
                             onSelect = viewModel::selectSource,
                         )
+
                         CaptureScreenState.Capturing -> SpectrumBars(spectrum, Modifier.fillMaxSize())
                     }
                 }
@@ -222,9 +216,11 @@ class CaptureScreen(activity: SealedLightActivity) : LightScreen<Unit, CaptureVi
                         CaptureScreenState.PermissionRequired -> listOf(
                             LightBarButton.Text("ALLOW", onClick = { permissionLauncher?.launch() }),
                         )
+
                         CaptureScreenState.Ready -> listOf(
                             LightBarButton.LightIcon(LightIcons.MICROPHONE, viewModel::startCapture),
                         )
+
                         CaptureScreenState.Capturing -> listOf(
                             LightBarButton.LightIcon(LightIcons.STOP, viewModel::stopCapture),
                         )

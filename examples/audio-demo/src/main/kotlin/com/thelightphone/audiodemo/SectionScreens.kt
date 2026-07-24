@@ -14,8 +14,6 @@ import androidx.compose.ui.text.style.TextAlign
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
-import com.thelightphone.sdk.audio.LightAudio
-import com.thelightphone.sdk.audio.rememberLightAudio
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightText
@@ -26,14 +24,7 @@ import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
 
-class AudioSectionViewModel : LightViewModel<Unit>() {
-    lateinit var audio: LightAudio
-        private set
-
-    fun attachAudio(value: LightAudio) {
-        if (!::audio.isInitialized) audio = value
-    }
-}
+class AudioSectionViewModel : LightViewModel<Unit>()
 
 abstract class AudioSectionScreen(
     sealedActivity: SealedLightActivity,
@@ -45,7 +36,6 @@ abstract class AudioSectionScreen(
 
     @Composable
     override fun Content() {
-        viewModel.attachAudio(rememberLightAudio())
         val themeColors by LightThemeController.colors.collectAsState()
         LightTheme(colors = themeColors) {
             Column(
