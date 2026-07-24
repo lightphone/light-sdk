@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,11 +58,17 @@ fun LightTextInputEditor(
     editorKey: Any = remember { Any() },
 ) {
     val currentOnSubmit by rememberUpdatedState(onSubmit)
+    val hapticsEnabled = LocalHapticsEnabled.current
+    val context = LocalContext.current
+    val currentOnHaptic by rememberUpdatedState {
+        if (hapticsEnabled) LightHapticFeedback.click(context)
+    }
     val keyboardCallback = remember(state, singleLine) {
         TextInputKeyboardCallback(
             state = state,
             singleLine = singleLine,
             onReturn = { currentOnSubmit(state.text) },
+            onHaptic = { currentOnHaptic() },
         )
     }
 
