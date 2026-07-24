@@ -80,7 +80,7 @@ _NOTE: The SDK only supports foreground audio at the moment. Background audio re
 
 #### Setup and lifecycle
 
-`LightAudio` is a factory for foreground audio, constructed from the `SealedLightActivity` your screen already receives. Pass it into your view model's constructor, create players, recorders, capture sources, and PCM voices from it there, and release them in `onCleared()`.
+`LightAudio` is a factory for foreground audio (only plays while tool is "in focus"), constructed from the `SealedLightActivity` your screen already receives. Pass it into your view model's constructor, create players, recorders, capture sources, and PCM voices from it there, and release them in `onCleared()`.
 
 ```kotlin
 class PlayerViewModel(audio: LightAudio) : LightViewModel<Unit>() {
