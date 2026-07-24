@@ -189,9 +189,6 @@ object LightSdkServer {
      */
     var permissionActivity: Class<out Activity>? = null
 
-    var rootActivity: Class<out Activity>? = null
-
-
     var grantPermission: (context: Context, packageName: String, permission: String) -> Result<Unit> =
         { context, packageName, permission ->
             runCatching {

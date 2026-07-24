@@ -49,7 +49,6 @@ class EmulatorApplication : Application() {
             }
             provideSdkSettings = { settings }
             permissionActivity = LightSdkPermissionActivity::class.java
-            rootActivity = MainActivity::class.java
             onDeviceKeyEvent = { _, request -> handleDeviceKeyEvent(request) }
         }
 
