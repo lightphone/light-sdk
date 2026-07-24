@@ -10,11 +10,15 @@ internal class TextInputKeyboardCallback(
     private val state: TextFieldState,
     private val singleLine: Boolean = false,
     private val onReturn: () -> Unit = {},
+    private val onHaptic: () -> Unit = {},
 ) : Lp3RepeatableKeyboardCallback {
 
-    override fun onKeyPressed(code: Int) = Unit
+    override fun onKeyPressed(code: Int) {
+        onHaptic()
+    }
 
     override fun onSpecialKeyPressed(key: SpecialKey) {
+        onHaptic()
         if (key == SpecialKey.Space) insertAtCursor(" ")
     }
 
