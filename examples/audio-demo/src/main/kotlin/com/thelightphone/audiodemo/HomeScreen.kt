@@ -52,6 +52,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                         .padding(horizontal = 1f.gridUnitsAsDp()),
                 ) {
                     MenuRow("PLAYER") { navigateTo(::PlayerScreen) }
+                    MenuRow("BYO STREAM") { navigateTo(::StreamingScreen) }
                     MenuRow("RECORDER") { navigateTo(::RecorderScreen) }
                     MenuRow("CAPTURE") { navigateTo(::CaptureScreen) }
                     MenuRow("TONE") { navigateTo(::ToneScreen) }

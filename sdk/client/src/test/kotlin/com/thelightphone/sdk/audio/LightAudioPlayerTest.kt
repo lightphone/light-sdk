@@ -2,6 +2,7 @@ package com.thelightphone.sdk.audio
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class LightAudioPlayerTest {
     @Test
@@ -13,7 +14,7 @@ class LightAudioPlayerTest {
     }
 
     @Test
-    fun sourceUriMapsAssetsAndUrls() {
+    fun sourceUriMapsAssetsUrlsAndCustom() {
         assertEquals(
             "asset:///audio/sample.ogg",
             LightAudioSource.AssetSource("/audio/sample.ogg").uriString(),
@@ -22,5 +23,42 @@ class LightAudioPlayerTest {
             "https://example.com/live.mp3",
             LightAudioSource.UrlSource("https://example.com/live.mp3").uriString(),
         )
+        assertEquals(
+            "demo:///track1",
+            LightAudioSource.CustomSource("demo:///track1").uriString(),
+        )
+    }
+
+    @Test
+    fun mediaItemMappingForwardsMimeCacheKeyAndMediaId() {
+        val item = LightAudioItem(
+            source = LightAudioSource.CustomSource("https://cdn.example/ephemeral"),
+            metadata = LightMediaMetadata(title = "Track"),
+            mimeType = "application/dash+xml",
+            customCacheKey = "stable:track:1",
+            mediaId = "catalog:track:1",
+        )
+        assertEquals(
+            MediaItemMapping(
+                uri = "https://cdn.example/ephemeral",
+                mediaId = "catalog:track:1",
+                mimeType = "application/dash+xml",
+                customCacheKey = "stable:track:1",
+            ),
+            item.mediaItemMapping(),
+        )
+    }
+
+    @Test
+    fun mediaItemMappingDefaultsMediaIdToUriWhenOmitted() {
+        val item = LightAudioItem(
+            source = LightAudioSource.UrlSource("https://example.com/a.mp3"),
+            metadata = LightMediaMetadata(title = "A"),
+        )
+        val mapping = item.mediaItemMapping()
+        assertEquals("https://example.com/a.mp3", mapping.uri)
+        assertEquals("https://example.com/a.mp3", mapping.mediaId)
+        assertNull(mapping.mimeType)
+        assertNull(mapping.customCacheKey)
     }
 }

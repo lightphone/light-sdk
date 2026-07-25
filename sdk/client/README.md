@@ -125,6 +125,54 @@ player.play()
 - Observe `isPlaying` for the actual state.
 - Transient focus loss pauses and later resumes playback, while duckable loss lowers the volume.
 
+#### Advanced: bring your own player
+
+For streaming clients that need Media3 builder-time control (custom `MediaSource.Factory`,
+`SimpleCache`, `PriorityTaskManager`, `LoadControl`, offline `DownloadManager` wiring), use
+the opt-in overload. The default `newPlayer(usage)` path is unchanged.
+
+| Layer | Owner |
+|---|---|
+| Source factory, cache, priority, load control, DownloadManager, extra listeners | Tool (configure before handoff) |
+| Audio attributes, audio focus, play/pause/seek API, `release()` | SDK (re-asserted after adoption) |
+
+```kotlin
+@OptIn(UnstableApi::class)
+val player = audio.newPlayer(LightAudioUsage.Music) {
+    val cache = SimpleCache(
+        File(cacheDir, "stream-cache"),
+        LeastRecentlyUsedCacheEvictor(64L * 1024L * 1024L),
+        databaseProvider(),
+    )
+    val upstream = CacheDataSource.Factory()
+        .setCache(cache)
+        .setUpstreamDataSourceFactory(defaultDataSourceFactory())
+    builder
+        .setMediaSourceFactory(DefaultMediaSourceFactory(upstream))
+        .setLoadControl(
+            DefaultLoadControl.Builder()
+                .setBufferDurationsMs(15_000, 50_000, 2_500, 5_000)
+                .build(),
+        )
+        .setPriorityTaskManager(PriorityTaskManager())
+        .build()
+}
+```
+
+Ownership rules:
+- Do not request audio focus yourself; the SDK owns focus via `AudioFocusHelper`.
+- Do not retain or `release()` the `ExoPlayer` after handoff — call `LightAudioPlayer.release()`.
+- If you replace the media-source factory, still delegate file/asset/http(s) (compose with
+  `defaultMediaSourceFactory()` / `DefaultMediaSourceFactory`) when those sources are used.
+- Resolve network-bound URLs **off the main thread** before `setMediaQueue`; do not block
+  inside `MediaSource.Factory.createMediaSource`.
+- Use [LightAudioSource.CustomSource] for non-standard URI schemes, and set optional
+  `mimeType` / `customCacheKey` / `mediaId` on [LightAudioItem] when the playable URI is
+  ephemeral or extension-less (e.g. DASH MPD, CDN URLs).
+
+`LightExoPlayerConfigurer` exposes `builder`, `filesDir`, `cacheDir`, and Media3 factory
+helpers so tools never import Android `Context` (blocked by the Light SDK plugin).
+
 #### PCM voice
 
 `LightAudioVoice` plays short mono signed 16-bit PCM buffers.

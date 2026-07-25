@@ -2,11 +2,33 @@ package com.thelightphone.sdk.audio
 
 import android.content.Context
 import android.media.AudioManager
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
 import com.thelightphone.sdk.SealedLightActivity
 
 interface LightAudio {
     val capabilities: AudioCapabilities
     fun newPlayer(usage: LightAudioUsage = LightAudioUsage.Music): LightAudioPlayer
+    /**
+     * Create a player that adopts a caller-configured [ExoPlayer].
+     *
+     * The [configure] receiver provides an [ExoPlayer.Builder] (application
+     * context) plus [LightExoPlayerConfigurer] helpers for media-source and
+     * cache factories without importing Android `Context`. Return a fully built
+     * `ExoPlayer` (source factory, cache, priority, load control, listeners).
+     * The SDK re-asserts audio attributes, audio focus, and lifecycle after
+     * adoption; do not manage focus, retain, or release the instance yourself.
+     * For streams that cannot be a plain URL, resolve
+     * [LightAudioSource.CustomSource] URIs via the factory on this player. A
+     * custom media-source factory must still delegate file/asset/http(s)
+     * schemes if those sources are used on the same player. Do not perform
+     * network I/O on the main thread inside a media-source factory.
+     */
+    @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
+    fun newPlayer(
+        usage: LightAudioUsage = LightAudioUsage.Music,
+        configure: LightExoPlayerConfigurer.() -> ExoPlayer,
+    ): LightAudioPlayer
     fun newRecorder(cfg: RecorderConfig = RecorderConfig()): LightAudioRecorder
     fun newCapture(cfg: CaptureConfig = CaptureConfig()): LightAudioCapture
     fun newVoice(
@@ -27,6 +49,14 @@ value class DefaultLightAudio(
     /** Create a player that requests audio focus appropriate for [usage]. */
     override fun newPlayer(usage: LightAudioUsage): LightAudioPlayer {
         return LightAudioPlayer(sealedActivity.activity, usage)
+    }
+
+    @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
+    override fun newPlayer(
+        usage: LightAudioUsage,
+        configure: LightExoPlayerConfigurer.() -> ExoPlayer,
+    ): LightAudioPlayer {
+        return LightAudioPlayer(sealedActivity.activity, usage, configure)
     }
 
     /** Create a recorder using [cfg]. Call [LightAudioRecorder.release] when done. */

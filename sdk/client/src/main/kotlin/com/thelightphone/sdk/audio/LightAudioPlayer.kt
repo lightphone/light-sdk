@@ -28,11 +28,20 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * Transient focus loss pauses and later resumes playback; duckable loss lowers
  * volume. Call [release] when the owning screen is destroyed.
+ *
+ * When constructed with a player [configure] callback, the SDK adopts the
+ * returned [ExoPlayer] and re-asserts audio attributes, audio focus, and
+ * lifecycle ownership. The caller may configure source resolution, caching,
+ * priority, load control, and additional listeners on the instance, but must
+ * not manage audio focus, must not retain the instance after handoff, and must
+ * not call [ExoPlayer.release] on it directly — [release] owns teardown.
  */
 class LightAudioPlayer internal constructor(
     context: Context,
-    usage: LightAudioUsage = LightAudioUsage.Music
+    usage: LightAudioUsage = LightAudioUsage.Music,
+    configure: (LightExoPlayerConfigurer.() -> ExoPlayer)? = null,
 ) {
+    private val appContext = context.applicationContext
     private val scopeJob = SupervisorJob()
     private val scope = CoroutineScope(scopeJob + Dispatchers.Main.immediate)
     private val _positionMs = MutableStateFlow(0L)
@@ -52,7 +61,13 @@ class LightAudioPlayer internal constructor(
     /** Current queue index, or `-1` when the queue is empty. */
     val currentMediaItemIndex: StateFlow<Int> = _currentMediaItemIndex
 
-    private val player = ExoPlayer.Builder(context).build().apply player@{
+    @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
+    private val player = (
+        configure?.let { block ->
+            LightExoPlayerConfigurer(ExoPlayer.Builder(appContext), appContext).block()
+        } ?: ExoPlayer.Builder(appContext).build()
+        ).apply player@{
+        // SDK re-asserts output + focus ownership after adopting the player.
         setAudioAttributes(usage.toMedia3AudioAttributes(), false)
         addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -86,7 +101,7 @@ class LightAudioPlayer internal constructor(
     }
 
     private val focus = AudioFocusHelper(
-        context = context,
+        context = appContext,
         usage = usage,
         gainType = AudioManager.AUDIOFOCUS_GAIN,
         onFocusChange = ::onAudioFocusChange
@@ -273,18 +288,39 @@ class LightAudioPlayer internal constructor(
 }
 
 internal fun LightAudioItem.toMediaItem(queueIndex: Int): MediaItem {
-    val uri = Uri.parse(source.uriString())
-    return MediaItem.Builder()
-        .setUri(uri)
-        .setMediaId(uri.toString())
+    val mapping = mediaItemMapping()
+    val builder = MediaItem.Builder()
+        .setUri(Uri.parse(mapping.uri))
+        .setMediaId(mapping.mediaId)
         .setMediaMetadata(metadata.toMedia3Metadata(queueIndex))
-        .build()
+    mapping.mimeType?.let(builder::setMimeType)
+    mapping.customCacheKey?.let(builder::setCustomCacheKey)
+    return builder.build()
+}
+
+/** Pure queue → MediaItem field mapping (unit-testable without constructing MediaItem). */
+internal data class MediaItemMapping(
+    val uri: String,
+    val mediaId: String,
+    val mimeType: String?,
+    val customCacheKey: String?,
+)
+
+internal fun LightAudioItem.mediaItemMapping(): MediaItemMapping {
+    val uri = source.uriString()
+    return MediaItemMapping(
+        uri = uri,
+        mediaId = mediaId ?: uri,
+        mimeType = mimeType,
+        customCacheKey = customCacheKey,
+    )
 }
 
 internal fun LightAudioSource.uriString(): String = when (this) {
     is LightAudioSource.FileSource -> Uri.fromFile(file).toString()
     is LightAudioSource.AssetSource -> "asset:///${assetPath.trimStart('/')}"
     is LightAudioSource.UrlSource -> url
+    is LightAudioSource.CustomSource -> uri
 }
 
 private fun LightMediaMetadata.toMedia3Metadata(queueIndex: Int): MediaMetadata {

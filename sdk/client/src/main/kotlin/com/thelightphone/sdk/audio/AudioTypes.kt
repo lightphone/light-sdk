@@ -160,6 +160,14 @@ sealed interface LightAudioSource {
     data class AssetSource(val assetPath: String) : LightAudioSource
     /** A local or remote [url] supported by the platform player. */
     data class UrlSource(val url: String) : LightAudioSource
+    /**
+     * A caller-defined [uri] resolved by a custom `MediaSource.Factory` on a
+     * tool-supplied player (see [LightAudio.newPlayer] with a player configurer).
+     * Use for streams that cannot be a plain URL — e.g. session-bound or
+     * decrypted sources. Prefer [LightAudioItem.mimeType] when the [uri] has no
+     * resolvable extension so the platform extractor can pick a container.
+     */
+    data class CustomSource(val uri: String) : LightAudioSource
 }
 
 /**
@@ -167,10 +175,16 @@ sealed interface LightAudioSource {
  *
  * @property source playable media location
  * @property metadata descriptive values forwarded to playback surfaces
+ * @property mimeType optional container hint for extension-less URIs (e.g. DASH MPD)
+ * @property customCacheKey optional stable cache key when the playable URI is ephemeral
+ * @property mediaId optional stable queue identity; defaults to the source URI string
  */
 data class LightAudioItem(
     val source: LightAudioSource,
     val metadata: LightMediaMetadata,
+    val mimeType: String? = null,
+    val customCacheKey: String? = null,
+    val mediaId: String? = null,
 )
 
 internal const val DEFAULT_SAMPLE_RATE = 48_000

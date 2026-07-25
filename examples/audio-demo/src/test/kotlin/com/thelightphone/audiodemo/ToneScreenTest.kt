@@ -30,6 +30,15 @@ class ToneScreenTest {
                 TODO("Should not be called")
             }
 
+            @androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
+            override fun newPlayer(
+                usage: LightAudioUsage,
+                configure: com.thelightphone.sdk.audio.LightExoPlayerConfigurer.() ->
+                    androidx.media3.exoplayer.ExoPlayer,
+            ): LightAudioPlayer {
+                TODO("Should not be called")
+            }
+
             override fun newRecorder(cfg: RecorderConfig): LightAudioRecorder {
                 TODO("Should not be called")
             }
