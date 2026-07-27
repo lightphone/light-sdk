@@ -1,6 +1,7 @@
 package com.thelightphone.sdk
 
 import android.content.Context
+import android.media.AudioManager
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
@@ -60,6 +61,21 @@ class LightActivity internal constructor() : ComponentActivity() {
     private val currentScreen = mutableStateOf<BackStackEntry<*>?>(null)
     private var contentReady = false
     private val createdAt = android.os.SystemClock.elapsedRealtime()
+
+    // Volume-key handling for media tools that opted in via useMediaVolumeKeys().
+    private var mediaVolumeKeysEnabled = false
+    private val volumeIndicator = mutableStateOf<LightVolumeIndicator?>(null)
+    private var volumeToken = 0L
+
+    /**
+     * Intercept the hardware volume keys, adjust the media stream ourselves, and
+     * show the in-app volume HUD. Enabled by [useMediaVolumeKeys]; LightOS's own
+     * volume UI does not render over tool windows.
+     */
+    internal fun enableMediaVolumeKeys() {
+        mediaVolumeKeysEnabled = true
+        volumeControlStream = AudioManager.STREAM_MUSIC
+    }
 
     internal fun <T> navigateTo(screen: SimpleLightScreen<T>, resultCallback: ((T) -> Unit)? = null) {
         currentScreen.value?.screen?.notifyWillHide()
@@ -124,6 +140,7 @@ class LightActivity internal constructor() : ComponentActivity() {
                         }
                     }
                 }
+                LightVolumeOverlay(volumeIndicator.value)
                 // Transient modals draw on top of the current screen.
                 val activeModal by LightModalManager.activeModal.collectAsState()
                 activeModal?.Content()
@@ -144,6 +161,12 @@ class LightActivity internal constructor() : ComponentActivity() {
         get() = (this == KeyEvent.KEYCODE_BACK || this == KeyEvent.KEYCODE_HOME)
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        // Media tools that opted in take the volume keys before anything else, so the
+        // in-app HUD stands in for LightOS's (which does not render over tool windows).
+        if (mediaVolumeKeysEnabled && isVolumeKey(keyCode)) {
+            adjustMediaVolume(raise = keyCode == KeyEvent.KEYCODE_VOLUME_UP)
+            return true
+        }
         // don't do anything with android keys
         // back button override handled elsewhere and home button won't get dispatched to external tools
         return if (keyCode.isSystemKeyCode) {
@@ -178,6 +201,8 @@ class LightActivity internal constructor() : ComponentActivity() {
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        // Consume the matching key-up so the framework doesn't also show its own UI.
+        if (mediaVolumeKeysEnabled && isVolumeKey(keyCode)) return true
         return if (keyCode.isSystemKeyCode) {
             super.onKeyUp(keyCode, event)
         } else if (currentScreen.value?.screen?.onKeyUp(keyCode, event) == true) {
@@ -188,6 +213,22 @@ class LightActivity internal constructor() : ComponentActivity() {
         } else {
             false
         }
+    }
+
+    private fun isVolumeKey(keyCode: Int): Boolean =
+        keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+
+    private fun adjustMediaVolume(raise: Boolean) {
+        val audio = getSystemService(AudioManager::class.java) ?: return
+        val direction = if (raise) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
+        // Flag 0: change the volume without the system's own (absent) volume UI.
+        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0)
+        volumeToken += 1
+        volumeIndicator.value = LightVolumeIndicator(
+            level = audio.getStreamVolume(AudioManager.STREAM_MUSIC),
+            max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC),
+            token = volumeToken,
+        )
     }
 
     private fun forwardKeyEventToServer(
