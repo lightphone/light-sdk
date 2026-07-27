@@ -11,6 +11,14 @@ import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.util.Log
+import com.thelightphone.sdk.audio.LightAudioPlayer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 
 /**
  * The track a tool wants shown on the lock screen / system media controls.
@@ -56,7 +64,19 @@ interface LightMediaControls {
  *
  * A tool declares `android.permission.FOREGROUND_SERVICE`,
  * `android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK`, and
- * `android.permission.POST_NOTIFICATIONS` in its `lighttool.toml`, then:
+ * `android.permission.POST_NOTIFICATIONS` in its `lighttool.toml`.
+ *
+ * Tools that play through the SDK's own [LightAudioPlayer] only need to hand the
+ * player over — metadata, transport state, and the control callbacks are all
+ * derived from it:
+ *
+ * ```
+ * LightMediaSession.attach(lightContext, player)
+ * // when playback ends / the tool tears down:
+ * LightMediaSession.release()
+ * ```
+ *
+ * Tools driving their own playback engine push state instead:
  *
  * ```
  * LightMediaSession.attach(lightContext)   // once, e.g. from your initial screen
@@ -85,6 +105,10 @@ object LightMediaSession {
     private var session: MediaSession? = null
     private var controls: LightMediaControls? = null
 
+    // Set only when driven by a LightAudioPlayer; both are torn down by release().
+    private var scope: CoroutineScope? = null
+    private var playerJob: Job? = null
+
     // Captured once via [attach] (always the application context, never an
     // Activity) so context-less engines can drive the session through [update].
     private var appContext: Context? = null
@@ -107,6 +131,60 @@ object LightMediaSession {
      */
     fun attach(lightContext: SealedLightContext) {
         appContext = lightContext.androidContext.applicationContext
+    }
+
+    /**
+     * Binds the media session to [player] and keeps it in sync for as long as
+     * the player lives: transport buttons are routed back into the player, and
+     * every change to its queue position, metadata, or playback state is
+     * republished to the lock screen.
+     *
+     * Replaces any previously attached player and any [setControls] handler.
+     * Cancelled by [release] — call that before [LightAudioPlayer.release] so
+     * the session stops before the player it mirrors goes away.
+     */
+    fun attach(lightContext: SealedLightContext, player: LightAudioPlayer) {
+        attach(lightContext)
+        setControls(object : LightMediaControls {
+            override fun onPlay() = player.play()
+            override fun onPause() = player.pause()
+            override fun onNext() = player.skipToNext()
+            override fun onPrevious() = player.skipToPrevious()
+            override fun onSeekTo(positionMs: Long) = player.seekTo(positionMs)
+            override fun onStop() = player.stop()
+        })
+
+        val scope = scope ?: CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+            .also { scope = it }
+        playerJob?.cancel()
+        playerJob = scope.launch {
+            combine(
+                player.nowPlaying,
+                player.hasNext,
+                player.hasPrevious,
+                player.isPlaying,
+                player.positionMs,
+            ) { metadata, hasNext, hasPrevious, isPlaying, positionMs ->
+                metadata?.let {
+                    LightNowPlaying(
+                        title = it.title,
+                        artist = it.artist,
+                        // Prefer the metadata the tool supplied; fall back to the
+                        // duration the player resolved off the decoded stream.
+                        // Read directly because it's refreshed by the same poll
+                        // that emits positionMs, so it needs no combine input.
+                        durationMs = it.durationMs ?: player.durationMs.value,
+                        hasNext = hasNext,
+                        hasPrevious = hasPrevious,
+                    ) to LightPlaybackStatus(isPlaying = isPlaying, positionMs = positionMs)
+                }
+            }.collect { snapshot ->
+                // A null snapshot means an empty queue — nothing to publish, and
+                // tearing down is release()'s job, not a transient queue change's.
+                val (nowPlaying, status) = snapshot ?: return@collect
+                update(nowPlaying, status)
+            }
+        }
     }
 
     /** Registers (or clears) the transport-control handlers. Safe to call before [update]. */
@@ -161,6 +239,13 @@ object LightMediaSession {
     /** Tears down the media session and stops the foreground service. */
     fun release() {
         val appContext = appContext
+        // Stop mirroring the player first, so a late emission can't restart the
+        // session and foreground service on the way out.
+        playerJob?.cancel()
+        playerJob = null
+        scope?.cancel()
+        scope = null
+        controls = null
         started = false
         lastNowPlaying = null
         lastStatus = null

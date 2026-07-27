@@ -39,6 +39,10 @@ class LightAudioPlayer internal constructor(
     private val _durationMs = MutableStateFlow(0L)
     private val _isPlaying = MutableStateFlow(false)
     private val _currentMediaItemIndex = MutableStateFlow(NO_MEDIA_ITEM)
+    private val _nowPlaying = MutableStateFlow<LightMediaMetadata?>(null)
+    private val _hasNext = MutableStateFlow(false)
+    private val _hasPrevious = MutableStateFlow(false)
+    private var queue: List<LightAudioItem> = emptyList()
     private var positionJob: Job? = null
     private var pausedForTransientLoss = false
     private var released = false
@@ -52,6 +56,18 @@ class LightAudioPlayer internal constructor(
     /** Current queue index, or `-1` when the queue is empty. */
     val currentMediaItemIndex: StateFlow<Int> = _currentMediaItemIndex
 
+    /**
+     * Metadata for the queue item at [currentMediaItemIndex], or `null` when the
+     * queue is empty. Saves callers re-deriving the current track by mapping the
+     * index back onto the list they passed to [setMediaQueue], and is what
+     * `LightMediaSession` publishes to the lock screen.
+     */
+    val nowPlaying: StateFlow<LightMediaMetadata?> = _nowPlaying
+    /** Whether [skipToNext] has a later queue item to move to. */
+    val hasNext: StateFlow<Boolean> = _hasNext
+    /** Whether [skipToPrevious] has an earlier queue item to move to. */
+    val hasPrevious: StateFlow<Boolean> = _hasPrevious
+
     private val player = ExoPlayer.Builder(context).build().apply player@{
         setAudioAttributes(usage.toMedia3AudioAttributes(), false)
         addListener(object : Player.Listener {
@@ -62,6 +78,7 @@ class LightAudioPlayer internal constructor(
                 } else {
                     this@player.currentMediaItemIndex
                 }
+                updateQueueState()
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -139,7 +156,9 @@ class LightAudioPlayer internal constructor(
     fun setMediaQueue(items: List<LightAudioItem>, startIndex: Int = 0) {
         if (items.isEmpty()) {
             player.clearMediaItems()
+            queue = emptyList()
             _currentMediaItemIndex.value = NO_MEDIA_ITEM
+            updateQueueState()
             updateDuration()
             updatePosition()
             return
@@ -147,7 +166,9 @@ class LightAudioPlayer internal constructor(
         require(startIndex in items.indices) { "Start index must reference a queue item" }
         val mediaItems = items.mapIndexed { index, item -> item.toMediaItem(index) }
         player.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
+        queue = items
         _currentMediaItemIndex.value = startIndex
+        updateQueueState()
         player.prepare()
         updateDuration()
         updatePosition()
@@ -270,7 +291,18 @@ class LightAudioPlayer internal constructor(
     private fun updateDuration() {
         _durationMs.value = player.duration.validDuration()
     }
+
+    private fun updateQueueState() {
+        val index = _currentMediaItemIndex.value
+        _nowPlaying.value = queue.getOrNull(index)?.metadata
+        _hasNext.value = hasNextItem(index, queue.size)
+        _hasPrevious.value = hasPreviousItem(index)
+    }
 }
+
+internal fun hasNextItem(index: Int, size: Int): Boolean = index in 0 until size - 1
+
+internal fun hasPreviousItem(index: Int): Boolean = index > 0
 
 internal fun LightAudioItem.toMediaItem(queueIndex: Int): MediaItem {
     val uri = Uri.parse(source.uriString())
