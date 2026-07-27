@@ -97,6 +97,14 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
                         )
                     }
 
+                    is WeatherScreenMode.LocationSearchResults -> {
+                        LocationSearchResultsContent(
+                            results = mode.results,
+                            onSelect = viewModel::selectLocationResult,
+                            onBack = viewModel::cancelLocationSearchResults,
+                        )
+                    }
+
                     is WeatherScreenMode.Loading -> {
                         Column(modifier = Modifier.fillMaxSize()) {
                             LightTopBar(
@@ -176,6 +184,53 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
                         message = message,
                         onClose = viewModel::dismissError,
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocationSearchResultsContent(
+    results: List<GeocodingResult>,
+    onSelect: (GeocodingResult) -> Unit,
+    onBack: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        LightTopBar(
+            leftButton = LightBarButton.LightIcon(
+                icon = LightIcons.BACK,
+                onClick = onBack,
+                contentDescription = "Back",
+            ),
+            center = LightTopBarCenter.Text("Search Results"),
+            modifier = Modifier.padding(bottom = 0.25f.gridUnitsAsDp()),
+        )
+
+        LightScrollView(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(start = 1f.gridUnitsAsDp()),
+        ) {
+            results.forEach { result ->
+                val region = result.regionLabel()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .lightClickable(onClick = { onSelect(result) })
+                        .padding(bottom = 1f.gridUnitsAsDp()),
+                ) {
+                    LightText(
+                        text = result.name,
+                        variant = LightTextVariant.Copy,
+                    )
+                    if (region.isNotEmpty()) {
+                        LightText(
+                            text = region,
+                            variant = LightTextVariant.Detail,
+                        )
+                    }
                 }
             }
         }

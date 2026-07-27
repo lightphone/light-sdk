@@ -21,6 +21,7 @@ data class LightToolMetadata(
     val versionName: String,
     val permissions: List<String>,
     val serverPackage: String,
+    val orientation: String? = null,
 ) {
     companion object {
         const val FILE_NAME: String = "lighttool.toml"
@@ -58,6 +59,7 @@ data class LightToolMetadata(
                 versionName = validateVersionName(tool.tomlString("versionName")),
                 permissions = validatePermissions(tool.tomlStringList("permissions")),
                 serverPackage = validateServerPackage(tool.tomlString("serverPackage")),
+                orientation = validateOrientation(tool.tomlString("orientation")),
             )
         }
 
@@ -90,7 +92,7 @@ data class LightToolMetadata(
         private fun validateVersionName(value: String?): String {
             val v = value ?: throw LightToolMetadataException("tool.versionName is required")
             require(LightToolPolicy.VERSION_NAME_PATTERN.matches(v)) {
-                "tool.versionName may contain only [A-Za-z0-9._+-] and must be <=30 chars; got '$v'"
+                "tool.versionName must be major.minor.patch semver; got '$v'"
             }
             return v
         }
@@ -102,6 +104,15 @@ data class LightToolMetadata(
                         "(e.g. com.lightos); got '$v'"
             }
             return v
+        }
+
+        private fun validateOrientation(value: String?): String? {
+            if (value == null) return null
+            require(value in LightToolPolicy.ALLOWED_ORIENTATIONS) {
+                "tool.orientation must be one of: " +
+                    LightToolPolicy.ALLOWED_ORIENTATIONS.sorted().joinToString() + "; got '$value'"
+            }
+            return value
         }
 
         private fun validatePermissions(values: List<String>?): List<String> {
@@ -127,9 +138,11 @@ class LightToolMetadataException(message: String) : RuntimeException(message)
 /** Policy values lifted into one object so tests and the validator share them. */
 object LightToolPolicy {
     val TOOL_ID_PATTERN: Regex = Regex("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$")
-    val VERSION_NAME_PATTERN: Regex = Regex("^[A-Za-z0-9._\\-+]{1,30}$")
+    val VERSION_NAME_PATTERN: Regex =
+        Regex("""^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$""")
     val TOOL_LABEL_PATTERN: Regex = Regex("^[^\\x00-\\x1f<>]{1,50}$")
     const val MAX_VERSION_CODE: Int = 2_100_000_000
+    val ALLOWED_ORIENTATIONS: Set<String> = setOf("portrait")
 
     val ALLOWED_PERMISSIONS: Set<String> = setOf(
         "android.permission.INTERNET",

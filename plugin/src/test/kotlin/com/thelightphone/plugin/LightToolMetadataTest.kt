@@ -25,6 +25,7 @@ class LightToolMetadataTest {
             versionName = "1.2.0"
             permissions = ["android.permission.INTERNET"]
             serverPackage = "com.lightos"
+            orientation = "portrait"
         """.trimIndent())
 
         val meta = LightToolMetadata.parse(file)
@@ -35,6 +36,53 @@ class LightToolMetadataTest {
         assertEquals("1.2.0", meta.versionName)
         assertEquals(listOf("android.permission.INTERNET"), meta.permissions)
         assertEquals("com.lightos", meta.serverPackage)
+        assertEquals("portrait", meta.orientation)
+    }
+
+    @Test
+    fun `orientation is optional`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "My Tool"
+            versionCode = 1
+            versionName = "1.0"
+            serverPackage = "com.lightos"
+        """.trimIndent())
+
+        assertEquals(null, LightToolMetadata.parse(file).orientation)
+    }
+
+    @Test
+    fun `unsupported orientation fails`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "My Tool"
+            versionCode = 1
+            versionName = "1.0"
+            serverPackage = "com.lightos"
+            orientation = "landscape"
+        """.trimIndent())
+
+        val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+        assert(ex.message!!.contains("orientation"))
+    }
+
+    @Test
+    fun `foreground service permission is not allowed`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "X"
+            versionCode = 1
+            versionName = "1.0"
+            serverPackage = "com.lightos"
+            permissions = ["android.permission.FOREGROUND_SERVICE"]
+        """.trimIndent())
+
+        val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+        assert(ex.message!!.contains("not allowed"))
     }
 
     @Test
@@ -58,7 +106,7 @@ class LightToolMetadataTest {
             id = "Com.Example.MyTool"
             label = "X"
             versionCode = 1
-            versionName = "1.0"
+            versionName = "1.0.0"
         """.trimIndent())
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
         assert(ex.message!!.contains("tool.id"))
@@ -71,7 +119,7 @@ class LightToolMetadataTest {
             id = "mytool"
             label = "X"
             versionCode = 1
-            versionName = "1.0"
+            versionName = "1.0.0"
         """.trimIndent())
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
         assert(ex.message!!.contains("tool.id"))
@@ -112,7 +160,7 @@ class LightToolMetadataTest {
             id = "com.example.mytool"
             label = "X"
             versionCode = 1
-            versionName = "1.0"
+            versionName = "1.0.0"
             permissions = ["android.permission.READ_SMS"]
         """.trimIndent())
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
@@ -126,10 +174,39 @@ class LightToolMetadataTest {
             id = "com.example.mytool"
             label = "X"
             versionCode = 0
-            versionName = "1.0"
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
         """.trimIndent())
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
         assert(ex.message!!.contains("versionCode"))
+    }
+
+    @Test
+    fun `two-part versionName fails`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "X"
+            versionCode = 1
+            versionName = "1.0"
+            serverPackage = "com.lightos"
+        """.trimIndent())
+        val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+        assert(ex.message!!.contains("versionName"))
+    }
+    
+    @Test
+    fun `versionName with pre-release suffix fails`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "X"
+            versionCode = 1
+            versionName = "1.2.3-rc.1"
+            serverPackage = "com.lightos"
+        """.trimIndent())
+        val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+        assert(ex.message!!.contains("versionName"))
     }
 
     @Test
@@ -139,7 +216,7 @@ class LightToolMetadataTest {
             id = "com.example.mytool"
             label = "<script>"
             versionCode = 1
-            versionName = "1.0"
+            versionName = "1.0.0"
         """.trimIndent())
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
         assert(ex.message!!.contains("label"))
@@ -152,7 +229,7 @@ class LightToolMetadataTest {
             id = "com.example.mytool"
             label = "X"
             versionCode = 1
-            versionName = "1.0"
+            versionName = "1.0.0"
             permissions = [
                 "android.permission.INTERNET",
                 "android.permission.INTERNET",
@@ -169,7 +246,7 @@ class LightToolMetadataTest {
             id = "com.example.mytool"
             label = "X"
             versionCode = "1"
-            versionName = "1.0"
+            versionName = "1.0.0"
         """.trimIndent())
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
         assert(ex.message!!.contains("versionCode")) { ex.message ?: "" }
@@ -182,7 +259,7 @@ class LightToolMetadataTest {
             id = "com.example.mytool"
             label = "X"
             versionCode = 1
-            versionName = "1.0"
+            versionName = "1.0.0"
         """.trimIndent())
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
         assert(ex.message!!.contains("serverPackage"))
@@ -195,7 +272,7 @@ class LightToolMetadataTest {
             id = "com.example.mytool"
             label = "X"
             versionCode = 1
-            versionName = "1.0"
+            versionName = "1.0.0"
             serverPackage = "Com.LightOS"
         """.trimIndent())
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
@@ -209,7 +286,7 @@ class LightToolMetadataTest {
             id = "com.example.mytool"
             label = "X"
             versionCode = 1
-            versionName = "1.0"
+            versionName = "1.0.0"
             serverPackage = "lightos"
         """.trimIndent())
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }

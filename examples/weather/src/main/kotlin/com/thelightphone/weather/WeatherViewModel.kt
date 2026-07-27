@@ -20,6 +20,10 @@ import kotlinx.serialization.json.Json
 
 sealed class WeatherScreenMode {
     data object LocationInput : WeatherScreenMode()
+    data class LocationSearchResults(
+        val query: String,
+        val results: List<GeocodingResult>,
+    ) : WeatherScreenMode()
     data object Loading : WeatherScreenMode()
     data class Settings(val locationName: String) : WeatherScreenMode()
     data object Attribution : WeatherScreenMode()
@@ -165,7 +169,8 @@ class WeatherViewModel(
             }
             is WeatherScreenMode.Weekly,
             is WeatherScreenMode.Settings,
-            is WeatherScreenMode.Attribution -> restoreWeatherScreen(selectedDayIndex = 0)
+            is WeatherScreenMode.Attribution,
+            is WeatherScreenMode.LocationSearchResults -> restoreWeatherScreen(selectedDayIndex = 0)
             else -> Unit
         }
     }
@@ -245,16 +250,17 @@ class WeatherViewModel(
                     )
                 }
 
-                val geoResult = api.resolveLocation(query)
-                geoResult.fold(
-                    onSuccess = { geo ->
-                        refreshForecast(
-                            query = query,
-                            locationName = geo.displayName(),
-                            latitude = geo.latitude,
-                            longitude = geo.longitude,
-                            showLoadingScreen = true,
-                        )
+                val searchResult = api.searchLocations(query)
+                searchResult.fold(
+                    onSuccess = { results ->
+                        updateState {
+                            it.copy(
+                                mode = WeatherScreenMode.LocationSearchResults(
+                                    query = query,
+                                    results = results,
+                                ),
+                            )
+                        }
                     },
                     onFailure = { error ->
                         showApiFailure(error)
@@ -264,6 +270,29 @@ class WeatherViewModel(
                 showApiFailure()
             }
         }
+    }
+
+    fun selectLocationResult(result: GeocodingResult) {
+        val query = (_uiState.value.mode as? WeatherScreenMode.LocationSearchResults)?.query
+            ?: return
+
+        viewModelScope.launch(Dispatchers.IO + apiExceptionHandler) {
+            runCatching {
+                refreshForecast(
+                    query = query,
+                    locationName = result.displayName(),
+                    latitude = result.latitude,
+                    longitude = result.longitude,
+                    showLoadingScreen = true,
+                )
+            }.onFailure {
+                showApiFailure()
+            }
+        }
+    }
+
+    fun cancelLocationSearchResults() {
+        _uiState.update { it.openLocationInput(canCancel = it.canCancelLocationInput) }
     }
 
     private suspend fun refreshForecast(

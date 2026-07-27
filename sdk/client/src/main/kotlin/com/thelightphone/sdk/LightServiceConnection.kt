@@ -27,15 +27,21 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "LightServiceConnection"
+private const val DEFAULT_TOKEN = "no_auth"
 
 internal object LightServiceConnection : ServiceConnection {
 
     private var serviceBinder: IBinder? = null
     private var bound = false
     private var binderReady = CompletableDeferred<IBinder>()
-    private var token: String? = null
+    private var token: String = DEFAULT_TOKEN
+    // Retained so we can rebind ourselves if the binding dies. applicationContext, so no leak.
+    private var appContext: Context? = null
+    private var serverPackage: String? = null
 
     fun bind(context: Context, serverPackage: String) {
+        appContext = context.applicationContext
+        this.serverPackage = serverPackage
         if (bound) return
         val intent = Intent(LightConstants.ACTION_BIND_SDK_SERVICE).apply {
             setPackage(serverPackage)
@@ -46,12 +52,20 @@ internal object LightServiceConnection : ServiceConnection {
         }
     }
 
+    /** Forget the cached token so the next [ensureToken] re-authenticates with the server. */
+    fun clearToken() {
+        token = DEFAULT_TOKEN
+    }
+
+    private fun resetConnection() {
+        serviceBinder = null
+        clearToken()
+        binderReady = CompletableDeferred()
+    }
+
     fun unbind(context: Context) {
         if (!bound) return
-        try {
-            context.unbindService(this)
-        } catch (_: IllegalArgumentException) {
-        }
+        runCatching { context.unbindService(this) }
         bound = false
         serviceBinder = null
     }
@@ -91,6 +105,8 @@ internal object LightServiceConnection : ServiceConnection {
     override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
         Log.i(TAG, "Connected to LightSdkService")
         serviceBinder = binder
+        // force re-auth if re-connected, token is likely invalid server-side now
+        clearToken()
         if (binder != null) {
             binderReady.complete(binder)
         }
@@ -98,15 +114,28 @@ internal object LightServiceConnection : ServiceConnection {
 
     override fun onServiceDisconnected(name: ComponentName?) {
         Log.w(TAG, "Disconnected from LightSdkService")
-        serviceBinder = null
-        token = null
-        binderReady = CompletableDeferred()
+        resetConnection()
+    }
+
+    override fun onBindingDied(name: ComponentName?) {
+        Log.w(TAG, "Binding to LightSdkService died, rebinding")
+        resetConnection()
+        val ctx = appContext ?: return
+        val pkg = serverPackage ?: return
+        runCatching { ctx.unbindService(this) }
+            .onFailure { Log.w(TAG, "Failed to unbind service", it) }
+        bound = false
+        bind(ctx, pkg)
+    }
+
+    override fun onNullBinding(name: ComponentName?) {
+        Log.e(TAG, "LightSdkService returned a null binding")
     }
 
     suspend fun awaitBinder(): IBinder = binderReady.await()
 
     fun ensureToken(): Boolean {
-        if (token != null) return true
+        if (token != DEFAULT_TOKEN) return true
         return when (val result = request(
             LightServiceMethod.GetToken.id,
             LightServiceMethod.GetToken.encodeRequest(Unit)
@@ -138,7 +167,16 @@ suspend fun <TRequest, TResponse> callRemoteServiceMethod(
     if (bound != true) {
         return@withContext LightResult.Error(LightResult.ErrorCode.Unknown, "Unable to bind to server")
     }
-    when (val result = LightServiceConnection.request(method.id, method.encodeRequest(body))) {
+    val encoded = method.encodeRequest(body)
+    var result = LightServiceConnection.request(method.id, encoded)
+    if (result is LightResult.Error && result.code == LightResult.ErrorCode.InvalidToken) {
+        // Case where the app is "allowed", but the token is no longer valid, allow one retry
+        Log.i(TAG, "Token rejected calling remote method, re-auth + retry")
+        LightServiceConnection.clearToken()
+        LightServiceConnection.ensureToken()
+        result = LightServiceConnection.request(method.id, encoded)
+    }
+    when (result) {
         is LightResult.Success -> LightResult.Success(method.decodeResponse(result.data))
         is LightResult.Error -> result
     }

@@ -14,13 +14,15 @@ import kotlinx.serialization.json.Json
 import java.net.URLEncoder
 import kotlin.text.Charsets.UTF_8
 
+private const val WEATHER_API_BASE = "https://production.lightphonecloud.com"
+
 @Serializable
 internal data class GeocodingResponse(
     val results: List<GeocodingResult> = emptyList(),
 )
 
 @Serializable
-internal data class GeocodingResult(
+data class GeocodingResult(
     val name: String,
     val latitude: Double,
     val longitude: Double,
@@ -77,10 +79,10 @@ internal class WeatherApi {
         }
     }
 
-    suspend fun resolveLocation(query: String): Result<GeocodingResult> = runCatching {
+    suspend fun searchLocations(query: String): Result<List<GeocodingResult>> = runCatching {
         val encoded = URLEncoder.encode(query.trim(), UTF_8.name())
         val response = client.get(
-            "https://geocoding-api.open-meteo.com/v1/search?name=$encoded&count=1",
+            "$WEATHER_API_BASE/tools/weather/geolocation?name=$encoded&count=15",
         )
 
         if (!response.status.isSuccess()) {
@@ -89,12 +91,12 @@ internal class WeatherApi {
         }
 
         val geo: GeocodingResponse = response.body()
-        geo.results.firstOrNull() ?: throw LocationNotFoundException()
+        geo.results.ifEmpty { throw LocationNotFoundException() }
     }
 
     suspend fun fetchForecast(latitude: Double, longitude: Double): Result<StoredForecast> = runCatching {
         val response = client.get(
-            "https://api.open-meteo.com/v1/forecast" +
+            "$WEATHER_API_BASE/tools/weather/forecast" +
                 "?latitude=$latitude&longitude=$longitude" +
                 "&current=temperature_2m,apparent_temperature,weather_code" +
                 "&hourly=temperature_2m,apparent_temperature,precipitation,precipitation_probability" +
@@ -187,7 +189,10 @@ private fun OpenMeteoHourly.toHourlyForecasts(): List<HourlyForecast> {
     }
 }
 
-internal fun GeocodingResult.displayName(): String {
-    val region = listOfNotNull(admin1, country).joinToString(", ")
+fun GeocodingResult.displayName(): String {
+    val region = regionLabel()
     return if (region.isEmpty()) name else "$name, $region"
 }
+
+fun GeocodingResult.regionLabel(): String =
+    listOfNotNull(admin1, country).joinToString(", ")

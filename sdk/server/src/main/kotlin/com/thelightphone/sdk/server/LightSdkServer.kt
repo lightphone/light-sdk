@@ -3,6 +3,7 @@ package com.thelightphone.sdk.server
 import android.Manifest
 import android.app.Activity
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -14,6 +15,7 @@ import android.os.UserHandle
 import android.util.Log
 import com.thelightphone.sdk.shared.LightConstants
 import com.thelightphone.sdk.shared.LightResult
+import com.thelightphone.sdk.shared.LightServiceMethod
 
 
 data class InstalledClient(
@@ -146,6 +148,21 @@ object LightSdkServer {
         }
 
     /**
+     * Handle a hardware key event forwarded from a client whose current screen did not consume
+     * it.
+     *
+     * Settable from enclosing application!! May be run on any thread
+     */
+    var onDeviceKeyEvent: (callingUid: Int, event: LightServiceMethod.DeviceKeyEvent.Request) -> Unit =
+        { _, event ->
+            Log.w(TAG, "Unhandled device key event: $event")
+        }
+
+    var foregroundSelfWithCallback: (componentToReturnTo: ComponentName) -> Unit = {
+        Log.e(TAG, "Server wants to foreground itself but does not know how!")
+    }
+
+    /**
      * Given an apk's package name, determine if it's been built with the Light SDK and/or promoted by Light
      *
      * Settable from enclosing application!! May be run on any thread
@@ -163,40 +180,47 @@ object LightSdkServer {
         setOf(
             Manifest.permission.CAMERA,
             Manifest.permission.READ_MEDIA_AUDIO,
+            Manifest.permission.RECORD_AUDIO,
         ).contains(permissionName)
     }
 
+    /**
+     * Activity to launch when allowing user to grant permission via server app
+     */
     var permissionActivity: Class<out Activity>? = null
 
-
-    var grantPermission: (context: Context, packageName: String, permission: String) -> Result<Unit> = { context, packageName, permission ->
-        runCatching {
-            // Fine for emulator, can avoid reflection on real system apps
-            val grant = PackageManager::class.java.getMethod(
-                "grantRuntimePermission",
-                String::class.java,
-                String::class.java,
-                UserHandle::class.java
-            )
-            grant.invoke(
-                context.packageManager,
-                packageName,
-                permission,
-                Process.myUserHandle()
-            )
+    var grantPermission: (context: Context, packageName: String, permission: String) -> Result<Unit> =
+        { context, packageName, permission ->
+            runCatching {
+                // Fine for emulator, can avoid reflection on real system apps
+                val grant = PackageManager::class.java.getMethod(
+                    "grantRuntimePermission",
+                    String::class.java,
+                    String::class.java,
+                    UserHandle::class.java
+                )
+                grant.invoke(
+                    context.packageManager,
+                    packageName,
+                    permission,
+                    Process.myUserHandle()
+                )
+            }
         }
-    }
 
     /**
      * A receiver that will bring the rootActivity (MainActivity in both emulator and real LightOS)
      * to the foreground with a new intent whenever the device's screen goes off
      * (unless user has overridden the settings.forceFocusLevel)
      */
-    fun Context.registerLockReceiver(rootActivityClass: Class<out Activity>, settings: LightSdkServerSettings) : BroadcastReceiver {
+    fun Context.registerLockReceiver(
+        rootActivityClass: Class<out Activity>,
+        settings: LightSdkServerSettings
+    ): BroadcastReceiver {
         val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
         val lockReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                val allowForceFocus = when(settings.forceFocusLevel) {
+                val allowForceFocus = when (settings.forceFocusLevel) {
                     ForceFocusLevel.Always -> true
                     ForceFocusLevel.AlertsOnly, ForceFocusLevel.Never -> false
                 }

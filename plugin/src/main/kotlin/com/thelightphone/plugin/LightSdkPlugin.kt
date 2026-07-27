@@ -33,6 +33,7 @@ class LightSdkPlugin : Plugin<Project> {
             "androidx.room",
             "androidx.work",
             "androidx.startup",
+            "androidx.media3",
             "io.github.david-allison:anki-android-backend",
         )
 

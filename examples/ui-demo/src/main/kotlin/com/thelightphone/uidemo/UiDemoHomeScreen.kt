@@ -17,6 +17,7 @@ import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SimpleLightScreen
 import com.thelightphone.sdk.ui.LightFullscreenModal
+import com.thelightphone.sdk.ui.LightScrollView
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.LightTheme
@@ -47,8 +48,9 @@ class UiDemoHomeScreen(sealedActivity: SealedLightActivity) :
                         modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
                     )
 
-                    Column(
+                    LightScrollView(
                         modifier = Modifier
+                            .weight(1f)
                             .fillMaxWidth()
                             .padding(horizontal = 1f.gridUnitsAsDp()),
                     ) {
@@ -111,6 +113,20 @@ class UiDemoHomeScreen(sealedActivity: SealedLightActivity) :
                             variant = LightTextVariant.Copy,
                             modifier = Modifier
                                 .lightClickable { LightThemeController.toggle() }
+                                .padding(vertical = 0.75f.gridUnitsAsDp()),
+                        )
+                        LightText(
+                            text = "PROGRESS BAR",
+                            variant = LightTextVariant.Copy,
+                            modifier = Modifier
+                                .lightClickable { navigateTo(::UiDemoProgressBarScreen) }
+                                .padding(vertical = 0.75f.gridUnitsAsDp()),
+                        )
+                        LightText(
+                            text = "KEY EVENTS",
+                            variant = LightTextVariant.Copy,
+                            modifier = Modifier
+                                .lightClickable { navigateTo(::UiDemoKeyEventsScreen) }
                                 .padding(vertical = 0.75f.gridUnitsAsDp()),
                         )
                     }
