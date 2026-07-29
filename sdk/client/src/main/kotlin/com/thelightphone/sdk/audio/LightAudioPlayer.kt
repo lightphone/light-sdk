@@ -30,7 +30,7 @@ import kotlinx.coroutines.flow.StateFlow
  * Transient focus loss pauses and later resumes playback; duckable loss lowers
  * volume. Call [release] when the owning screen is destroyed.
  */
-class LightAudioPlayer internal constructor(
+open class LightAudioPlayerCore internal constructor(
     context: Context,
     private val usage: LightAudioUsage,
     private val player: Player,
@@ -47,10 +47,13 @@ class LightAudioPlayer internal constructor(
 
     /** Current position in milliseconds, updated while playing. */
     val positionMs: StateFlow<Long> = _positionMs
+
     /** Resolved duration in milliseconds, or `0` while unknown/unavailable. */
     val durationMs: StateFlow<Long> = _durationMs
+
     /** Whether the platform is actively advancing playback. */
     val isPlaying: StateFlow<Boolean> = _isPlaying
+
     /** Current queue index, or `-1` when the queue is empty. */
     val currentMediaItemIndex: StateFlow<Int> = _currentMediaItemIndex
 
@@ -60,6 +63,35 @@ class LightAudioPlayer internal constructor(
         gainType = AudioManager.AUDIOFOCUS_GAIN,
         onFocusChange = ::onAudioFocusChange
     )
+
+    private val stateListener = object : Player.Listener {
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            _currentMediaItemIndex.value = if (mediaItem == null) {
+                NO_MEDIA_ITEM
+            } else {
+                player.currentMediaItemIndex
+            }
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            _isPlaying.value = isPlaying
+            if (isPlaying) {
+                startPositionUpdates()
+            } else {
+                stopPositionUpdates()
+                updatePosition()
+            }
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            updateDuration()
+            updatePosition()
+            if (playbackState == Player.STATE_ENDED) {
+                stopPositionUpdates()
+                abandonFocus()
+            }
+        }
+    }
 
     init {
         reassertSdkOutput(player, usage)
@@ -74,22 +106,6 @@ class LightAudioPlayer internal constructor(
         set(value) {
             field = value.coerceAtLeast(MIN_SPEED)
             player.playbackParameters = PlaybackParameters(field)
-        }
-
-    /** Enables the platform player's silence-skipping behavior. */
-    var skipSilence: Boolean = false
-        @OptIn(UnstableApi::class)
-        set(value) {
-            field = value
-            (player as? ExoPlayer)?.skipSilenceEnabled = value
-        }
-
-    /** When `true`, playback pauses at the end of each queue item instead of advancing. */
-    var pauseAtEndOfMediaItems: Boolean = false
-        @OptIn(UnstableApi::class)
-        set(value) {
-            field = value
-            (player as? ExoPlayer)?.pauseAtEndOfMediaItems = value
         }
 
     /** Replaces the queue with [file] and prepares it for playback. */
@@ -185,13 +201,12 @@ class LightAudioPlayer internal constructor(
     }
 
     /** Permanently releases playback, focus, and state-update resources. Idempotent. */
-    fun release() {
+    open fun release() {
         if (released) return
         released = true
         stopPositionUpdates()
         abandonFocus()
         player.removeListener(stateListener)
-        (player as? ExoPlayer)?.release()
         scope.cancel()
     }
 
@@ -249,33 +264,47 @@ class LightAudioPlayer internal constructor(
         _durationMs.value = player.duration.validDuration()
     }
 
-    private val stateListener = object : Player.Listener {
-        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            _currentMediaItemIndex.value = if (mediaItem == null) {
-                NO_MEDIA_ITEM
-            } else {
-                player.currentMediaItemIndex
-            }
+    internal companion object {
+        @OptIn(UnstableApi::class)
+        internal fun create(
+            context: Context,
+            usage: LightAudioUsage,
+            player: Player
+        ): LightAudioPlayerCore {
+            return LightAudioPlayerCore(context, usage, player)
         }
 
-        override fun onIsPlayingChanged(isPlaying: Boolean) {
-            _isPlaying.value = isPlaying
-            if (isPlaying) {
-                startPositionUpdates()
-            } else {
-                stopPositionUpdates()
-                updatePosition()
-            }
+        private fun reassertSdkOutput(player: Player, usage: LightAudioUsage) {
+            player.setAudioAttributes(usage.toMedia3AudioAttributes(), false)
+        }
+    }
+}
+
+class LightAudioPlayer internal constructor(
+    context: Context,
+    usage: LightAudioUsage,
+    private val exoPlayer: ExoPlayer
+) :
+    LightAudioPlayerCore(context, usage, exoPlayer) {
+    /** Enables the platform player's silence-skipping behavior. */
+    var skipSilence: Boolean = false
+        @OptIn(UnstableApi::class)
+        set(value) {
+            field = value
+            exoPlayer.skipSilenceEnabled = value
         }
 
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            updateDuration()
-            updatePosition()
-            if (playbackState == Player.STATE_ENDED) {
-                stopPositionUpdates()
-                abandonFocus()
-            }
+    /** When `true`, playback pauses at the end of each queue item instead of advancing. */
+    var pauseAtEndOfMediaItems: Boolean = false
+        @OptIn(UnstableApi::class)
+        set(value) {
+            field = value
+            exoPlayer.pauseAtEndOfMediaItems = value
         }
+
+    override fun release() {
+        super.release()
+        exoPlayer.release()
     }
 
     internal companion object {
@@ -289,10 +318,6 @@ class LightAudioPlayer internal constructor(
             configure?.configure(builder, LightMediaEnv.forContext(context))
             val exoPlayer = builder.build()
             return LightAudioPlayer(context, usage, exoPlayer)
-        }
-
-        private fun reassertSdkOutput(player: Player, usage: LightAudioUsage) {
-            player.setAudioAttributes(usage.toMedia3AudioAttributes(), false)
         }
     }
 }

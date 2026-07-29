@@ -9,6 +9,7 @@ import com.thelightphone.sdk.audio.LightAudioRecorder
 import com.thelightphone.sdk.audio.LightAudioUsage
 import com.thelightphone.sdk.audio.LightAudioVoice
 import com.thelightphone.sdk.audio.LightMediaEnv
+import com.thelightphone.sdk.audio.LightPlayerConfigurator
 import com.thelightphone.sdk.audio.RecorderConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,8 +28,11 @@ class ToneScreenTest {
         val vm = ToneViewModel(object : LightAudio {
             override val capabilities: AudioCapabilities = AudioCapabilities(67)
 
-            override fun newPlayer(usage: LightAudioUsage): LightAudioPlayer {
-                TODO("Should not be called")
+            override fun newPlayer(
+                usage: LightAudioUsage,
+                configure: LightPlayerConfigurator?
+            ): LightAudioPlayer {
+                TODO("should not be called")
             }
 
             override fun mediaEnv(): LightMediaEnv {
