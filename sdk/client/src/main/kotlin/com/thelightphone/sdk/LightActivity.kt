@@ -93,6 +93,9 @@ class LightActivity internal constructor() : ComponentActivity() {
         }
         super.onCreate(savedInstanceState)
 
+        // Avoids a stale-content flash when resuming from a stopped task (if false)
+        setRecentsScreenshotEnabled(LightSdkRegistry.entryPoint?.enableRecentsScreenshots == true)
+
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.hide(WindowInsetsCompat.Type.systemBars())
