@@ -17,6 +17,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -193,22 +194,27 @@ fun LightTextInputEditor(
                 }
             }
 
-            LightEmbeddedLp3Keyboard(viewModel = viewModel)
-
-            LightBottomBar(
-                items = listOf(
-                    when (submitIcon) {
-                        null -> LightBarButton.Text(
-                            text = submitLabel,
-                            onClick = { onSubmit(state.text) },
-                        )
-                        else -> LightBarButton.LightIcon(
-                            icon = submitIcon,
-                            onClick = { onSubmit(state.text) },
-                            contentDescription = submitLabel,
-                        )
-                    },
-                ),
+            LightEmbeddedLp3Keyboard(
+                viewModel = viewModel,
+                additionalBottomHeight = 5f.gridUnitsAsDp(),
+                bottomBar = {
+                    LightBottomBar(
+                        topPadding = 0.dp,
+                        items = listOf(
+                            when (submitIcon) {
+                                null -> LightBarButton.Text(
+                                    text = submitLabel,
+                                    onClick = { onSubmit(state.text) },
+                                )
+                                else -> LightBarButton.LightIcon(
+                                    icon = submitIcon,
+                                    onClick = { onSubmit(state.text) },
+                                    contentDescription = submitLabel,
+                                )
+                            },
+                        ),
+                    )
+                }
             )
         }
     }

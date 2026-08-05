@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.thelightphone.lp3Keyboard.ui.DarkKeyboardColors
 import com.thelightphone.lp3Keyboard.ui.LightKeyboardColors
@@ -17,9 +18,16 @@ import com.thelightphone.lp3Keyboard.ui.Lp3KeyboardWrapper
 import com.thelightphone.lp3Keyboard.ui.viewmodel.Lp3KeyboardViewModel
 import com.thelightphone.sdk.ui.LightThemeColors
 import com.thelightphone.sdk.ui.LightThemeTokens
+import kotlin.Int
 
 @Composable
-fun LightEmbeddedLp3Keyboard(viewModel: Lp3KeyboardViewModel<*>) {
+fun LightEmbeddedLp3Keyboard(
+    viewModel: Lp3KeyboardViewModel<*>,
+    additionalBottomHeight: Dp = 0.dp,
+    bottomBar: (@Composable () -> Unit)? = null,
+    onOverlayDismissed: (() -> Unit)? = null,
+    overlay: (@Composable () -> Unit)? = null,
+) {
     val layout by viewModel.layoutFlow.collectAsState()
     val keyboardOptions by viewModel.keyboardOptionsFlow.collectAsState()
     val layoutOptions by viewModel.layoutOptionsFlow.collectAsState()
@@ -42,7 +50,11 @@ fun LightEmbeddedLp3Keyboard(viewModel: Lp3KeyboardViewModel<*>) {
                 keyboardOptions = keyboardOptions,
                 layoutOptions = layoutOptions,
                 callback = viewModel,
-                swipeCallback = null
+                swipeCallback = null,
+                additionalBottomHeight = additionalBottomHeight,
+                bottomBar = bottomBar,
+                onOverlayDismissed = onOverlayDismissed,
+                overlay = overlay
             )
         }
     }
