@@ -2,11 +2,28 @@ package com.thelightphone.sdk.audio
 
 import android.content.Context
 import android.media.AudioManager
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import com.thelightphone.sdk.SealedLightActivity
 
 interface LightAudio {
     val capabilities: AudioCapabilities
-    fun newPlayer(usage: LightAudioUsage = LightAudioUsage.Music): LightAudioPlayer
+
+    /**
+     * Creates a player that requests audio focus appropriate for [usage].
+     * When [configure] is non-null, the SDK builds an [ExoPlayer.Builder] and
+     * invokes it before constructing the player.
+     */
+    @OptIn(UnstableApi::class)
+    fun newPlayer(
+        usage: LightAudioUsage = LightAudioUsage.Music,
+        configure: LightPlayerConfigurator? = null,
+    ): LightAudioPlayer
+
+    /** Sandboxed media3 cache and data-source helpers for this tool process. */
+    @OptIn(UnstableApi::class)
+    fun mediaEnv(): LightMediaEnv
+
     fun newRecorder(cfg: RecorderConfig = RecorderConfig()): LightAudioRecorder
     fun newCapture(cfg: CaptureConfig = CaptureConfig()): LightAudioCapture
     fun newVoice(
@@ -24,10 +41,17 @@ value class DefaultLightAudio(
     override val capabilities: AudioCapabilities
         get() = sealedActivity.activity.readAudioCapabilities()
 
-    /** Create a player that requests audio focus appropriate for [usage]. */
-    override fun newPlayer(usage: LightAudioUsage): LightAudioPlayer {
-        return LightAudioPlayer(sealedActivity.activity, usage)
+    @OptIn(UnstableApi::class)
+    override fun newPlayer(
+        usage: LightAudioUsage,
+        configure: LightPlayerConfigurator?,
+    ): LightAudioPlayer {
+        return LightAudioPlayer.create(sealedActivity.activity, usage, configure)
     }
+
+    @OptIn(UnstableApi::class)
+    override fun mediaEnv(): LightMediaEnv =
+        LightMediaEnv.forContext(sealedActivity.activity)
 
     /** Create a recorder using [cfg]. Call [LightAudioRecorder.release] when done. */
     override fun newRecorder(cfg: RecorderConfig): LightAudioRecorder =

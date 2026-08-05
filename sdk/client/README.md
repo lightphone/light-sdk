@@ -125,6 +125,22 @@ player.play()
 - Observe `isPlaying` for the actual state.
 - Transient focus loss pauses and later resumes playback, while duckable loss lowers the volume.
 
+#### Advanced audio configuration
+The default `newPlayer()` path builds an internal ExoPlayer and is unchanged for simple playback. Tools that have more complex audio needs can pass `LightPlayerConfigurator` to have more fine-grained control.
+The SDK owns `Context` and constructs `ExoPlayer.Builder`. Your tool configures source factory, cache, load control, and related builder options via `LightPlayerConfigurator`. `LightMediaEnv` vends sandboxed cache, database, and data-source helpers rooted in the tool's private storage.
+```kotlin
+val player = audio.newPlayer(configure = LightPlayerConfigurator { builder, env ->
+    val cache = env.cache("stream", maxBytes = 64L * 1024 * 1024)
+    // configure builder with the things you need
+})
+```
+Call `LightAudioPlayer.release` when done.
+- Caches from `env.cache(...)` are process-scoped.
+- Use `LightAudio.mediaEnv` for bankers, downloads, or other cache readers/writers.
+- Do not call `SimpleCache.release()` from tool code. Player `release()` only tears down ExoPlayer.
+- Use `LightAudioPlayer.media3Player` for direct queue editing (`replaceMediaItem`), per-item keys, and `Player.Listener` access.
+
+
 #### PCM voice
 
 `LightAudioVoice` plays short mono signed 16-bit PCM buffers.
