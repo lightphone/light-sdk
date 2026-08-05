@@ -11,7 +11,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.thelightphone.sdk.SealedLightActivity
@@ -28,7 +27,6 @@ import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 
@@ -42,7 +40,6 @@ class AuthenticatorCodeScreen(
     @Composable
     override fun Content() {
         val themeColors by LightThemeController.colors.collectAsState()
-        val scope = rememberCoroutineScope()
         var account by remember { mutableStateOf<StoredAccount?>(null) }
         var secret by remember { mutableStateOf<String?>(null) }
 
@@ -108,11 +105,16 @@ class AuthenticatorCodeScreen(
                             LightBarButton.Text(
                                 text = "REMOVE",
                                 onClick = {
-                                    scope.launch {
-                                        withContext(Dispatchers.IO) {
-                                            repository.deleteAccount(loadedAccount.id)
+                                    navigateTo(screenFactory = {
+                                        AuthenticatorConfirmRemoveScreen(
+                                            it,
+                                            loadedAccount,
+                                            repository,
+                                        )
+                                    }) { removed ->
+                                        if (removed) {
+                                            goBack()
                                         }
-                                        goBack()
                                     }
                                 },
                             ),

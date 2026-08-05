@@ -76,29 +76,13 @@ flag and AGP signs with the shared dev keystore as usual.
 ## Building the image
 
 ```sh
-GH_PACKAGES_USER=<your-gh-user> \
-GH_PACKAGES_TOKEN=<PAT with repo + read:packages scopes> \
 DOCKER_BUILDKIT=1 docker build \
   -f builder/Dockerfile \
   --build-arg SDK_GIT_URL=https://github.com/lightphone/light-sdk \
   --build-arg SDK_GIT_REF=<commit-sha-or-tag> \
-  --secret id=github_token,env=GH_PACKAGES_TOKEN \
-  --secret id=gh_packages_user,env=GH_PACKAGES_USER \
   -t lightphone/light-builder:<tag> \
   builder/
 ```
-
-A single GitHub PAT does two jobs at image-build time:
-
-1. **Stage 2** clones the (currently private) SDK repo — needs `repo` scope.
-2. **Stage 3** pre-warms the gradle dependency cache, which includes
-   `com.thelightphone.lp3keyboard` from GitHub Packages — needs `read:packages`.
-
-Both stages read the same token via BuildKit secret mounts (`id=github_token`
-for the clone, `id=github_token` + `id=gh_packages_user` for the warm-up).
-The secrets are mounted only for the steps that need them and never end up
-in any image layer. When both the SDK repo and the Packages deps become
-public, we will omit the secrets entirely.
 
 ### Apple Silicon
 
@@ -197,8 +181,7 @@ commit.
 - **Full bit-reproducibility.** AGP, R8, ZIP packaging, and signed-block
   layout each introduce non-determinism. The extraction-and-build pipeline here is deterministic, 
   but the gradle output is only "reproducible enough that diffs are inspectable".
-- **Everything should be public.** Eventually, we won't require any GitHub creds here. The SDK will be public,
-  tools will only be buildable if they are public, and we'll (likely) host our build artifacts on Maven Central.
+- **Tools should be public.** Eventually, tools will only be buildable if they are public.
 
 ## Tests
 

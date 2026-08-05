@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import kotlinx.datetime.LocalDate
 import com.thelightphone.weather.R
 import com.thelightphone.sdk.ui.designVerticalPxToSp
 import com.thelightphone.sdk.InitialScreen
@@ -111,11 +112,19 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
                                 center = LightTopBarCenter.Text("Weather"),
                                 modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
                             )
-                            LightText(
-                                text = "Loading…",
-                                variant = LightTextVariant.Copy,
-                                modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                LightText(
+                                    text = mode.message,
+                                    variant = LightTextVariant.Copy,
+                                    align = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
+                                )
+                            }
                         }
                     }
 
@@ -483,7 +492,7 @@ private fun WeatherBoldLine(text: String) {
 
 @Composable
 private fun HourlyForecastContent(
-    date: String,
+    date: LocalDate,
     hours: List<HourlyForecast>,
     temperatureUnit: TemperatureUnit,
     onClose: () -> Unit,

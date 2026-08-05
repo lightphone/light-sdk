@@ -30,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.thelightphone.lp3Keyboard.ui.LightDeviceKeys
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.ui.LightModalManager
+import com.thelightphone.sdk.ui.LocalHapticsEnabled
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -117,8 +118,10 @@ class LightActivity internal constructor() : ComponentActivity() {
                                 .weight(1f)
                                 .fillMaxWidth(),
                         ) {
+                            val hapticsEnabled by rememberHapticsEnabled().collectAsState()
                             CompositionLocalProvider(
                                 LocalViewModelStoreOwner provides entry.viewModelStoreOwner,
+                                LocalHapticsEnabled provides hapticsEnabled,
                                 content = { entry.screen.Content() },
                             )
                         }

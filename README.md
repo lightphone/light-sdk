@@ -16,18 +16,6 @@ We're hoping to have an update on that front later this month. In the meantime, 
 are [right here](docs/system_app).
 
 ## Quickstart
-### Grabbing a token
-We're currently hosting our library builds with GitHub Packages so each artifact can live beside its source. The tradeoff is that you'll need to add a GitHub token with package read access to your local build environment. **We are considering migrating to Maven Central to avoid this requirement when everything goes public.**
-For now, you can either add environment variables with your username and token:
-```
-GITHUB_ACTOR=your_username
-GITHUB_TOKEN=your_token
-```
-or you can add them to your `local.properties` file:
-```
-gpr.user=your_username
-gpr.key=your_token
-```
 
 ### Running your Tool
 **You can test your tool on any Android device or emulator**, but certain functionality (receiving push notifications, requesting special permissions) can only be tested with:

@@ -56,5 +56,6 @@ kotlin {
 
 dependencies {
     implementation(project(":sdk:client"))
+    implementation(libs.kotlinx.datetime)
     testImplementation(libs.kotlin.test)
 }

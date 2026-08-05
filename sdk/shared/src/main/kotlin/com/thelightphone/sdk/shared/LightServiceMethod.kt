@@ -6,7 +6,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 
-val lightJson = Json { ignoreUnknownKeys = true }
+val lightJson = Json {
+    ignoreUnknownKeys = true
+    explicitNulls = false
+}
 
 /**
  * Defines a typed method that a client can call on the server's bound service.
@@ -70,7 +73,8 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
             val emojisAsString: String?,
             val displayVoice: Boolean,
             val enableKeyAnimation: Boolean,
-            val swipeEnabled: Boolean?
+            // optional for older sdk servers that omit this field
+            val swipeEnabled: Boolean? = null,
         )
     }
 
@@ -131,7 +135,6 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
     }
 }
 
-// TODO we're gonna forget to add manually, maybe use reflection?
 val allMethods: Map<String, LightServiceMethod<*, *>> = listOf(
     LightServiceMethod.GetToken,
     LightServiceMethod.GetVersion,

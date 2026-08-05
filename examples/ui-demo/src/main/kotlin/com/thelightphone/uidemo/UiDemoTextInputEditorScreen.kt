@@ -17,6 +17,7 @@ import com.thelightphone.sdk.ui.LightThemeTokens
 data class EditorRequest(
     val title: String,
     val initialValue: String,
+    val initialCaps: Boolean = false,
 )
 
 class UiDemoTextInputEditorScreen(
@@ -37,6 +38,7 @@ class UiDemoTextInputEditorScreen(
                 onSubmit = { result -> goBack(result.toString()) },
                 onBack = { goBack(null) },
                 modifier = Modifier.background(LightThemeTokens.colors.background),
+                initialCaps = editorRequest.initialCaps,
             )
         }
     }
