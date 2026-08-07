@@ -15,8 +15,9 @@ id          = "com.example.mytool"             # Java package id, dotted, lowerc
 label       = "My Tool"                        # Your tool's display name
 versionCode = 1                                # monotonically-increasing integer
 versionName = "1.0.0"                          # ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
-permissions = ["android.permission.CAMERA"]  # allowlisted permissions only
-orientation = "portrait"                    # optional; omit for no orientation lock
+permissions  = ["android.permission.CAMERA"]   # allowlisted permissions only
+capabilities = []                              # allowlisted SDK features
+orientation  = "portrait"                      # optional; omit for no orientation lock
 ```
 
 ## Fields
@@ -36,6 +37,19 @@ pre-release (`1.2.3-rc.1`), and no build metadata (`1.2.3+build`). This will be 
 
 ### `permissions` — Android permissions your tool needs
 An array of permission strings, each one from the allowlist below. Anything not on the list will fail the build. Each entry becomes a `<uses-permission>` element in the generated manifest.
+
+### `capabilities` — optional SDK features
+
+An array of capability names from the SDK allowlist. Omit it when the tool needs none. A capability may generate the permissions, manifest components, and runtime marker required by that feature.
+
+Detached playback uses:
+
+```toml
+[tool]
+capabilities = ["detached-audio"]
+```
+
+`detached-audio` generates the `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permissions, the detached audio service, and the SDK marker checked by `LightAudio.newPlayer`. None of those permissions can be listed under `permissions`. The capability owns them, and the build fails with an error naming the capability to declare instead.
 
 ### `orientation` — optional screen orientation lock
 Set to `"portrait"` to keep the tool in portrait orientation. Omit this field to

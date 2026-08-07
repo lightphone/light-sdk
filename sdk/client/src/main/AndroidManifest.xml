@@ -14,5 +14,8 @@
                 <action android:name="org.unifiedpush.android.connector.PUSH_EVENT"/>
             </intent-filter>
         </service>
+        <!-- LightAudioService is not declared here. The Gradle plugin emits it
+             into the manifests of tools that declare the detached-audio
+             capability, so no other tool carries a mediaPlayback claim. -->
     </application>
 </manifest>

@@ -15,9 +15,9 @@ class AudioLibraryRepositoryTest {
     fun sampleCatalogIncludesBundledMusicSpeechAndRemoteStreams() {
         val clips = SampleAudioCatalog.clips
 
-        assertEquals(5, clips.size)
+        assertEquals(6, clips.size)
         assertEquals(3, clips.count { it.source is AudioClipSource.AssetSource })
-        assertEquals(2, clips.count { it.source is AudioClipSource.UrlSource })
+        assertEquals(3, clips.count { it.source is AudioClipSource.UrlSource })
         assertEquals(2, clips.count { it.kind == AudioContentKind.Speech })
         assertTrue(clips.all { it.usage == LightAudioUsage.Music })
         assertTrue(clips.any { it.formatLabel == "OGG" })
@@ -42,12 +42,6 @@ class AudioLibraryRepositoryTest {
         assertFailsWith<IllegalArgumentException> {
             playbackSelectionFor(missing, SampleAudioCatalog.clips)
         }
-    }
-
-    @Test
-    fun playNextControlsPauseAtEndWithoutChangingQueue() {
-        assertEquals(false, pauseAtEndOfMediaItemsFor(playNext = true))
-        assertEquals(true, pauseAtEndOfMediaItemsFor(playNext = false))
     }
 
     @Test

@@ -6,7 +6,10 @@ import com.thelightphone.sdk.SealedLightActivity
 
 interface LightAudio {
     val capabilities: AudioCapabilities
-    fun newPlayer(usage: LightAudioUsage = LightAudioUsage.Music): LightAudioPlayer
+    fun newPlayer(
+        usage: LightAudioUsage = LightAudioUsage.Music,
+        playback: LightAudioPlayback = LightAudioPlayback.Attached,
+    ): LightAudioPlayer
     fun newRecorder(cfg: RecorderConfig = RecorderConfig()): LightAudioRecorder
     fun newCapture(cfg: CaptureConfig = CaptureConfig()): LightAudioCapture
     fun newVoice(
@@ -24,9 +27,44 @@ value class DefaultLightAudio(
     override val capabilities: AudioCapabilities
         get() = sealedActivity.activity.readAudioCapabilities()
 
-    /** Create a player that requests audio focus appropriate for [usage]. */
-    override fun newPlayer(usage: LightAudioUsage): LightAudioPlayer {
-        return LightAudioPlayer(sealedActivity.activity, usage)
+    /**
+     * Create a player that requests audio focus appropriate for [usage].
+     *
+     * Only one [LightAudioPlayback.Detached] player handle may exist in the
+     * process at a time.
+     */
+    override fun newPlayer(
+        usage: LightAudioUsage,
+        playback: LightAudioPlayback,
+    ): LightAudioPlayer {
+        if (playback == LightAudioPlayback.Attached) {
+            return LightAudioPlayer(sealedActivity.activity, usage, playback)
+        }
+
+        sealedActivity.activity.requireDetachedAudioCapability()
+        val activeUsage = detachedSessionState.activeUsage()
+        if (!isDetachedUsageCompatible(activeUsage, usage)) {
+            throw LightAudioPlayerException(
+                "Detached audio is already using $activeUsage; requested $usage. " +
+                    "Reconnect with the active usage or wait for the detached session to stop."
+            )
+        }
+        if (!detachedSessionState.openHandle()) {
+            throw LightAudioPlayerException(
+                "Only one detached LightAudioPlayer may exist at a time; release the existing player first"
+            )
+        }
+        return try {
+            LightAudioPlayer(
+                sealedActivity.activity,
+                usage,
+                playback,
+                detachedSessionState::closeHandle,
+            )
+        } catch (error: Throwable) {
+            detachedSessionState.closeHandle()
+            throw error
+        }
     }
 
     /** Create a recorder using [cfg]. Call [LightAudioRecorder.release] when done. */

@@ -3,6 +3,7 @@ package com.thelightphone.sdk.audio
 import android.media.AudioAttributes
 import android.media.MediaRecorder
 import androidx.media3.common.C
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.AudioAttributes as Media3AudioAttributes
 
 /** Describes how the platform should classify, process, and prioritize audio. */
@@ -31,6 +32,54 @@ enum class LightAudioUsage {
      */
     VoiceCall
 }
+
+/** Whether playback is tied to the tool screen or survives leaving it. */
+enum class LightAudioPlayback {
+    /** Playback stops when the player is released. */
+    Attached,
+    /** Playback continues after the player handle is released. */
+    Detached,
+}
+
+/** What went wrong during playback, at the granularity a tool can act on. */
+enum class LightAudioErrorKind {
+    /** Network or file I/O failure. */
+    Source,
+    /** Container, codec, or decoding support failure. */
+    Unsupported,
+    /** Audio output initialization or write failure. */
+    Output,
+    /** Failure without a more actionable classification. */
+    Unknown,
+}
+
+/** Current playback failure, using SDK-owned types shared by both playback modes. */
+data class LightAudioError(
+    /** Actionable failure category. */
+    val kind: LightAudioErrorKind,
+    /** Stable media3 error-code name for logs and bug reports. */
+    val diagnostic: String,
+    /** Queue index that failed, or `-1` when unavailable. */
+    val itemIndex: Int,
+)
+
+internal fun errorKindFor(errorCode: Int): LightAudioErrorKind = when (errorCode) {
+    in PlaybackException.ERROR_CODE_IO_UNSPECIFIED..
+        PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE -> LightAudioErrorKind.Source
+    in PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED..
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+    in PlaybackException.ERROR_CODE_DECODER_INIT_FAILED..
+        PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED -> LightAudioErrorKind.Unsupported
+    in PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED..
+        PlaybackException.ERROR_CODE_AUDIO_TRACK_OFFLOAD_INIT_FAILED -> LightAudioErrorKind.Output
+    else -> LightAudioErrorKind.Unknown
+}
+
+internal fun PlaybackException.toLightAudioError(itemIndex: Int): LightAudioError = LightAudioError(
+    kind = errorKindFor(errorCode),
+    diagnostic = PlaybackException.getErrorCodeName(errorCode),
+    itemIndex = itemIndex,
+)
 
 internal data class AudioAttributeSpec(
     val usage: Int,

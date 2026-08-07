@@ -31,3 +31,7 @@ class LightAudioRecorderException(message: String, cause: Throwable? = null) :
  */
 class LightAudioCaptureException(message: String, cause: Throwable? = null) :
     LightAudioException(message, cause)
+
+/** Thrown when detached playback cannot be created. */
+class LightAudioPlayerException(message: String, cause: Throwable? = null) :
+    LightAudioException(message, cause)

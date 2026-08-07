@@ -11,13 +11,19 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.viewModelScope
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.audio.DefaultLightAudio
 import com.thelightphone.sdk.audio.LightAudio
+import com.thelightphone.sdk.audio.LightAudioError
 import com.thelightphone.sdk.audio.LightAudioItem
+import com.thelightphone.sdk.audio.LightAudioPlayback
 import com.thelightphone.sdk.audio.LightAudioPlayer
 import com.thelightphone.sdk.audio.LightAudioSource
 import com.thelightphone.sdk.audio.LightMediaMetadata
@@ -35,66 +41,158 @@ import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
 import java.io.File
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 
+interface PlayerModeStore {
+    suspend fun getPlayback(): LightAudioPlayback
+    suspend fun setPlayback(playback: LightAudioPlayback)
+}
+
+// In order to get the detached audio player demo working, we need to
+// be able to get in and out of the tool while audio keeps playing.
+// For that, the detached mode toggle UI state should be persistent.
+internal class DataStorePlayerModeStore(
+    private val dataStore: DataStore<Preferences>,
+) : PlayerModeStore {
+    override suspend fun getPlayback(): LightAudioPlayback =
+        if (dataStore.data.first()[DETACHED_MODE_KEY] == true) {
+            LightAudioPlayback.Detached
+        } else {
+            LightAudioPlayback.Attached
+        }
+
+    override suspend fun setPlayback(playback: LightAudioPlayback) {
+        dataStore.edit { preferences ->
+            preferences[DETACHED_MODE_KEY] = playback == LightAudioPlayback.Detached
+        }
+    }
+
+    private companion object {
+        val DETACHED_MODE_KEY = booleanPreferencesKey("player_detached")
+    }
+}
+
+internal class PlayerDemoMode(
+    private val store: PlayerModeStore,
+    initialPlayback: LightAudioPlayback = LightAudioPlayback.Attached,
+) {
+    val playback = MutableStateFlow(initialPlayback)
+
+    suspend fun load(): LightAudioPlayback = store.getPlayback().also {
+        playback.value = it
+    }
+
+    suspend fun set(playback: LightAudioPlayback) {
+        store.setPlayback(playback)
+        this.playback.value = playback
+    }
+}
+
+internal fun nextPlaybackMode(playback: LightAudioPlayback): LightAudioPlayback = when (playback) {
+    LightAudioPlayback.Attached -> LightAudioPlayback.Detached
+    LightAudioPlayback.Detached -> LightAudioPlayback.Attached
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
 class PlayerViewModel(
     filesDir: File,
-    audio: LightAudio
+    private val audio: LightAudio,
+    modeStore: PlayerModeStore,
 ) : LightViewModel<Unit>() {
-    private val player: LightAudioPlayer = audio.newPlayer()
+    private val mode = PlayerDemoMode(modeStore)
+    // The playback toggle swaps the player instance, so screen state follows
+    // the flow rather than one player's own flows, which would go stale.
+    private val playerFlow = MutableStateFlow(audio.newPlayer(playback = mode.playback.value))
+    private val currentPlayer: LightAudioPlayer get() = playerFlow.value
     val clips = AudioLibraryRepository(filesDir).list()
-    val currentClip: StateFlow<AudioClip?> = player.currentMediaItemIndex
+    val currentClip: StateFlow<AudioClip?> = playerFlow
+        .flatMapLatest { it.currentMediaItemIndex }
         .map(clips::getOrNull)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, clips.getOrNull(player.currentMediaItemIndex.value))
-    val positionMs = player.positionMs
-    val durationMs = player.durationMs
-    val isPlaying = player.isPlaying
+        .stateIn(viewModelScope, SharingStarted.Eagerly, clips.getOrNull(currentPlayer.currentMediaItemIndex.value))
+    val positionMs = playerFlow
+        .flatMapLatest { it.positionMs }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, currentPlayer.positionMs.value)
+    val durationMs = playerFlow
+        .flatMapLatest { it.durationMs }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, currentPlayer.durationMs.value)
+    val isPlaying = playerFlow
+        .flatMapLatest { it.isPlaying }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, currentPlayer.isPlaying.value)
+    val error = playerFlow
+        .flatMapLatest { it.error }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, currentPlayer.error.value)
+    val playback = mode.playback
     val speed = MutableStateFlow(1f)
-    val skipSilence = MutableStateFlow(false)
-    val playNext = MutableStateFlow(true)
+
+    private val modeLoadJob = viewModelScope.launch {
+        val initialPlayback = mode.playback.value
+        val persistedPlayback = mode.load()
+        if (persistedPlayback != initialPlayback) {
+            replacePlayer(persistedPlayback)
+        }
+    }
 
     fun play(clip: AudioClip) {
-        val selection = playbackSelectionFor(clip, clips)
-        player.speed = speed.value
-        player.skipSilence = skipSilence.value
-        player.pauseAtEndOfMediaItems = pauseAtEndOfMediaItemsFor(playNext.value)
-        player.setMediaQueue(selection.queue.map(AudioClip::toLightAudioItem), selection.startIndex)
-        player.play()
+        val selectedPlayer = currentPlayer
+        viewModelScope.launch {
+            if (!selectedPlayer.awaitReady() || selectedPlayer !== currentPlayer) return@launch
+            val selection = playbackSelectionFor(clip, clips)
+            selectedPlayer.speed = speed.value
+            selectedPlayer.setMediaQueue(
+                selection.queue.map(AudioClip::toLightAudioItem),
+                selection.startIndex,
+            )
+            selectedPlayer.play()
+        }
     }
 
     fun togglePlayPause() {
-        if (isPlaying.value) player.pause() else player.play()
+        if (isPlaying.value) currentPlayer.pause() else currentPlayer.play()
     }
 
-    fun skipBack() = player.skipBack()
-    fun skipForward() = player.skipForward()
-    fun skipToPrevious() = player.skipToPrevious()
-    fun skipToNext() = player.skipToNext()
+    fun skipBack() = currentPlayer.skipBack()
+    fun skipForward() = currentPlayer.skipForward()
+    fun skipToPrevious() = currentPlayer.skipToPrevious()
+    fun skipToNext() = currentPlayer.skipToNext()
 
     fun cycleSpeed() {
         val next = SPEEDS[(SPEEDS.indexOf(speed.value) + 1).mod(SPEEDS.size)]
         speed.value = next
-        player.speed = next
+        currentPlayer.speed = next
     }
 
-    fun toggleSkipSilence() {
-        val enabled = !skipSilence.value
-        skipSilence.value = enabled
-        player.skipSilence = enabled
+    fun toggleDetached() {
+        viewModelScope.launch {
+            modeLoadJob.join()
+            val nextPlayback = nextPlaybackMode(playback.value)
+            replacePlayer(nextPlayback)
+            mode.set(nextPlayback)
+        }
     }
 
-    fun togglePlayNext() {
-        val enabled = !playNext.value
-        playNext.value = enabled
-        player.pauseAtEndOfMediaItems = pauseAtEndOfMediaItemsFor(enabled)
+    private fun replacePlayer(nextPlayback: LightAudioPlayback) {
+        val oldPlayer = currentPlayer
+        oldPlayer.stop()
+        oldPlayer.setMediaQueue(emptyList())
+        oldPlayer.release()
+
+        val nextPlayer = audio.newPlayer(playback = nextPlayback).apply {
+            speed = this@PlayerViewModel.speed.value
+        }
+        mode.playback.value = nextPlayback
+        playerFlow.value = nextPlayer
     }
 
     override fun onCleared() {
-        player.release()
+        currentPlayer.release()
         super.onCleared()
     }
 
@@ -123,9 +221,7 @@ internal data class PlaybackSelection(
     val startIndex: Int,
 )
 
-internal fun pauseAtEndOfMediaItemsFor(playNext: Boolean): Boolean = !playNext
-
-/** The whole library is one playlist; play-next only controls auto-advance. */
+/** The whole library is one playlist. */
 internal fun playbackSelectionFor(
     selected: AudioClip,
     clips: List<AudioClip>,
@@ -138,7 +234,11 @@ internal fun playbackSelectionFor(
 class PlayerScreen(private val sealedActivity: SealedLightActivity) :
     LightScreen<Unit, PlayerViewModel>(sealedActivity) {
     override val viewModelClass = PlayerViewModel::class.java
-    override fun createViewModel() = PlayerViewModel(lightContext.filesDir, DefaultLightAudio(sealedActivity))
+    override fun createViewModel() = PlayerViewModel(
+        filesDir = lightContext.filesDir,
+        audio = DefaultLightAudio(sealedActivity),
+        modeStore = DataStorePlayerModeStore(lightContext.dataStore),
+    )
 
     @Composable
     override fun Content() {
@@ -147,9 +247,9 @@ class PlayerScreen(private val sealedActivity: SealedLightActivity) :
         val position by viewModel.positionMs.collectAsState()
         val duration by viewModel.durationMs.collectAsState()
         val playing by viewModel.isPlaying.collectAsState()
+        val error by viewModel.error.collectAsState()
         val speed by viewModel.speed.collectAsState()
-        val skipSilence by viewModel.skipSilence.collectAsState()
-        val playNext by viewModel.playNext.collectAsState()
+        val playback by viewModel.playback.collectAsState()
         val durationDisplay = playerDurationDisplay(duration)
 
         LightTheme(colors = colors) {
@@ -178,23 +278,35 @@ class PlayerScreen(private val sealedActivity: SealedLightActivity) :
                         .fillMaxWidth()
                         .padding(bottom = 0.5f.gridUnitsAsDp()),
                 )
-                Row(Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 1f.gridUnitsAsDp())) {
-                    PlayerOption("SPEED", "${speed}x", Modifier.weight(1f), viewModel::cycleSpeed)
-                    PlayerOption(
-                        "SKIP SILENCE",
-                        if (skipSilence) "ON" else "OFF",
-                        Modifier.weight(1f),
-                        viewModel::toggleSkipSilence,
-                    )
-                    PlayerOption(
-                        "PLAY NEXT",
-                        if (playNext) "ON" else "OFF",
-                        Modifier.weight(1f),
-                        viewModel::togglePlayNext,
+                error?.let {
+                    LightText(
+                        text = playbackErrorMessage(it),
+                        variant = LightTextVariant.Fine,
+                        align = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 0.5f.gridUnitsAsDp()),
                     )
                 }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 1f.gridUnitsAsDp()),
+                ) {
+                    PlayerOption("SPEED", "${speed}x", Modifier.weight(1f), viewModel::cycleSpeed)
+                    PlayerOption(
+                        "DETACHED",
+                        if (playback == LightAudioPlayback.Detached) "ON" else "OFF",
+                        Modifier.weight(1f),
+                        viewModel::toggleDetached,
+                    )
+                }
+                LightText(
+                    text = "MODE SWITCH STOPS PLAYBACK",
+                    variant = LightTextVariant.Superfine,
+                    align = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 LightBottomBar(
                     items = listOf(
                         LightBarButton.LightIcon(
@@ -225,6 +337,9 @@ class PlayerScreen(private val sealedActivity: SealedLightActivity) :
         }
     }
 }
+
+internal fun playbackErrorMessage(error: LightAudioError): String =
+    "${error.kind}: ${error.diagnostic}. Select another item to continue."
 
 @Composable
 private fun AudioClipRow(number: Int, clip: AudioClip, selected: Boolean, onClick: () -> Unit) {

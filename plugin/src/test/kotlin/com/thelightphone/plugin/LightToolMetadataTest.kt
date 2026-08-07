@@ -24,6 +24,7 @@ class LightToolMetadataTest {
             versionCode = 7
             versionName = "1.2.0"
             permissions = ["android.permission.INTERNET"]
+            capabilities = ["detached-audio"]
             serverPackage = "com.lightos"
             orientation = "portrait"
         """.trimIndent())
@@ -35,6 +36,7 @@ class LightToolMetadataTest {
         assertEquals(7, meta.versionCode)
         assertEquals("1.2.0", meta.versionName)
         assertEquals(listOf("android.permission.INTERNET"), meta.permissions)
+        assertEquals(listOf("detached-audio"), meta.capabilities)
         assertEquals("com.lightos", meta.serverPackage)
         assertEquals("portrait", meta.orientation)
     }
@@ -46,7 +48,7 @@ class LightToolMetadataTest {
             id = "com.example.mytool"
             label = "My Tool"
             versionCode = 1
-            versionName = "1.0"
+            versionName = "1.0.0"
             serverPackage = "com.lightos"
         """.trimIndent())
 
@@ -60,7 +62,7 @@ class LightToolMetadataTest {
             id = "com.example.mytool"
             label = "My Tool"
             versionCode = 1
-            versionName = "1.0"
+            versionName = "1.0.0"
             serverPackage = "com.lightos"
             orientation = "landscape"
         """.trimIndent())
@@ -70,19 +72,71 @@ class LightToolMetadataTest {
     }
 
     @Test
-    fun `foreground service permission is not allowed`(@TempDir dir: Path) {
+    fun `capabilities default to empty`(@TempDir dir: Path) {
         val file = writeToml(dir, """
             [tool]
             id = "com.example.mytool"
             label = "X"
             versionCode = 1
-            versionName = "1.0"
+            versionName = "1.0.0"
             serverPackage = "com.lightos"
-            permissions = ["android.permission.FOREGROUND_SERVICE"]
+        """.trimIndent())
+
+        assertEquals(emptyList(), LightToolMetadata.parse(file).capabilities)
+    }
+
+    @Test
+    fun `unlisted capability fails`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "X"
+            versionCode = 1
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
+            capabilities = ["detached-video"]
         """.trimIndent())
 
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
-        assert(ex.message!!.contains("not allowed"))
+        assert(ex.message!!.contains("capability not allowed"))
+    }
+
+    @Test
+    fun `duplicate capability fails`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "X"
+            versionCode = 1
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
+            capabilities = ["detached-audio", "detached-audio"]
+        """.trimIndent())
+
+        val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+        assert(ex.message!!.contains("duplicate capability"))
+    }
+
+    @Test
+    fun `explicit capability-generated permission fails naming the capability`(@TempDir dir: Path) {
+        // The capability is the single source of truth for these permissions,
+        // so hand-writing one is rejected even alongside the capability itself.
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "X"
+            versionCode = 1
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
+            permissions = ["android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"]
+            capabilities = ["detached-audio"]
+        """.trimIndent())
+
+        val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+        assert(ex.message!!.contains("android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK")) {
+            ex.message ?: ""
+        }
+        assert(ex.message!!.contains("detached-audio")) { ex.message ?: "" }
     }
 
     @Test

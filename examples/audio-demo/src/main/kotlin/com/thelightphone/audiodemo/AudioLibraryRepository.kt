@@ -75,6 +75,14 @@ object SampleAudioCatalog {
             durationMs = 0L,
             formatLabel = "STREAM",
         ),
+        AudioClip(
+            source = AudioClipSource.UrlSource("http://127.0.0.1:1/missing.mp3"),
+            displayName = "Broken source (error demo)",
+            usage = LightAudioUsage.Music,
+            kind = AudioContentKind.Music,
+            durationMs = 0L,
+            formatLabel = "BROKEN URL",
+        ),
     )
 }
 
