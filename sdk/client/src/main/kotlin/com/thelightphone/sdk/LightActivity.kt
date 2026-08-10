@@ -2,6 +2,8 @@ package com.thelightphone.sdk
 
 import android.content.Context
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -135,6 +137,11 @@ class SealedLightContext(internal val androidContext: Context) {
     val dataStore: DataStore<Preferences> by lazy{ androidContext.dataStore }
     val filesDir: File by lazy{ androidContext.filesDir }
     val fileShare: LightFileShare by lazy { LightFileShare(androidContext) }
+
+    fun vibrate(millis: Long) {
+        val vibrator = androidContext.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        vibrator.vibrate(VibrationEffect.createOneShot(millis, VibrationEffect.DEFAULT_AMPLITUDE))
+    }
 }
 /**
  * Wrapper class to pass around an instance of LightActivity without exposing it to

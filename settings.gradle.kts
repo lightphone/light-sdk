@@ -47,3 +47,6 @@ include(":examples:weather")
 project(":examples:weather").projectDir = file("examples/weather")
 include(":examples:authenticator")
 project(":examples:authenticator").projectDir = file("examples/authenticator")
+
+include(":examples:cozy-sleep-trainer")
+project(":examples:cozy-sleep-trainer").projectDir = file("examples/cozy-sleep-trainer")

@@ -1,0 +1,7 @@
+[tool]
+id = "com.thelightphone.sleeptrainer"
+label = "Cozy Sleep Trainer"
+versionCode = 1
+versionName = "1.0"
+permissions = ["android.permission.VIBRATE"]
+serverPackage = "com.lightos"
