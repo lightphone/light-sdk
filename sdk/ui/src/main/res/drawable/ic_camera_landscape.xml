@@ -1,34 +1,30 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="80.0dp"
-    android:height="80.0dp"
-    android:viewportWidth="80.0"
-    android:viewportHeight="80.0">
-    <path
-        android:pathData="M 77.6,77.7 L 2.5,77.7 L 2.5,67.3 L 2.5,2.6 L 77.6,2.6 Z"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="4.0"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        />
-    <path
-        android:pathData="M 2.5,69.3 L 23.3,48.5 L 31.7,56.8 L 52.5,77.7"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="4.0"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        />
-    <path
-        android:pathData="M 77.6,61.0 L 52.5,36.0 L 30.5,58.0"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="4.0"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        />
-    <path
-        android:pathData="M 23.3,24.5 a 5.2,5.2 0 1,0 10.4,0 a 5.2,5.2 0 1,0 -10.4,0"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="4.0"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        />
+    android:width="80dp"
+    android:height="80dp"
+    android:viewportWidth="80"
+    android:viewportHeight="80">
+  <path
+      android:pathData="M77.6,77.7L2.5,77.7L2.5,2.6L77.6,2.6L77.6,77.7Z"
+      android:strokeWidth="4"
+      android:fillColor="#00000000"
+      android:strokeColor="#ffffff"
+      android:fillType="nonZero"/>
+  <path
+      android:pathData="M2.5,69.3L23.3,48.5L31.7,56.8L52.5,77.7"
+      android:strokeWidth="4"
+      android:fillColor="#00000000"
+      android:strokeColor="#ffffff"
+      android:fillType="nonZero"/>
+  <path
+      android:pathData="M77.6,61L52.5,36L30.5,58"
+      android:strokeWidth="4"
+      android:fillColor="#00000000"
+      android:strokeColor="#ffffff"
+      android:fillType="nonZero"/>
+  <path
+      android:pathData="M28.5,24.5m-5.2,0a5.2,5.2 0,1 1,10.4 0a5.2,5.2 0,1 1,-10.4 0"
+      android:strokeLineJoin="miter"
+      android:strokeWidth="4"
+      android:fillColor="#00000000"
+      android:strokeColor="#ffffff"/>
 </vector>

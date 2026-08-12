@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import kotlinx.datetime.LocalDate
 import com.thelightphone.weather.R
 import com.thelightphone.sdk.ui.designVerticalPxToSp
 import com.thelightphone.sdk.InitialScreen
@@ -97,17 +98,33 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
                         )
                     }
 
+                    is WeatherScreenMode.LocationSearchResults -> {
+                        LocationSearchResultsContent(
+                            results = mode.results,
+                            onSelect = viewModel::selectLocationResult,
+                            onBack = viewModel::cancelLocationSearchResults,
+                        )
+                    }
+
                     is WeatherScreenMode.Loading -> {
                         Column(modifier = Modifier.fillMaxSize()) {
                             LightTopBar(
                                 center = LightTopBarCenter.Text("Weather"),
                                 modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
                             )
-                            LightText(
-                                text = "Loading…",
-                                variant = LightTextVariant.Copy,
-                                modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                LightText(
+                                    text = mode.message,
+                                    variant = LightTextVariant.Copy,
+                                    align = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
+                                )
+                            }
                         }
                     }
 
@@ -176,6 +193,53 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
                         message = message,
                         onClose = viewModel::dismissError,
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocationSearchResultsContent(
+    results: List<GeocodingResult>,
+    onSelect: (GeocodingResult) -> Unit,
+    onBack: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        LightTopBar(
+            leftButton = LightBarButton.LightIcon(
+                icon = LightIcons.BACK,
+                onClick = onBack,
+                contentDescription = "Back",
+            ),
+            center = LightTopBarCenter.Text("Search Results"),
+            modifier = Modifier.padding(bottom = 0.25f.gridUnitsAsDp()),
+        )
+
+        LightScrollView(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(start = 1f.gridUnitsAsDp()),
+        ) {
+            results.forEach { result ->
+                val region = result.regionLabel()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .lightClickable(onClick = { onSelect(result) })
+                        .padding(bottom = 1f.gridUnitsAsDp()),
+                ) {
+                    LightText(
+                        text = result.name,
+                        variant = LightTextVariant.Copy,
+                    )
+                    if (region.isNotEmpty()) {
+                        LightText(
+                            text = region,
+                            variant = LightTextVariant.Detail,
+                        )
+                    }
                 }
             }
         }
@@ -428,7 +492,7 @@ private fun WeatherBoldLine(text: String) {
 
 @Composable
 private fun HourlyForecastContent(
-    date: String,
+    date: LocalDate,
     hours: List<HourlyForecast>,
     temperatureUnit: TemperatureUnit,
     onClose: () -> Unit,

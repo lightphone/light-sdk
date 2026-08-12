@@ -1,26 +1,27 @@
 package com.thelightphone.weather
 
+import android.view.KeyEvent
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.viewModelScope
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SimpleLightScreen
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.Json
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 sealed class WeatherScreenMode {
     data object LocationInput : WeatherScreenMode()
-    data object Loading : WeatherScreenMode()
+    data class LocationSearchResults(
+        val query: String,
+        val results: List<GeocodingResult>,
+    ) : WeatherScreenMode()
+
+    data class Loading(val message: String) : WeatherScreenMode()
     data class Settings(val locationName: String) : WeatherScreenMode()
     data object Attribution : WeatherScreenMode()
     data class Weekly(
@@ -42,7 +43,7 @@ sealed class WeatherScreenMode {
 }
 
 data class WeatherUiState(
-    val mode: WeatherScreenMode = WeatherScreenMode.Loading,
+    val mode: WeatherScreenMode = WeatherScreenMode.Loading(FETCHING_WEATHER_MESSAGE),
     val canCancelLocationInput: Boolean = false,
     val locationInputSession: Int = 0,
     val temperatureUnit: TemperatureUnit = TemperatureUnit.Celsius,
@@ -56,6 +57,11 @@ private enum class LocationInputSource {
 
 private const val NETWORK_ERROR_MESSAGE =
     "The Weather tool requires a network connection. Please insert a data sim or connect to wi-fi to view the latest conditions."
+
+private val MIN_LOADING_DISPLAY = 1.seconds
+
+internal const val LOADING_MESSAGE = "Loading…"
+internal const val FETCHING_WEATHER_MESSAGE = "fetching weather data..."
 
 class WeatherViewModel(
     private val dataStore: DataStore<Preferences>,
@@ -90,19 +96,15 @@ class WeatherViewModel(
         errorModal = null,
     )
 
-    private suspend fun updateState(transform: (WeatherUiState) -> WeatherUiState) {
-        withContext(Dispatchers.Main) {
-            _uiState.update(transform)
-        }
+    private fun updateState(transform: (WeatherUiState) -> WeatherUiState) {
+        _uiState.update(transform)
     }
 
-    private suspend fun setState(state: WeatherUiState) {
-        withContext(Dispatchers.Main) {
-            _uiState.value = state
-        }
+    private fun setState(state: WeatherUiState) {
+        _uiState.value = state
     }
 
-    private suspend fun showLocationInputError(message: String) {
+    private fun showLocationInputError(message: String) {
         updateState {
             it.openLocationInput(canCancel = it.canCancelLocationInput).copy(errorModal = message)
         }
@@ -145,6 +147,14 @@ class WeatherViewModel(
         }
     }
 
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        // volume clicks are going to foreground LightOS quickly, don't need to refresh when we're back
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            skipRefreshOnNextScreenShow = true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     private var skipRefreshOnNextScreenShow = true
 
     private fun resetToTodayView() {
@@ -154,6 +164,7 @@ class WeatherViewModel(
             is WeatherScreenMode.Weather -> {
                 _uiState.value = state.copy(mode = mode.copy(selectedDayIndex = 0))
             }
+
             is WeatherScreenMode.Hourly -> {
                 _uiState.value = state.copy(
                     mode = WeatherScreenMode.Weather(
@@ -163,9 +174,11 @@ class WeatherViewModel(
                     ),
                 )
             }
+
             is WeatherScreenMode.Weekly,
             is WeatherScreenMode.Settings,
-            is WeatherScreenMode.Attribution -> restoreWeatherScreen(selectedDayIndex = 0)
+            is WeatherScreenMode.Attribution,
+            is WeatherScreenMode.LocationSearchResults -> restoreWeatherScreen(dayIndexOverride = 0)
             else -> Unit
         }
     }
@@ -177,7 +190,6 @@ class WeatherViewModel(
         val locationName = prefs[WeatherPreferences.LOCATION_NAME]
         val lat = prefs[WeatherPreferences.LATITUDE]?.toDoubleOrNull()
         val lon = prefs[WeatherPreferences.LONGITUDE]?.toDoubleOrNull()
-        val forecastJson = prefs[WeatherPreferences.FORECAST_JSON]
 
         updateState { it.copy(temperatureUnit = unit) }
 
@@ -186,32 +198,9 @@ class WeatherViewModel(
             return
         }
 
-        val cachedForecast = forecastJson?.let {
-            runCatching { json.decodeFromString<StoredForecast>(it) }.getOrNull()
-        }
         savedLocationQuery = query
         cachedLocationName = locationName
-        if (cachedForecast != null && cachedForecast.weekly.isNotEmpty()) {
-            setState(
-                WeatherUiState(
-                    mode = WeatherScreenMode.Weather(
-                        locationName = locationName,
-                        forecast = cachedForecast,
-                    ),
-                    canCancelLocationInput = true,
-                    temperatureUnit = unit,
-                ),
-            )
-        } else {
-            updateState {
-                it.copy(mode = WeatherScreenMode.Loading, temperatureUnit = unit)
-            }
-        }
-
-        val needsRefresh = cachedForecast == null ||
-            cachedForecast.weekly.isEmpty() ||
-            cachedForecast.hourly.isEmpty()
-        refreshForecast(query, locationName, lat, lon, showLoadingScreen = needsRefresh)
+        refreshForecast(query, locationName, lat, lon)
     }
 
     private suspend fun refreshForecastOnScreenShow() {
@@ -225,7 +214,6 @@ class WeatherViewModel(
             locationName = locationName,
             latitude = lat,
             longitude = lon,
-            showLoadingScreen = false,
         )
     }
 
@@ -238,23 +226,19 @@ class WeatherViewModel(
 
         viewModelScope.launch(Dispatchers.IO + apiExceptionHandler) {
             runCatching {
-                updateState {
-                    it.copy(
-                        mode = WeatherScreenMode.Loading,
-                        errorModal = null,
-                    )
-                }
-
-                val geoResult = api.resolveLocation(query)
-                geoResult.fold(
-                    onSuccess = { geo ->
-                        refreshForecast(
-                            query = query,
-                            locationName = geo.displayName(),
-                            latitude = geo.latitude,
-                            longitude = geo.longitude,
-                            showLoadingScreen = true,
-                        )
+                val loadingStartedAt = beginLoading(LOADING_MESSAGE)
+                val searchResult = api.searchLocations(query)
+                awaitMinimumLoading(loadingStartedAt)
+                searchResult.fold(
+                    onSuccess = { results ->
+                        updateState {
+                            it.copy(
+                                mode = WeatherScreenMode.LocationSearchResults(
+                                    query = query,
+                                    results = results,
+                                ),
+                            )
+                        }
                     },
                     onFailure = { error ->
                         showApiFailure(error)
@@ -266,21 +250,41 @@ class WeatherViewModel(
         }
     }
 
+    fun selectLocationResult(result: GeocodingResult) {
+        val query = (_uiState.value.mode as? WeatherScreenMode.LocationSearchResults)?.query
+            ?: return
+
+        viewModelScope.launch(Dispatchers.IO + apiExceptionHandler) {
+            runCatching {
+                refreshForecast(
+                    query = query,
+                    locationName = result.displayName(),
+                    latitude = result.latitude,
+                    longitude = result.longitude,
+                )
+            }.onFailure {
+                showApiFailure()
+            }
+        }
+    }
+
+    fun cancelLocationSearchResults() {
+        _uiState.update { it.openLocationInput(canCancel = it.canCancelLocationInput) }
+    }
+
     private suspend fun refreshForecast(
         query: String,
         locationName: String,
         latitude: Double,
         longitude: Double,
-        showLoadingScreen: Boolean,
     ) {
-        if (showLoadingScreen) {
-            updateState { it.copy(mode = WeatherScreenMode.Loading) }
-        }
+        val loadingStartedAt = beginLoading(FETCHING_WEATHER_MESSAGE)
 
         val forecastResult = api.fetchForecast(latitude, longitude)
+        awaitMinimumLoading(loadingStartedAt)
         forecastResult.fold(
             onSuccess = { forecast ->
-                try {
+                runCatching {
                     dataStore.edit { prefs ->
                         prefs[WeatherPreferences.LOCATION_QUERY] = query
                         prefs[WeatherPreferences.LOCATION_NAME] = locationName
@@ -288,7 +292,6 @@ class WeatherViewModel(
                         prefs[WeatherPreferences.LONGITUDE] = longitude.toString()
                         prefs[WeatherPreferences.FORECAST_JSON] = json.encodeToString(forecast)
                     }
-                } catch (_: Exception) {
                 }
                 savedLocationQuery = query
                 cachedLocationName = locationName
@@ -308,6 +311,21 @@ class WeatherViewModel(
                 showApiFailure(error)
             },
         )
+    }
+
+    private fun beginLoading(message: String): Instant {
+        updateState {
+            it.copy(
+                mode = WeatherScreenMode.Loading(message),
+                errorModal = null,
+            )
+        }
+        return Clock.System.now()
+    }
+
+    private suspend fun awaitMinimumLoading(startedAt: Instant) {
+        val remaining = MIN_LOADING_DISPLAY - (Clock.System.now() - startedAt)
+        if (remaining.isPositive()) delay(remaining)
     }
 
     fun showPreviousDay() {
@@ -380,7 +398,7 @@ class WeatherViewModel(
         val weekly = state.mode as? WeatherScreenMode.Weekly ?: return
         if (index < 0 || index >= weekly.days.size) return
         lastSelectedDayIndex = index
-        restoreWeatherScreen(selectedDayIndex = index)
+        restoreWeatherScreen(dayIndexOverride = index)
     }
 
     fun openHourly() {
@@ -408,7 +426,7 @@ class WeatherViewModel(
         lastSelectedDayIndex = 0
         when (_uiState.value.mode) {
             is WeatherScreenMode.Hourly -> closeHourly()
-            else -> restoreWeatherScreen(selectedDayIndex = 0)
+            else -> restoreWeatherScreen(dayIndexOverride = 0)
         }
     }
 
@@ -442,6 +460,7 @@ class WeatherViewModel(
                 locationInputSource = LocationInputSource.Initial
                 _uiState.update { it.copy(mode = settingsMode()) }
             }
+
             LocationInputSource.Initial -> {
                 viewModelScope.launch(Dispatchers.IO) {
                     restoreSavedWeather()
@@ -450,28 +469,28 @@ class WeatherViewModel(
         }
     }
 
-    private fun restoreWeatherScreen(selectedDayIndex: Int? = null) {
+    private fun restoreWeatherScreen(dayIndexOverride: Int? = null) {
         val state = _uiState.value
         val weather = state.mode as? WeatherScreenMode.Weather
         if (weather != null) return
-        val weekly = state.mode as? WeatherScreenMode.Weekly
-        val hourly = state.mode as? WeatherScreenMode.Hourly
+        val selectedDayIndex = dayIndexOverride ?: when(val snapshot = state.mode) {
+            is WeatherScreenMode.Weekly -> snapshot.selectedDayIndex
+            else -> lastSelectedDayIndex
+        }
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val prefs = dataStore.data.first()
                 val locationName = prefs[WeatherPreferences.LOCATION_NAME] ?: return@runCatching
                 val forecastJson = prefs[WeatherPreferences.FORECAST_JSON] ?: return@runCatching
                 val forecast = runCatching { json.decodeFromString<StoredForecast>(forecastJson) }.getOrNull()
-                    ?: return@runCatching
+                        ?: return@runCatching
                 updateState {
                     it.copy(
                         mode = WeatherScreenMode.Weather(
                             locationName = locationName,
                             forecast = forecast,
                             selectedDayIndex = selectedDayIndex
-                                ?: weekly?.selectedDayIndex
-                                ?: lastSelectedDayIndex,
-                        ),
+                        )
                     )
                 }
             }

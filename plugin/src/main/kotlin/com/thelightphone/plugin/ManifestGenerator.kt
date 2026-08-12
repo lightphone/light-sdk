@@ -15,55 +15,99 @@ object ManifestGenerator {
     fun render(metadata: LightToolMetadata): String = buildString {
         appendLine("""<?xml version="1.0" encoding="utf-8"?>""")
         appendLine("""<manifest xmlns:android="http://schemas.android.com/apk/res/android">""")
-        for (perm in metadata.permissions) {
+        // A capability declares what the tool does and the permissions it needs
+        // follow from that, so they are unioned in here rather than written by the tool.
+        val permissions = (
+            metadata.permissions + metadata.capabilities.flatMap {
+                LightToolPolicy.CAPABILITY_IMPLIED_PERMISSIONS[it].orEmpty()
+            }
+        ).distinct()
+        for (perm in permissions) {
             appendLine("""    <uses-permission android:name="${xmlAttr(perm)}" />""")
         }
         // Emit Play-Store-inferred hardware features as required="false" so
         // PermissionImpliesUnsupportedChromeOsHardware lint stays quiet and
         // we don't accidentally narrow the install pool. Deduped because
         // distinct permissions can map to overlapping feature sets.
-        val features = metadata.permissions
+        val features = permissions
             .flatMap { LightToolPolicy.PERMISSION_IMPLIED_FEATURES[it].orEmpty() }
             .toSet()
         for (feature in features) {
             appendLine("""    <uses-feature android:name="${xmlAttr(feature)}" android:required="false" />""")
         }
-        appendLine("""    <application""")
-        appendLine("""        android:name="com.thelightphone.sdk.LightSdkApplication"""")
-        appendLine("""        android:label="${xmlAttr(metadata.label)}"""")
-        appendLine("""        android:supportsRtl="true"""")
-        appendLine("""        android:theme="@style/LightSdk.Theme.Splash">""")
-        appendLine("""        <meta-data""")
-        appendLine("""            android:name="com.thelightphone.sdk.LIGHT_SERVER_PACKAGE"""")
-        appendLine("""            android:value="${xmlAttr(metadata.serverPackage)}" />""")
-        appendLine("""        <activity""")
-        appendLine("""            android:name="com.thelightphone.sdk.LightActivity"""")
-        appendLine("""            android:exported="true">""")
-        appendLine("""            <intent-filter>""")
-        appendLine("""                <action android:name="android.intent.action.MAIN" />""")
-        appendLine("""                <category android:name="android.intent.category.LAUNCHER" />""")
-        appendLine("""            </intent-filter>""")
-        appendLine("""        </activity>""")
-        appendLine("""        <receiver""")
-        appendLine("""            android:name="com.thelightphone.sdk.LightSdkReceiver"""")
-        appendLine("""            android:enabled="true"""")
-        appendLine("""            android:exported="true"""")
-        appendLine("""            android:permission="normal">""")
-        appendLine("""            <intent-filter>""")
-        appendLine("""                <action android:name="com.thelightphone.sdk.ACTION_SDK_MARKER" />""")
-        appendLine("""            </intent-filter>""")
-        appendLine("""            <meta-data""")
-        appendLine("""                android:name="com.thelightphone.sdk.SDK_VERSION"""")
-        appendLine("""                android:value="${'$'}{sdkVersion}" />""")
-        appendLine("""        </receiver>""")
-        appendLine("""    </application>""")
-        appendLine("""    <queries>""")
-        appendLine("""        <intent>""")
-        appendLine("""            <action android:name="com.thelightphone.sdk.ACTION_SDK_MARKER" />""")
-        appendLine("""        </intent>""")
-        appendLine("""    </queries>""")
-        appendLine("""</manifest>""")
+        val screenOrientation = metadata.orientation?.let {
+            "\n            |            android:screenOrientation=\"${xmlAttr(it)}\""
+        }.orEmpty()
+        val capabilityMarkers = marginBlock(
+            metadata.capabilities.flatMap { capability ->
+                listOf(
+                    """        <meta-data""",
+                    """            android:name="${xmlAttr(LightToolPolicy.capabilityMarker(capability))}"""",
+                    """            android:value="true" />""",
+                )
+            }
+        )
+        // Only tools that opted in declare the audio service. Shipping it in the
+        // SDK library manifest would put a mediaPlayback claim in every tool.
+        val detachedAudioService = marginBlock(
+            if (LightToolPolicy.DETACHED_AUDIO !in metadata.capabilities) emptyList() else listOf(
+                """        <service""",
+                """            android:name="com.thelightphone.sdk.audio.LightAudioService"""",
+                """            android:foregroundServiceType="mediaPlayback"""",
+                """            android:exported="false">""",
+                """            <intent-filter>""",
+                """                <action android:name="androidx.media3.session.MediaSessionService" />""",
+                """            </intent-filter>""",
+                """        </service>""",
+            )
+        )
+        appendLine(
+            """
+            |    <application
+            |        android:name="com.thelightphone.sdk.LightSdkApplication"
+            |        android:label="${xmlAttr(metadata.label)}"
+            |        android:supportsRtl="true"
+            |        android:theme="@style/LightSdk.Theme.Splash">
+            |        <meta-data
+            |            android:name="com.thelightphone.sdk.LIGHT_SERVER_PACKAGE"
+            |            android:value="${xmlAttr(metadata.serverPackage)}" />$capabilityMarkers
+            |        <activity
+            |            android:name="com.thelightphone.sdk.LightActivity"
+            |            android:launchMode="singleTask"$screenOrientation
+            |            android:exported="true">
+            |            <intent-filter>
+            |                <action android:name="android.intent.action.MAIN" />
+            |                <category android:name="android.intent.category.LAUNCHER" />
+            |            </intent-filter>
+            |        </activity>
+            |        <receiver
+            |            android:name="com.thelightphone.sdk.LightSdkReceiver"
+            |            android:enabled="true"
+            |            android:exported="true"
+            |            android:permission="normal">
+            |            <intent-filter>
+            |                <action android:name="com.thelightphone.sdk.ACTION_SDK_MARKER" />
+            |            </intent-filter>
+            |            <meta-data
+            |                android:name="com.thelightphone.sdk.SDK_VERSION"
+            |                android:value="${'$'}{sdkVersion}" />
+            |        </receiver>$detachedAudioService
+            |    </application>
+            |    <queries>
+            |        <intent>
+            |            <action android:name="com.thelightphone.sdk.ACTION_SDK_MARKER" />
+            |        </intent>
+            |    </queries>
+            |</manifest>""".trimMargin()
+        )
     }
+
+    /**
+     * Splices [lines] into the trimMargin template below. Interpolation happens
+     * before trimMargin runs, so every inserted line carries its own margin.
+     */
+    private fun marginBlock(lines: List<String>): String =
+        lines.joinToString("") { "\n            |$it" }
 
     private fun xmlAttr(value: String): String = buildString(value.length) {
         for (ch in value) {

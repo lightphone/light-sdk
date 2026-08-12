@@ -68,7 +68,11 @@ class UiDemoTextInputScreen(sealedActivity: SealedLightActivity) :
                     value = nameValue,
                     placeholder = "Your name",
                     onClick = {
-                        val editorRequest = EditorRequest(title = "Name", initialValue = nameValue)
+                        val editorRequest = EditorRequest(
+                            title = "Name",
+                            initialValue = nameValue,
+                            initialCaps = nameValue.isBlank(),
+                        )
                         navigateTo(
                             screenFactory = { UiDemoTextInputEditorScreen(it, editorRequest) },
                             resultCallback = { viewModel.setName(it) }

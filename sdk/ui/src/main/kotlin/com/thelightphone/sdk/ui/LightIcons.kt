@@ -2,540 +2,433 @@ package com.thelightphone.sdk.ui
 
 sealed class LightIconConfiguration(
     val name: String,
-    val darkModeResource: Int,
-    val lightModeResource: Int,
+    val drawableResource: Int,
 )
 
 object LightIcons {
     object ACCEPT : LightIconConfiguration(
         name = "confirm",
-        darkModeResource = R.drawable.ic_accept_white,
-        lightModeResource = R.drawable.ic_accept_black
+        drawableResource = R.drawable.ic_accept_white,
     )
     object ADD : LightIconConfiguration(
         name = "Add",
-        darkModeResource = R.drawable.ic_add_white,
-        lightModeResource = R.drawable.ic_add_black
+        drawableResource = R.drawable.ic_add_white,
     )
     object AIRPLANE : LightIconConfiguration(
         name = "airplane",
-        darkModeResource = R.drawable.ic_airplane_white,
-        lightModeResource = R.drawable.ic_airplane_black
+        drawableResource = R.drawable.ic_airplane_white,
     )
     object ALARM : LightIconConfiguration(
         name = "alarm",
-        darkModeResource = R.drawable.ic_alarm_white,
-        lightModeResource = R.drawable.ic_alarm_black
+        drawableResource = R.drawable.ic_alarm_white,
     )
     object ARROW_DOWN : LightIconConfiguration(
         name = "arrow pointing down",
-        darkModeResource = R.drawable.ic_arrow_down_white,
-        lightModeResource = R.drawable.ic_arrow_down_black
+        drawableResource = R.drawable.ic_arrow_down_white,
     )
     object AUDIO_MESSAGE : LightIconConfiguration(
         name = "audio message",
-        darkModeResource = R.drawable.ic_audio_message_white,
-        lightModeResource = R.drawable.ic_audio_message_black
+        drawableResource = R.drawable.ic_audio_message_white,
     )
     object BACK : LightIconConfiguration(
         name = "back",
-        darkModeResource = R.drawable.ic_back_white,
-        lightModeResource = R.drawable.ic_back_black
+        drawableResource = R.drawable.ic_back_white,
     )
     object BATTERY_ERROR : LightIconConfiguration(
         name = "battery empty",
-        darkModeResource = R.drawable.ic_battery_error_white,
-        lightModeResource = R.drawable.ic_battery_error_black
+        drawableResource = R.drawable.ic_battery_error_white,
     )
     object BATTERY_EMPTY : LightIconConfiguration(
         name = "battery empty",
-        darkModeResource = R.drawable.ic_battery_empty_white,
-        lightModeResource = R.drawable.ic_battery_empty_black
+        drawableResource = R.drawable.ic_battery_empty_white,
     )
     object BATTERY_ONE_QUARTER : LightIconConfiguration(
         name = "battery one quarter full",
-        darkModeResource = R.drawable.ic_battery_one_quarter_white,
-        lightModeResource = R.drawable.ic_battery_one_quarter_black
+        drawableResource = R.drawable.ic_battery_one_quarter_white,
     )
     object BATTERY_HALF : LightIconConfiguration(
         name = "battery half full",
-        darkModeResource = R.drawable.ic_battery_half_white,
-        lightModeResource = R.drawable.ic_battery_half_black
+        drawableResource = R.drawable.ic_battery_half_white,
     )
     object BATTERY_THREE_QUARTERS : LightIconConfiguration(
         name = "battery three quarters full",
-        darkModeResource = R.drawable.ic_battery_three_quarters_white,
-        lightModeResource = R.drawable.ic_battery_three_quarters_black
+        drawableResource = R.drawable.ic_battery_three_quarters_white,
     )
     object BATTERY_FULL : LightIconConfiguration(
         name = "full battery",
-        darkModeResource = R.drawable.ic_battery_full_white,
-        lightModeResource = R.drawable.ic_battery_full_black
+        drawableResource = R.drawable.ic_battery_full_white,
     )
     object BATTERY_ALMOST_FULL : LightIconConfiguration(
         name = "almost full battery",
-        darkModeResource = R.drawable.ic_battery_almost_full_white,
-        lightModeResource = R.drawable.ic_battery_almost_full_black
+        drawableResource = R.drawable.ic_battery_almost_full_white,
     )
     object BATTERY_CHARGING : LightIconConfiguration(
         name = "battery charging",
-        darkModeResource = R.drawable.ic_battery_charging_white,
-        lightModeResource = R.drawable.ic_battery_charging_black
+        drawableResource = R.drawable.ic_battery_charging_white,
     )
     object BLUETOOTH : LightIconConfiguration(
         name = "bluetooth",
-        darkModeResource = R.drawable.ic_bluetooth_white,
-        lightModeResource = R.drawable.ic_bluetooth_black
+        drawableResource = R.drawable.ic_bluetooth_white,
     )
     object CALL : LightIconConfiguration(
         name = "call",
-        darkModeResource = R.drawable.ic_call_white,
-        lightModeResource = R.drawable.ic_call_black
+        drawableResource = R.drawable.ic_call_white,
     )
     object CALL_MISSED : LightIconConfiguration(
         name = "mute",
-        darkModeResource = R.drawable.ic_missed_call_white,
-        lightModeResource = R.drawable.ic_missed_call_black
+        drawableResource = R.drawable.ic_missed_call_white,
     )
     object CAMERA_BRIGHTNESS : LightIconConfiguration(
         name = "camera brightness",
-        darkModeResource = R.drawable.ic_camera_brightness,
-        lightModeResource = R.drawable.ic_camera_brightness
+        drawableResource = R.drawable.ic_camera_brightness,
     )
     object CAMERA : LightIconConfiguration(
         name = "camera",
-        darkModeResource = R.drawable.ic_camera,
-        lightModeResource = R.drawable.ic_camera
+        drawableResource = R.drawable.ic_camera,
     )
     object CAMERA_FLASH_ON : LightIconConfiguration(
         name = "camera flash on",
-        darkModeResource = R.drawable.ic_camera_flash_on,
-        lightModeResource = R.drawable.ic_camera_flash_on
+        drawableResource = R.drawable.ic_camera_flash_on,
     )
     object CAMERA_FLASH_OFF : LightIconConfiguration(
         name = "camera flash off",
-        darkModeResource = R.drawable.ic_camera_flash_off,
-        lightModeResource = R.drawable.ic_camera_flash_off
+        drawableResource = R.drawable.ic_camera_flash_off,
     )
     object CAMERA_FLASH_AUTO : LightIconConfiguration(
         name = "camera flash auto",
-        darkModeResource = R.drawable.ic_camera_flash_auto,
-        lightModeResource = R.drawable.ic_camera_flash_auto
+        drawableResource = R.drawable.ic_camera_flash_auto,
     )
     object CAMERA_LANDSCAPE : LightIconConfiguration(
         name = "camera landscape",
-        darkModeResource = R.drawable.ic_camera_landscape,
-        lightModeResource = R.drawable.ic_camera_landscape
+        drawableResource = R.drawable.ic_camera_landscape,
     )
     object CAMERA_SETTINGS : LightIconConfiguration(
         name = "camera settings",
-        darkModeResource = R.drawable.ic_camera_settings,
-        lightModeResource = R.drawable.ic_camera_settings
+        drawableResource = R.drawable.ic_camera_settings,
     )
     object CAMERA_RECORDING : LightIconConfiguration(
         name = "camera recording",
-        darkModeResource = R.drawable.ic_camera_recording,
-        lightModeResource = R.drawable.ic_camera_recording
+        drawableResource = R.drawable.ic_camera_recording,
     )
     object CAMERA_FOCUS_LOCKING : LightIconConfiguration(
         name = "camera focus locking",
-        darkModeResource = R.drawable.ic_camera_focus_locking,
-        lightModeResource = R.drawable.ic_camera_focus_locking
+        drawableResource = R.drawable.ic_camera_focus_locking,
     )
     object CAMERA_FOCUS_LOCKED : LightIconConfiguration(
         name = "camera focus locked",
-        darkModeResource = R.drawable.ic_camera_focus_locked,
-        lightModeResource = R.drawable.ic_camera_focus_locked
+        drawableResource = R.drawable.ic_camera_focus_locked,
     )
     object CE_MARK : LightIconConfiguration(
         name = "ce mark",
-        darkModeResource = R.drawable.ic_ce_mark_white,
-        lightModeResource = R.drawable.ic_ce_mark_black
+        drawableResource = R.drawable.ic_ce_mark_white,
     )
     object CIRCLE : LightIconConfiguration(
         name = "circle",
-        darkModeResource = R.drawable.ic_circle_white,
-        lightModeResource = R.drawable.ic_circle_black
+        drawableResource = R.drawable.ic_circle_white,
     )
     object CLOSE : LightIconConfiguration(
         name = "close",
-        darkModeResource = R.drawable.ic_close_white,
-        lightModeResource = R.drawable.ic_close_black
+        drawableResource = R.drawable.ic_close_white,
     )
     object COMPOSE_MESSAGE : LightIconConfiguration(
         name = "compose message",
-        darkModeResource = R.drawable.ic_compose_white,
-        lightModeResource = R.drawable.ic_compose_black
+        drawableResource = R.drawable.ic_compose_white,
     )
     object PENCIL : LightIconConfiguration(
         name = "pencil",
-        darkModeResource = R.drawable.ic_pencil_white,
-        lightModeResource = R.drawable.ic_pencil_black
+        drawableResource = R.drawable.ic_pencil_white,
     )
     object DELETE : LightIconConfiguration(
         name = "delete",
-        darkModeResource = R.drawable.ic_delete_white,
-        lightModeResource = R.drawable.ic_delete_black
+        drawableResource = R.drawable.ic_delete_white,
     )
     object DENY : LightIconConfiguration(
         name = "deny",
-        darkModeResource = R.drawable.ic_deny_white,
-        lightModeResource = R.drawable.ic_deny_black
+        drawableResource = R.drawable.ic_deny_white,
     )
     object DIALPAD : LightIconConfiguration(
         name = "dialpad",
-        darkModeResource = R.drawable.ic_dialpad_white,
-        lightModeResource = R.drawable.ic_dialpad_black
+        drawableResource = R.drawable.ic_dialpad_white,
     )
     object DIRECTIONS_ARRIVAL : LightIconConfiguration(
         name = "arrival",
-        darkModeResource = R.drawable.ic_directions_arrival_white,
-        lightModeResource = R.drawable.ic_directions_arrival_black
+        drawableResource = R.drawable.ic_directions_arrival_white,
     )
     object DIRECTIONS_LEFT : LightIconConfiguration(
         name = "left turn",
-        darkModeResource = R.drawable.ic_directions_left_white,
-        lightModeResource = R.drawable.ic_directions_left_black
+        drawableResource = R.drawable.ic_directions_left_white,
     )
     object DIRECTIONS_RIGHT : LightIconConfiguration(
         name = "right turn",
-        darkModeResource = R.drawable.ic_directions_right_white,
-        lightModeResource = R.drawable.ic_directions_right_black
+        drawableResource = R.drawable.ic_directions_right_white,
     )
     object DIRECTIONS_SLIGHT_LEFT : LightIconConfiguration(
         name = "slight left turn",
-        darkModeResource = R.drawable.ic_directions_slight_left_white,
-        lightModeResource = R.drawable.ic_directions_slight_left_black
+        drawableResource = R.drawable.ic_directions_slight_left_white,
     )
     object DIRECTIONS_SLIGHT_RIGHT : LightIconConfiguration(
         name = "slight right turn",
-        darkModeResource = R.drawable.ic_directions_slight_right_white,
-        lightModeResource = R.drawable.ic_directions_slight_right_black
+        drawableResource = R.drawable.ic_directions_slight_right_white,
     )
     object DIRECTIONS_MIDDLE_FORK : LightIconConfiguration(
         name = "middle fork",
-        darkModeResource = R.drawable.ic_directions_middle_fork_white,
-        lightModeResource = R.drawable.ic_directions_middle_fork_black
+        drawableResource = R.drawable.ic_directions_middle_fork_white,
     )
     object DIRECTIONS_STRAIGHT : LightIconConfiguration(
         name = "continue straight",
-        darkModeResource = R.drawable.ic_directions_straight_white,
-        lightModeResource = R.drawable.ic_directions_straight_black
+        drawableResource = R.drawable.ic_directions_straight_white,
     )
     object DIRECTIONS_BUS : LightIconConfiguration(
         name = "bus",
-        darkModeResource = R.drawable.ic_directions_bus_white,
-        lightModeResource = R.drawable.ic_directions_bus_black
+        drawableResource = R.drawable.ic_directions_bus_white,
     )
     object DIRECTIONS_SUBWAY : LightIconConfiguration(
         name = "subway",
-        darkModeResource = R.drawable.ic_directions_subway_white,
-        lightModeResource = R.drawable.ic_directions_subway_black
+        drawableResource = R.drawable.ic_directions_subway_white,
     )
     object DIRECTIONS_TRAIN : LightIconConfiguration(
         name = "train",
-        darkModeResource = R.drawable.ic_directions_train_white,
-        lightModeResource = R.drawable.ic_directions_train_black
+        drawableResource = R.drawable.ic_directions_train_white,
     )
     object DIRECTIONS_PEDESTRIAN : LightIconConfiguration(
         name = "pedestrian",
-        darkModeResource = R.drawable.ic_directions_pedestrian_white,
-        lightModeResource = R.drawable.ic_directions_pedestrian_black
+        drawableResource = R.drawable.ic_directions_pedestrian_white,
     )
     object DIRECTIONS_ROUNDABOUT : LightIconConfiguration(
         name = "roundabout",
-        darkModeResource = R.drawable.ic_directions_round_about_white,
-        lightModeResource = R.drawable.ic_directions_round_about_black
+        drawableResource = R.drawable.ic_directions_round_about_white,
     )
     object DIRECTIONS_U_TURN_RIGHT : LightIconConfiguration(
         name = "u turn right",
-        darkModeResource = R.drawable.ic_directions_uturn_right_white,
-        lightModeResource = R.drawable.ic_directions_uturn_right_black
+        drawableResource = R.drawable.ic_directions_uturn_right_white,
     )
     object DIRECTIONS_U_TURN_LEFT : LightIconConfiguration(
         name = "u turn left",
-        darkModeResource = R.drawable.ic_directions_uturn_left_white,
-        lightModeResource = R.drawable.ic_directions_uturn_left_black
+        drawableResource = R.drawable.ic_directions_uturn_left_white,
     )
     object DIRECTIONS_FERRY : LightIconConfiguration(
         name = "ferry",
-        darkModeResource = R.drawable.ic_directions_ferry_white,
-        lightModeResource = R.drawable.ic_directions_ferry_black
+        drawableResource = R.drawable.ic_directions_ferry_white,
     )
     object DOWN : LightIconConfiguration(
         name = "down",
-        darkModeResource = R.drawable.ic_down_white,
-        lightModeResource = R.drawable.ic_down_black
+        drawableResource = R.drawable.ic_down_white,
     )
     object EMERGENCY : LightIconConfiguration(
         name = "emergency",
-        darkModeResource = R.drawable.ic_emergency_white,
-        lightModeResource = R.drawable.ic_emergency_black
+        drawableResource = R.drawable.ic_emergency_white,
     )
     object FCC_MARK : LightIconConfiguration(
         name = "fcc mark",
-        darkModeResource = R.drawable.ic_fcc_mark_white,
-        lightModeResource = R.drawable.ic_fcc_mark_black
+        drawableResource = R.drawable.ic_fcc_mark_white,
     )
     object LIGHT_LOGO : LightIconConfiguration(
         name = "light logo",
-        darkModeResource = R.drawable.ic_light_logo_white,
-        lightModeResource = R.drawable.ic_light_logo_black
+        drawableResource = R.drawable.ic_light_logo_white,
     )
     object FAST_FORWARD : LightIconConfiguration(
         name = "fast-forward",
-        darkModeResource = R.drawable.ic_fast_forward_white,
-        lightModeResource = R.drawable.ic_fast_forward_black
+        drawableResource = R.drawable.ic_fast_forward_white,
     )
     object LIST : LightIconConfiguration(
         name = "list",
-        darkModeResource = R.drawable.ic_list_white,
-        lightModeResource = R.drawable.ic_list_black
+        drawableResource = R.drawable.ic_list_white,
     )
     object LOOP : LightIconConfiguration(
         name = "loop",
-        darkModeResource = R.drawable.ic_loop_white,
-        lightModeResource = R.drawable.ic_loop_black
+        drawableResource = R.drawable.ic_loop_white,
     )
     object MEDIA : LightIconConfiguration(
         name = "media",
-        darkModeResource = R.drawable.ic_media_white,
-        lightModeResource = R.drawable.ic_media_black
+        drawableResource = R.drawable.ic_media_white,
     )
     object MICROPHONE : LightIconConfiguration(
         name = "microphone",
-        darkModeResource = R.drawable.ic_microphone_white,
-        lightModeResource = R.drawable.ic_microphone_black
+        drawableResource = R.drawable.ic_microphone_white,
     )
     object MUTE : LightIconConfiguration(
         name = "mute",
-        darkModeResource = R.drawable.ic_mute_white,
-        lightModeResource = R.drawable.ic_mute_black
+        drawableResource = R.drawable.ic_mute_white,
     )
     object PAUSE : LightIconConfiguration(
         name = "pause",
-        darkModeResource = R.drawable.ic_pause_white,
-        lightModeResource = R.drawable.ic_pause_black
+        drawableResource = R.drawable.ic_pause_white,
     )
     object PLAY : LightIconConfiguration(
         name = "play",
-        darkModeResource = R.drawable.ic_play_white,
-        lightModeResource = R.drawable.ic_play_black
+        drawableResource = R.drawable.ic_play_white,
     )
     object REWIND : LightIconConfiguration(
         name = "rewind",
-        darkModeResource = R.drawable.ic_rewind_white,
-        lightModeResource = R.drawable.ic_rewind_black
+        drawableResource = R.drawable.ic_rewind_white,
     )
     object SAVE_TO_ALBUM : LightIconConfiguration(
         name = "save to album",
-        darkModeResource = R.drawable.ic_save_to_album,
-        lightModeResource = R.drawable.ic_save_to_album
+        drawableResource = R.drawable.ic_save_to_album,
     )
     object SEARCH : LightIconConfiguration(
         name = "search",
-        darkModeResource = R.drawable.ic_search_white,
-        lightModeResource = R.drawable.ic_search_black
+        drawableResource = R.drawable.ic_search_white,
     )
     object SELECT_OFF : LightIconConfiguration(
         name = "select off",
-        darkModeResource = R.drawable.ic_select_off_white,
-        lightModeResource = R.drawable.ic_select_off_black
+        drawableResource = R.drawable.ic_select_off_white,
     )
     object SELECT_ON : LightIconConfiguration(
         name = "select on",
-        darkModeResource = R.drawable.ic_select_on_white,
-        lightModeResource = R.drawable.ic_select_on_black
+        drawableResource = R.drawable.ic_select_on_white,
     )
     object SEND : LightIconConfiguration(
         name = "send",
-        darkModeResource = R.drawable.ic_send_white,
-        lightModeResource = R.drawable.ic_send_black
+        drawableResource = R.drawable.ic_send_white,
     )
     object SETTINGS : LightIconConfiguration(
         name = "settings",
-        darkModeResource = R.drawable.ic_settings_white,
-        lightModeResource = R.drawable.ic_settings_black
+        drawableResource = R.drawable.ic_settings_white,
     )
     object SHUFFLE : LightIconConfiguration(
         name = "shuffle",
-        darkModeResource = R.drawable.ic_shuffle_white,
-        lightModeResource = R.drawable.ic_shuffle_black
+        drawableResource = R.drawable.ic_shuffle_white,
     )
     object SIGNAL_1 : LightIconConfiguration(
         name = "signal 1 bar",
-        darkModeResource = R.drawable.ic_signal1_bar_white,
-        lightModeResource = R.drawable.ic_signal1_bar_black
+        drawableResource = R.drawable.ic_signal1_bar_white,
     )
     object SIGNAL_2 : LightIconConfiguration(
         name = "signal 2 bars",
-        darkModeResource = R.drawable.ic_signal2_bars_white,
-        lightModeResource = R.drawable.ic_signal2_bars_black
+        drawableResource = R.drawable.ic_signal2_bars_white,
     )
     object SIGNAL_3 : LightIconConfiguration(
         name = "signal 3 bars",
-        darkModeResource = R.drawable.ic_signal3_bars_white,
-        lightModeResource = R.drawable.ic_signal3_bars_black
+        drawableResource = R.drawable.ic_signal3_bars_white,
     )
     object SIGNAL_4 : LightIconConfiguration(
         name = "signal 4 bars",
-        darkModeResource = R.drawable.ic_signal4_bars_white,
-        lightModeResource = R.drawable.ic_signal4_bars_black
+        drawableResource = R.drawable.ic_signal4_bars_white,
     )
     object SIGNAL_NONE : LightIconConfiguration(
         name = "no signal",
-        darkModeResource = R.drawable.ic_signal_none_white,
-        lightModeResource = R.drawable.ic_signal_none_black
+        drawableResource = R.drawable.ic_signal_none_white,
     )
     object SPEAKER : LightIconConfiguration(
         name = "speaker",
-        darkModeResource = R.drawable.ic_speaker_white,
-        lightModeResource = R.drawable.ic_speaker_black
+        drawableResource = R.drawable.ic_speaker_on,
     )
     object STAR : LightIconConfiguration(
         name = "star",
-        darkModeResource = R.drawable.ic_star_white,
-        lightModeResource = R.drawable.ic_star_black
+        drawableResource = R.drawable.ic_star_white,
     )
     object STAR_OUTLINE : LightIconConfiguration(
         name = "star outline",
-        darkModeResource = R.drawable.ic_star_outline_white,
-        lightModeResource = R.drawable.ic_star_outline_black
+        drawableResource = R.drawable.ic_star_outline_white,
     )
     object TETHERING : LightIconConfiguration(
         name = "tethering enabled",
-        darkModeResource = R.drawable.ic_tethering_white,
-        lightModeResource = R.drawable.ic_tethering_black
+        drawableResource = R.drawable.ic_tethering_white,
     )
-    object TOGGLE_OFF : LightIconConfiguration(
-        name = "toggle off",
-        darkModeResource = R.drawable.ic_toggle_off_white,
-        lightModeResource = R.drawable.ic_toggle_off_black
+    object TOGGLE_STATE_OFF : LightIconConfiguration(
+        name = "toggle state off",
+        drawableResource = R.drawable.ic_toggle_state_off_white,
     )
-    object TOGGLE_ON : LightIconConfiguration(
-        name = "toggle on",
-        darkModeResource = R.drawable.ic_toggle_on_white,
-        lightModeResource = R.drawable.ic_toggle_on_black
+    object TOGGLE_STATE_ON : LightIconConfiguration(
+        name = "toggle state on",
+        drawableResource = R.drawable.ic_toggle_state_on_white,
     )
     object UP : LightIconConfiguration(
         name = "up",
-        darkModeResource = R.drawable.ic_up_white,
-        lightModeResource = R.drawable.ic_up_black
+        drawableResource = R.drawable.ic_up_white,
     )
     object VOICE_MAIL : LightIconConfiguration(
         name = "voicemail",
-        darkModeResource = R.drawable.ic_voice_mail_white,
-        lightModeResource = R.drawable.ic_voice_mail_black
+        drawableResource = R.drawable.ic_voice_mail_white,
     )
     object VOICE_MEMO : LightIconConfiguration(
         name = "voicememo",
-        darkModeResource = R.drawable.ic_voice_memo_white,
-        lightModeResource = R.drawable.ic_voice_memo_black
+        drawableResource = R.drawable.ic_voice_memo_white,
     )
     object WEEE_MARK : LightIconConfiguration(
         name = "weee mark",
-        darkModeResource = R.drawable.ic_weee_mark_white,
-        lightModeResource = R.drawable.ic_weee_mark_black
+        drawableResource = R.drawable.ic_weee_mark_white,
     )
     object WIFI : LightIconConfiguration(
         name = "wifi",
-        darkModeResource = R.drawable.ic_wifi_white,
-        lightModeResource = R.drawable.ic_wifi_black
+        drawableResource = R.drawable.ic_wifi_white,
     )
     object WIFI_NO_INTERNET : LightIconConfiguration(
         name = "wifi no internet",
-        darkModeResource = R.drawable.ic_wifi_no_internet_white,
-        lightModeResource = R.drawable.ic_wifi_no_internet_black
+        drawableResource = R.drawable.ic_wifi_no_internet_white,
     )
     object LARGE_LIST : LightIconConfiguration(
         name = "large list",
-        darkModeResource = R.drawable.ic_large_list_white,
-        lightModeResource = R.drawable.ic_large_list_black
+        drawableResource = R.drawable.ic_large_list_white,
     )
     object DOWNLOADED_ARROW : LightIconConfiguration(
         name = "downloaded arrow",
-        darkModeResource = R.drawable.ic_downloaded_arrow_white,
-        lightModeResource = R.drawable.ic_downloaded_arrow_black
+        drawableResource = R.drawable.ic_downloaded_arrow_white,
     )
     object DOWNLOAD_ARROW : LightIconConfiguration(
         name = "download arrow",
-        darkModeResource = R.drawable.ic_download_arrow_white,
-        lightModeResource = R.drawable.ic_download_arrow_black
+        drawableResource = R.drawable.ic_download_arrow_white,
     )
     object SKIP_BACKWARD_FIFTEEN : LightIconConfiguration(
         name = "skip backward fifteen",
-        darkModeResource = R.drawable.ic_skip_backward_fifteen_white,
-        lightModeResource = R.drawable.ic_skip_backward_fifteen_black
+        drawableResource = R.drawable.ic_skip_backward_fifteen_white,
     )
     object SKIP_FORWARD_FIFTEEN : LightIconConfiguration(
         name = "skip forward fifteen",
-        darkModeResource = R.drawable.ic_skip_forward_fifteen_white,
-        lightModeResource = R.drawable.ic_skip_forward_fifteen_black
+        drawableResource = R.drawable.ic_skip_forward_fifteen_white,
     )
     object REFRESH : LightIconConfiguration(
         name = "refresh",
-        darkModeResource = R.drawable.ic_refresh_white,
-        lightModeResource = R.drawable.ic_refresh_black
+        drawableResource = R.drawable.ic_refresh_white,
     )
     object MAP : LightIconConfiguration(
         name = "map",
-        darkModeResource = R.drawable.ic_map_white,
-        lightModeResource = R.drawable.ic_map_black
+        drawableResource = R.drawable.ic_map_white,
     )
     object CROSSHAIR : LightIconConfiguration(
         name = "crosshair",
-        darkModeResource = R.drawable.ic_crosshair_white,
-        lightModeResource = R.drawable.ic_crosshair_black
+        drawableResource = R.drawable.ic_crosshair_white,
     )
     object ARROW_RIGHT : LightIconConfiguration(
         name = "arrow right",
-        darkModeResource = R.drawable.ic_arrow_right_white,
-        lightModeResource = R.drawable.ic_arrow_right_black
+        drawableResource = R.drawable.ic_arrow_right_white,
     )
     object STOP : LightIconConfiguration(
         name = "stop",
-        darkModeResource = R.drawable.ic_stop_white,
-        lightModeResource = R.drawable.ic_stop_black
+        drawableResource = R.drawable.ic_stop_white,
     )
     object CONTACTS : LightIconConfiguration(
         name = "contacts",
-        darkModeResource = R.drawable.ic_contacts_white,
-        lightModeResource = R.drawable.ic_contacts_black
+        drawableResource = R.drawable.ic_contacts_white,
     )
     object REVERSE_ORDER : LightIconConfiguration(
         name = "reverse order",
-        darkModeResource = R.drawable.ic_reverse_order_white,
-        lightModeResource = R.drawable.ic_reverse_order_black
+        drawableResource = R.drawable.ic_reverse_order_white,
     )
     object ELLIPSES : LightIconConfiguration(
         name = "ellipses",
-        darkModeResource = R.drawable.ic_ellipse_white,
-        lightModeResource = R.drawable.ic_ellipse_black
+        drawableResource = R.drawable.ic_ellipse_white,
     )
     object SPACER : LightIconConfiguration(
         name = "spacer",
-        darkModeResource = R.drawable.ic_spacer,
-        lightModeResource = R.drawable.ic_spacer
+        drawableResource = R.drawable.ic_spacer,
     )
     object TRASH : LightIconConfiguration(
         name = "trash",
-        darkModeResource = R.drawable.ic_trash,
-        lightModeResource = R.drawable.ic_trash
+        drawableResource = R.drawable.ic_trash,
     )
     object SPEAKER_ON : LightIconConfiguration(
         name = "speaker on",
-        darkModeResource = R.drawable.ic_speaker_on,
-        lightModeResource = R.drawable.ic_speaker_on
+        drawableResource = R.drawable.ic_speaker_on,
     )
     object SPEAKER_MUTED : LightIconConfiguration(
         name = "speaker muted",
-        darkModeResource = R.drawable.ic_speaker_muted,
-        lightModeResource = R.drawable.ic_speaker_muted
+        drawableResource = R.drawable.ic_speaker_muted,
     )
     object ROTATE : LightIconConfiguration(
         name = "rotate",
-        darkModeResource = R.drawable.ic_rotate_white,
-        lightModeResource = R.drawable.ic_rotate_black
+        drawableResource = R.drawable.ic_rotate_white,
     )
 
     val allEntries: List<Pair<String, LightIconConfiguration>> by lazy {

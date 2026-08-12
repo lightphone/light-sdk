@@ -8,11 +8,15 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.net.URLEncoder
 import kotlin.text.Charsets.UTF_8
+
+private const val WEATHER_API_BASE = "https://production.lightphonecloud.com"
 
 @Serializable
 internal data class GeocodingResponse(
@@ -20,7 +24,7 @@ internal data class GeocodingResponse(
 )
 
 @Serializable
-internal data class GeocodingResult(
+data class GeocodingResult(
     val name: String,
     val latitude: Double,
     val longitude: Double,
@@ -37,7 +41,7 @@ internal data class OpenMeteoForecastResponse(
 
 @Serializable
 internal data class OpenMeteoHourly(
-    val time: List<String> = emptyList(),
+    val time: List<LocalDateTime> = emptyList(),
     @SerialName("temperature_2m") val temperature2m: List<Double> = emptyList(),
     @SerialName("apparent_temperature") val apparentTemperature: List<Double> = emptyList(),
     val precipitation: List<Double> = emptyList(),
@@ -53,7 +57,7 @@ internal data class OpenMeteoCurrent(
 
 @Serializable
 internal data class OpenMeteoDaily(
-    val time: List<String> = emptyList(),
+    val time: List<LocalDate> = emptyList(),
     @SerialName("temperature_2m_max") val temperature2mMax: List<Double> = emptyList(),
     @SerialName("temperature_2m_min") val temperature2mMin: List<Double> = emptyList(),
     @SerialName("apparent_temperature_max") val apparentTemperatureMax: List<Double> = emptyList(),
@@ -64,8 +68,8 @@ internal data class OpenMeteoDaily(
     @SerialName("windspeed_10m_max") val windspeed10mMax: List<Double> = emptyList(),
     @SerialName("winddirection_10m_dominant") val winddirection10mDominant: List<Int> = emptyList(),
     @SerialName("uv_index_max") val uvIndexMax: List<Double> = emptyList(),
-    val sunrise: List<String> = emptyList(),
-    val sunset: List<String> = emptyList(),
+    val sunrise: List<LocalDateTime> = emptyList(),
+    val sunset: List<LocalDateTime> = emptyList(),
 )
 
 internal class WeatherApi {
@@ -77,10 +81,10 @@ internal class WeatherApi {
         }
     }
 
-    suspend fun resolveLocation(query: String): Result<GeocodingResult> = runCatching {
+    suspend fun searchLocations(query: String): Result<List<GeocodingResult>> = runCatching {
         val encoded = URLEncoder.encode(query.trim(), UTF_8.name())
         val response = client.get(
-            "https://geocoding-api.open-meteo.com/v1/search?name=$encoded&count=1",
+            "$WEATHER_API_BASE/tools/weather/geolocation?name=$encoded&count=15",
         )
 
         if (!response.status.isSuccess()) {
@@ -89,12 +93,12 @@ internal class WeatherApi {
         }
 
         val geo: GeocodingResponse = response.body()
-        geo.results.firstOrNull() ?: throw LocationNotFoundException()
+        geo.results.ifEmpty { throw LocationNotFoundException() }
     }
 
     suspend fun fetchForecast(latitude: Double, longitude: Double): Result<StoredForecast> = runCatching {
         val response = client.get(
-            "https://api.open-meteo.com/v1/forecast" +
+            "$WEATHER_API_BASE/tools/weather/forecast" +
                 "?latitude=$latitude&longitude=$longitude" +
                 "&current=temperature_2m,apparent_temperature,weather_code" +
                 "&hourly=temperature_2m,apparent_temperature,precipitation,precipitation_probability" +
@@ -112,42 +116,7 @@ internal class WeatherApi {
         }
 
         val forecastResponse: OpenMeteoForecastResponse = response.body()
-        val daily = forecastResponse.daily
-            ?: throw IllegalStateException("No forecast data available.")
-
-        if (daily.time.size < 2) {
-            throw IllegalStateException("Forecast did not include today and tomorrow.")
-        }
-
-        val current = forecastResponse.current?.let {
-            CurrentConditions(
-                tempC = it.temperature2m,
-                apparentTempC = it.apparentTemperature,
-                weatherCode = it.weatherCode,
-            )
-        }
-        val today = daily.toDayForecast(index = 0)
-        val tomorrow = daily.toDayForecast(index = 1)
-        val dailyForecasts = daily.time.indices.map { index -> daily.toDayForecast(index) }
-        val weekly = daily.time.indices.map { index ->
-            WeeklyDay(
-                date = daily.time[index],
-                tempMaxC = daily.temperature2mMax[index],
-                tempMinC = daily.temperature2mMin[index],
-                precipitationMm = daily.precipitationSum[index],
-                precipitationProbabilityMax = daily.precipitationProbabilityMax.getOrNull(index),
-                weatherCode = daily.weathercode[index],
-            )
-        }
-        val hourly = forecastResponse.hourly?.toHourlyForecasts().orEmpty()
-        StoredForecast(
-            today = today,
-            tomorrow = tomorrow,
-            weekly = weekly,
-            hourly = hourly,
-            current = current,
-            daily = dailyForecasts,
-        )
+        forecastResponse.toStoredForecast()
     }
 
     fun close() {
@@ -156,6 +125,40 @@ internal class WeatherApi {
 }
 
 internal class LocationNotFoundException : Exception("Location not found.")
+
+internal fun OpenMeteoForecastResponse.toStoredForecast(): StoredForecast {
+    val daily = daily ?: throw IllegalStateException("No forecast data available.")
+    if (daily.time.size < 2) {
+        throw IllegalStateException("Forecast did not include today and tomorrow.")
+    }
+
+    val currentConditions = current?.let {
+        CurrentConditions(
+            tempC = it.temperature2m,
+            apparentTempC = it.apparentTemperature,
+            weatherCode = it.weatherCode,
+        )
+    }
+    return StoredForecast(
+        today = daily.toDayForecast(index = 0),
+        tomorrow = daily.toDayForecast(index = 1),
+        weekly = daily.toWeeklyDays(),
+        hourly = hourly?.toHourlyForecasts().orEmpty(),
+        current = currentConditions,
+        daily = daily.time.indices.map { index -> daily.toDayForecast(index) },
+    )
+}
+
+private fun OpenMeteoDaily.toWeeklyDays(): List<WeeklyDay> = time.indices.map { index ->
+    WeeklyDay(
+        date = time[index],
+        tempMaxC = temperature2mMax[index],
+        tempMinC = temperature2mMin[index],
+        precipitationMm = precipitationSum[index],
+        precipitationProbabilityMax = precipitationProbabilityMax.getOrNull(index),
+        weatherCode = weathercode[index],
+    )
+}
 
 private fun OpenMeteoDaily.toDayForecast(index: Int): DayForecast {
     return DayForecast(
@@ -187,7 +190,10 @@ private fun OpenMeteoHourly.toHourlyForecasts(): List<HourlyForecast> {
     }
 }
 
-internal fun GeocodingResult.displayName(): String {
-    val region = listOfNotNull(admin1, country).joinToString(", ")
+fun GeocodingResult.displayName(): String {
+    val region = regionLabel()
     return if (region.isEmpty()) name else "$name, $region"
 }
+
+fun GeocodingResult.regionLabel(): String =
+    listOfNotNull(admin1, country).joinToString(", ")

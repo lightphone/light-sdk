@@ -1,9 +1,11 @@
 package com.thelightphone.sdk.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -11,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 
 private const val BOTTOMBAR_HEIGHT_UNITS = 4f
 private const val HORIZONTAL_PADDING_MULTI_UNITS = 2f
@@ -28,6 +31,7 @@ private val BOTTOMBAR_TEXT_VARIANT = LightTextVariant.Button
 fun LightBottomBar(
     items: List<LightBottomBarItem?>,
     modifier: Modifier = Modifier,
+    topPadding: Dp = TOP_MARGIN_UNITS.gridUnitsAsDp()
 ) {
     require(items.size <= 5) { "LightBottomBar supports at most 5 items" }
 
@@ -45,7 +49,7 @@ fun LightBottomBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = TOP_MARGIN_UNITS.gridUnitsAsDp())
+            .padding(top = topPadding)
             .height(barHeight)
             .padding(horizontal = horizontalPadding),
         verticalAlignment = Alignment.CenterVertically,
@@ -137,9 +141,11 @@ private fun LightBottomBarItemView(item: LightBottomBarItem?) {
 private fun isMixedIconTextIconLayout(items: List<LightBottomBarItem?>): Boolean {
     if (items.size != 3) return false
 
-    val firstIsIconOrEmpty = items[0] == null || items[0] is LightBarButton.LightIcon || items[0] is LightBarButton.Icon
+    val firstIsIconOrEmpty =
+        items[0] == null || items[0] is LightBarButton.LightIcon || items[0] is LightBarButton.Icon
     val centerIsText = items[1] is LightBarButton.Text
-    val lastIsIconOrEmpty = items[2] == null || items[2] is LightBarButton.LightIcon || items[2] is LightBarButton.Icon
+    val lastIsIconOrEmpty =
+        items[2] == null || items[2] is LightBarButton.LightIcon || items[2] is LightBarButton.Icon
 
     return firstIsIconOrEmpty && centerIsText && lastIsIconOrEmpty
 }
@@ -148,13 +154,19 @@ private fun isMixedIconTextIconLayout(items: List<LightBottomBarItem?>): Boolean
 @Composable
 private fun PreviewLightBottomBarIconsDark() {
     LightTheme(colors = LightThemeColors.Dark) {
-        LightBottomBar(
-            items = listOf(
-                LightBarButton.LightIcon(icon = LightIcons.DIALPAD, onClick = {}),
-                LightBarButton.LightIcon(icon = LightIcons.SEARCH, onClick = {}),
-                LightBarButton.LightIcon(icon = LightIcons.CONTACTS, onClick = {}),
-            ),
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(LightThemeTokens.colors.background)
+        ) {
+            LightBottomBar(
+                items = listOf(
+                    LightBarButton.LightIcon(icon = LightIcons.DIALPAD, onClick = {}),
+                    LightBarButton.LightIcon(icon = LightIcons.SEARCH, onClick = {}),
+                    LightBarButton.LightIcon(icon = LightIcons.CONTACTS, onClick = {}),
+                ),
+            )
+        }
     }
 }
 

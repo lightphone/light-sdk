@@ -101,7 +101,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) : LightScreen<Unit, HomeSc
                     )
                     LightIcon(icon = LightIcons.CALL, modifier = Modifier.padding(end = 16.dp))
                     LightIcon(icon = LightIcons.SEARCH, modifier = Modifier.padding(end = 16.dp))
-                    LightIcon(icon = LightIcons.TOGGLE_ON)
+                    LightIcon(icon = LightIcons.TOGGLE_STATE_ON)
                 }
 
                 status?.let {

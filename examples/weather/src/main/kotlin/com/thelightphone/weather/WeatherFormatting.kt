@@ -1,11 +1,9 @@
 package com.thelightphone.weather
 
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
-import java.util.Locale
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.Month
 import kotlin.math.roundToInt
 
 enum class TemperatureUnit {
@@ -83,12 +81,10 @@ fun formatWindSpeed(kmh: Double, compass: String, unit: TemperatureUnit): String
     TemperatureUnit.Celsius -> "${kmh.roundToInt()} km/h $compass"
 }
 
-fun formatTimeAmPm(iso: String): String = runCatching {
-    val timePart = iso.substringAfter('T')
-    val localTime = LocalTime.parse(timePart.take(5))
-    localTime.format(DateTimeFormatter.ofPattern("h:mm a", Locale.US))
-}.getOrElse {
-    iso.substringAfter('T', iso).take(5)
+fun formatTimeAmPm(dateTime: LocalDateTime?): String {
+    dateTime ?: return "--:--"
+    val (hour, period) = dateTime.to12Hour()
+    return "$hour:${dateTime.minute.toString().padStart(2, '0')} $period"
 }
 
 fun formatUvIndex(value: Double): String = value.round1()
@@ -110,13 +106,9 @@ fun formatWeeklyPrecipitationDetail(day: WeeklyDay, unit: TemperatureUnit): Stri
     return if (probability != null) "$amount ($probability%)" else amount
 }
 
-fun formatHourLabel(isoDateTime: String): String {
-    return try {
-        val time = LocalTime.parse(isoDateTime.substringAfter('T').take(5))
-        time.format(DateTimeFormatter.ofPattern("ha", Locale.US)).uppercase(Locale.US)
-    } catch (_: Exception) {
-        isoDateTime.substringAfter('T').take(5)
-    }
+fun formatHourLabel(dateTime: LocalDateTime): String {
+    val (hour, period) = dateTime.to12Hour()
+    return "$hour$period"
 }
 
 fun formatHourlyTempLine(hour: HourlyForecast, unit: TemperatureUnit): String {
@@ -131,34 +123,30 @@ fun formatHourlyRainLine(hour: HourlyForecast, unit: TemperatureUnit): String {
     return if (probability != null) "Rain: $rain ($probability%)" else "Rain: $rain"
 }
 
-fun formatDailyTitle(isoDate: String): String {
-    return try {
-        val date = LocalDate.parse(isoDate)
-        val weekday = when (date.dayOfWeek) {
-            DayOfWeek.MONDAY -> "Mon"
-            DayOfWeek.TUESDAY -> "Tues"
-            DayOfWeek.WEDNESDAY -> "Weds"
-            DayOfWeek.THURSDAY -> "Thurs"
-            DayOfWeek.FRIDAY -> "Fri"
-            DayOfWeek.SATURDAY -> "Sat"
-            DayOfWeek.SUNDAY -> "Sun"
-        }
-        val month = date.month.getDisplayName(TextStyle.FULL, Locale.US)
-        "$weekday $month ${date.dayOfMonth}"
-    } catch (_: Exception) {
-        isoDate
+fun formatDailyTitle(date: LocalDate): String {
+    val weekday = when (date.dayOfWeek) {
+        DayOfWeek.MONDAY -> "Mon"
+        DayOfWeek.TUESDAY -> "Tues"
+        DayOfWeek.WEDNESDAY -> "Weds"
+        DayOfWeek.THURSDAY -> "Thurs"
+        DayOfWeek.FRIDAY -> "Fri"
+        DayOfWeek.SATURDAY -> "Sat"
+        DayOfWeek.SUNDAY -> "Sun"
     }
+    return "$weekday ${date.month.displayName()} ${date.dayOfMonth}"
 }
 
-fun formatWeeklyDayLabel(isoDate: String): String {
-    return try {
-        val date = LocalDate.parse(isoDate)
-        val dayOfWeek = date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
-        val month = date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
-        "$dayOfWeek $month ${date.dayOfMonth}"
-    } catch (_: Exception) {
-        isoDate
-    }
+fun formatWeeklyDayLabel(date: LocalDate): String {
+    val dayOfWeek = date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }
+    return "$dayOfWeek ${date.month.displayName()} ${date.dayOfMonth}"
+}
+
+private fun Month.displayName(): String = name.lowercase().replaceFirstChar { it.uppercase() }
+
+private fun LocalDateTime.to12Hour(): Pair<Int, String> {
+    val period = if (hour < 12) "AM" else "PM"
+    val twelveHour = hour % 12
+    return (if (twelveHour == 0) 12 else twelveHour) to period
 }
 
 private fun Double.round1(): String {

@@ -16,15 +16,7 @@
 #   docker build \
 #     --build-arg SDK_GIT_URL=https://github.com/lightphone/light-sdk \
 #     --build-arg SDK_GIT_REF=<commit-sha> \
-#     --secret id=github_token,env=GH_PACKAGES_TOKEN \
-#     --secret id=gh_packages_user,env=GH_PACKAGES_USER \
 #     -t lightphone/light-builder:<tag> builder/
-#
-# `github_token` is a single GitHub PAT used for two things:
-#   1. cloning the SDK repo if it's private (stage 2)
-#   2. authenticating to GitHub Packages while pre-warming gradle (stage 3)
-# Needs `repo` and `read:packages` scopes. Public SDK + no GH Packages deps
-# means you can omit both secrets entirely.
 #
 # Runtime:
 #   docker run --rm --network=none \
@@ -90,38 +82,16 @@ ARG SDK_GIT_REF
 # SDK_GIT_REF must be a commit-ish; fail loud if the caller forgot it.
 RUN test -n "${SDK_GIT_REF}" || (echo "SDK_GIT_REF build arg required" >&2; exit 1)
 
-# If a github_token secret is mounted, use it to clone (works for private repos).
-# Otherwise fall back to an anonymous clone (public repos). The token is read
-# from the secret mount and used via a one-shot credential helper, so it never
-# lands in process args, git config, or any image layer.
-RUN --mount=type=secret,id=github_token,uid=0,mode=0400,target=/run/secrets/gh \
-    set -eu; \
-    if [ -s /run/secrets/gh ]; then \
-        echo ">> github_token secret received ($(wc -c < /run/secrets/gh) bytes)"; \
-        TOKEN="$(cat /run/secrets/gh)"; \
-        git -c credential.helper="!f() { echo username=x-access-token; echo password=$TOKEN; }; f" \
-            clone --no-tags "${SDK_GIT_URL}" /opt/light-sdk; \
-    else \
-        echo ">> no github_token secret mounted; attempting anonymous clone"; \
-        git clone --no-tags "${SDK_GIT_URL}" /opt/light-sdk; \
-    fi; \
+RUN git clone --no-tags "${SDK_GIT_URL}" /opt/light-sdk; \
     git -C /opt/light-sdk checkout -q "${SDK_GIT_REF}"; \
     rm -rf /opt/light-sdk/.git
 
 # ─── Stage 3: pre-warm gradle cache ──────────────────────────────────────────
-# This is the only stage that needs network for Maven repos + GH Packages.
 # Once it's done, GRADLE_USER_HOME holds every dep needed for any tool/
 # build of this SDK commit, and runtime can run --offline.
 FROM --platform=linux/amd64 sdk AS warm
 
-RUN --mount=type=secret,id=github_token,uid=0,mode=0400,target=/run/secrets/gh_token \
-    --mount=type=secret,id=gh_packages_user,uid=0,mode=0400,target=/run/secrets/gh_user \
-    set -eux; \
-    set +x; \
-    export GH_PACKAGES_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)"; \
-    export GH_PACKAGES_USER="$(cat /run/secrets/gh_user 2>/dev/null || true)"; \
-    set -x; \
-    cd /opt/light-sdk; \
+RUN cd /opt/light-sdk; \
     ./gradlew :tool:assembleRelease --no-daemon --stacktrace; \
     # Drop build outputs but keep the populated dep cache.
     find /opt/light-sdk -path '*/build' -type d -prune -exec rm -rf {} +
@@ -141,8 +111,6 @@ COPY bin /opt/light-builder/bin
 
 RUN chmod +x /opt/light-builder/bin/build-apk.sh
 
-# Non-root user for the build. The user cannot read GH_PACKAGES_TOKEN or any
-# other build-time secret because secret mounts are unmounted between stages.
 RUN useradd --create-home --shell /bin/bash builder \
     && chown -R builder:builder /opt/light-sdk /opt/gradle-cache /opt/light-builder
 
