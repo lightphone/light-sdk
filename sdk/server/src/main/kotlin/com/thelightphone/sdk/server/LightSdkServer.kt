@@ -10,12 +10,22 @@ import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.os.Process
 import android.os.UserHandle
 import android.util.Log
+import com.thelightphone.filemanager.AndroidKeystoreKeyCipher
+import com.thelightphone.filemanager.BranchView
+import com.thelightphone.filemanager.DataView
+import com.thelightphone.filemanager.KeyCipher
+import com.thelightphone.filemanager.RootViewSpec
+import com.thelightphone.filemanager.datatree.BranchDataTree
+import com.thelightphone.filemanager.datatree.RootDataTree
 import com.thelightphone.sdk.shared.LightConstants
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
+import java.io.File
+import java.security.MessageDigest
 
 
 data class InstalledClient(
@@ -47,27 +57,53 @@ object LightSdkServer {
     /**
      * returns true iff this server version supports tools built with given sdkVersion
      */
-    fun isSdkVersionSupported(sdkVersion: String): Boolean {
-        return true
-    }
+    var isSdkVersionSupported: (sdkVersion: String) -> Boolean = { true }
 
-    fun List<InstalledClient>.filterAllowedTools(settings: LightSdkServerSettings): List<InstalledClient> {
+    fun List<InstalledClient>.filterAllowedInstalledTools(
+        settings: LightSdkServerSettings
+    ): List<InstalledClient> {
         val clientFilterLevel = settings.clientFilterLevel
-        return filter { isPackageAllowed(clientFilterLevel, it.packageInfo.packageName) }
+        return filter {
+            val meta = readApkMetadata(it.packageInfo)
+            isPackageAllowed(clientFilterLevel, meta)
+        }
     }
 
     fun isPackageAllowed(
         clientFilterLevel: ClientFilterLevel,
-        packageName: String
+        packageMeta: ApkMetadata
+    ): Boolean {
+        return isPackageAllowed(clientFilterLevel) { checkCert(packageMeta) }
+    }
+
+    fun isPackageAllowed(
+        clientFilterLevel: ClientFilterLevel,
+        context: Context,
+        callingPackage: String
+    ): Boolean {
+        return isPackageAllowed(clientFilterLevel) { checkCert(context, callingPackage) }
+    }
+
+    fun isPackageInstallable(
+        clientFilterLevel: ClientFilterLevel,
+        context: Context,
+        apkFile: File
+    ): Boolean {
+        return isPackageAllowed(clientFilterLevel) { checkCertUninstalled(context, apkFile) }
+    }
+
+    inline fun isPackageAllowed(
+        clientFilterLevel: ClientFilterLevel,
+        checkCert: () -> ClientCertType
     ): Boolean {
         return when (clientFilterLevel) {
             ClientFilterLevel.ExcludeAllApks -> false
             ClientFilterLevel.AllowAllApks -> true
             ClientFilterLevel.AllowLightApprovedApks -> {
-                checkCert(packageName) == ClientCertType.LightSdkApproved
+                checkCert() == ClientCertType.LightSdkApproved
             }
 
-            ClientFilterLevel.AllowLightSignedApks -> when (checkCert(packageName)) {
+            ClientFilterLevel.AllowLightSignedApks -> when (checkCert()) {
                 ClientCertType.Unknown -> false
                 ClientCertType.LightSdkSignedUnverified, ClientCertType.LightSdkApproved -> true
             }
@@ -87,7 +123,10 @@ object LightSdkServer {
             val packageInfo: PackageInfo
             try {
                 packageInfo =
-                    packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
+                    packageManager.getPackageInfo(
+                        packageName,
+                        PackageManager.GET_PERMISSIONS or PackageManager.GET_SIGNING_CERTIFICATES
+                    )
             } catch (e: PackageManager.NameNotFoundException) {
                 Log.e(TAG, "Could not find SDK package", e)
                 return@map null
@@ -108,7 +147,15 @@ object LightSdkServer {
     fun Context.queryEnabledClients(settings: LightSdkServerSettings): List<InstalledClient> {
         return queryInstalledClients()
             .filter { isSdkVersionSupported(it.sdkVersion) }
-            .filterAllowedTools(settings)
+            .filterAllowedInstalledTools(settings)
+    }
+
+    var getApkInboxDirectory: (Context) -> File = {
+        File(it.applicationContext.filesDir, "apkInbox")
+    }
+
+    var getFileManagerKeyCipher: () -> KeyCipher = {
+        AndroidKeystoreKeyCipher()
     }
 
     var provideSdkSettings: (Context) -> LightSdkServerSettings = {
@@ -172,12 +219,10 @@ object LightSdkServer {
         Log.e(TAG, "Server wants to foreground itself but does not know how!")
     }
 
-    /**
-     * Given an apk's package name, determine if it's been built with the Light SDK and/or promoted by Light
-     *
-     * Settable from enclosing application!! May be run on any thread
-     */
-    var checkCert: (callingPackage: String) -> ClientCertType = { ClientCertType.Unknown }
+    var isLightSigned: (callingPackage: String, signatureHash: String) -> Boolean =
+        { _, _ -> false }
+    var isLightApproved: (callingPackage: String, signatureHash: String) -> Boolean =
+        { _, _ -> false }
 
     /**
      * Given an android permission id (android.manifest.CAMERA, for example), return whether
@@ -185,13 +230,48 @@ object LightSdkServer {
      *
      * Settable from enclosing application!! May be run on any thread
      */
-    var androidPermissionAllowed: (callingUid: Int, permissionName: String) -> Boolean = { _, permissionName ->
-        // default grantable permissions; enclosing app may override
-        setOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.READ_MEDIA_AUDIO,
-            Manifest.permission.RECORD_AUDIO,
-        ).contains(permissionName)
+    var androidPermissionAllowed: (callingUid: Int, permissionName: String) -> Boolean =
+        { _, permissionName ->
+            // default grantable permissions; enclosing app may override
+            setOf(
+                Manifest.permission.CAMERA,
+                Manifest.permission.READ_MEDIA_AUDIO,
+                Manifest.permission.RECORD_AUDIO,
+            ).contains(permissionName)
+        }
+
+    /**
+     * Called when the SDK server successfully installs a tool
+     * May be called with a null path if unknown apk was installed
+     * (or we want to notify the server that it should refresh it's apk list)
+     */
+    var onApkInstalled: (apkPath: String?) -> Unit = { apkPath ->
+        if (!apkPath.isNullOrBlank()) {
+            Log.d(TAG, "Successfully installed APK: $apkPath")
+        }
+    }
+
+    /**
+     * SDK server should have a singleTask Activity to represent the FileManager's UI
+     * If the FileManager is running and the server app is active, the FileManager UI should always show
+     */
+    var foregroundFileManagerUi: (activityToReplace: Activity) -> Unit = {
+        // if activityToReplace is not the FileManager UI already, relaunch the FileManager UI
+    }
+
+    var reportError: (tag: String, exception: Throwable?, message: String) -> Unit = { tag, e, msg ->
+        Log.e(tag, msg, e)
+    }
+
+    var verboseLoggingEnabled = true
+
+    var rootFileManagerDataProvider: () -> RootDataTree = {
+        RootDataTree {
+            val stubDataTree = object : BranchDataTree {
+                override suspend fun getChildren(): List<DataView<*>> = emptyList()
+            }
+            BranchView(RootViewSpec("Empty Root", "emptyRoot"), stubDataTree, forceHide = true)
+        }
     }
 
     /**
@@ -244,5 +324,84 @@ object LightSdkServer {
         }
         registerReceiver(lockReceiver, filter)
         return lockReceiver
+    }
+
+    data class ApkMetadata(
+        val packageName: String,
+        val versionName: String?,
+        val versionCode: Long,
+        val signingCertSha256: List<String>
+    )
+
+    fun readApkMetadata(info: PackageInfo): ApkMetadata {
+        val signingInfo = info.signingInfo
+        val signatures: Array<Signature> = if (signingInfo != null) {
+            if (signingInfo.hasMultipleSigners()) {
+                signingInfo.apkContentsSigners
+            } else {
+                signingInfo.signingCertificateHistory
+            }
+        } else emptyArray()
+
+        val sha256Hashes = signatures.map { sig ->
+            MessageDigest.getInstance("SHA-256")
+                .digest(sig.toByteArray())
+                .toHexString()
+        }
+
+        return ApkMetadata(
+            packageName = info.packageName,
+            versionName = info.versionName,
+            versionCode = info.longVersionCode,
+            signingCertSha256 = sha256Hashes
+        )
+    }
+
+    fun Context.readApkMetadata(apkFile: File): ApkMetadata? {
+        val pm = packageManager
+        val flags = PackageManager.GET_SIGNING_CERTIFICATES
+
+        val info: PackageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, flags)
+            ?: return null
+
+        // Required so the ApplicationInfo resolves correctly (icons, etc.) —
+        // not strictly needed just for package name/signatures, but harmless to set.
+        info.applicationInfo?.sourceDir = apkFile.absolutePath
+        info.applicationInfo?.publicSourceDir = apkFile.absolutePath
+        return readApkMetadata(info)
+    }
+
+    fun checkCertUninstalled(context: Context, apkFile: File): ClientCertType {
+        val packageMeta = context.readApkMetadata(apkFile) ?: return ClientCertType.Unknown
+        return checkCert(packageMeta)
+    }
+
+    fun checkCert(context: Context, callingPackage: String): ClientCertType {
+        val info = try {
+            context.packageManager.getPackageInfo(
+                callingPackage,
+                PackageManager.GET_SIGNING_CERTIFICATES
+            )
+        } catch (_: PackageManager.NameNotFoundException) {
+            return ClientCertType.Unknown
+        }
+        val packageMeta = readApkMetadata(info)
+        return checkCert(packageMeta)
+    }
+
+    fun checkCert(packageMeta: ApkMetadata): ClientCertType {
+        val lightSignedMatches = packageMeta.signingCertSha256.filter {
+            isLightSigned(packageMeta.packageName, it)
+        }
+
+        if (lightSignedMatches.isEmpty()) {
+            return ClientCertType.Unknown
+        }
+
+        val lightApprovedMatches = lightSignedMatches.filter {
+            isLightApproved(packageMeta.packageName, it)
+        }
+
+        return if (lightApprovedMatches.isEmpty()) ClientCertType.LightSdkSignedUnverified else ClientCertType.LightSdkApproved
     }
 }

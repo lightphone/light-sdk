@@ -2,27 +2,41 @@ package com.thelightphone.sdk.emulator
 
 import android.app.Application
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.content.pm.Signature
 import android.util.Log
+import com.thelightphone.filemanager.BranchView
+import com.thelightphone.filemanager.RootViewSpec
+import com.thelightphone.filemanager.datatree.RootDataTree
+import com.thelightphone.filemanager.datatree.StaticBranchProvider
 import com.thelightphone.sdk.emulator.http.EmulatorHttpServer
-import com.thelightphone.sdk.server.ClientCertType
 import com.thelightphone.sdk.server.DefaultLightSdkServerSettings
 import com.thelightphone.sdk.server.LightSdkServer
+import com.thelightphone.sdk.server.filemanager.developerModeDataView
+import com.thelightphone.sdk.server.filemanager.getApkInboxSignaturesDirectory
+import com.thelightphone.sdk.server.filemanager.readSigningKeyHash
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.ui.LightModalManager
-import java.security.MessageDigest
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 // SHA-256 fingerprint of sdk/keys/lightsdk-dev.jks (alias: lightsdk-dev).
 private const val LIGHTSDK_DEV_CERT_SHA256 =
     "B9C33E29B0CCAD2BFF11ACAB55F65A3C517EF4BC92CD9C77785366FA353D5F28"
 
 class EmulatorApplication : Application() {
+    companion object {
+        // bumped whenever installed tools may have changed (e.g. an APK finished installing via
+        // the SDK), so MainActivity's tool list can re-fetch. safe to update from any thread.
+        private val _installedToolsRefreshCount = MutableStateFlow(0)
+        val installedToolsRefreshCount = _installedToolsRefreshCount.asStateFlow()
+    }
+
     val lightAudioManager by lazy { LightAudioManager(this) }
     val deviceKeyHandler by lazy { EmulatorDeviceKeyHandler(lightAudioManager) }
+
+    @Volatile
+    private var validSignatures: List<String> = emptyList()
 
     override fun onCreate() {
         super.onCreate()
@@ -31,7 +45,7 @@ class EmulatorApplication : Application() {
 
         with(LightSdkServer) {
             registerLockReceiver(MainActivity::class.java, settings)
-            customServiceMethodResolver = { callingId, methodId, payload ->
+            customServiceMethodResolver = { _, methodId, _ ->
                 if (methodId == "GetMollySocketUri" && mollySocketUriString.isNotEmpty()) {
                     val json = "{\"mollySocketUri\":\"$mollySocketUriString\"}"
                     LightResult.Success(json)
@@ -40,19 +54,52 @@ class EmulatorApplication : Application() {
                 }
             }
             val pushDomain = BuildConfig.PUSH_DOMAIN.ifEmpty { "http://localhost:8090" }
-            pushEndpointFetcher = { callingPackage, token, vapid ->
+            pushEndpointFetcher = { _, token, vapid ->
                 Log.d("LightEmulator", "getting push endpoint for token: $token, vapid: $vapid")
                 "$pushDomain/push/$token"
             }
-            checkCert = { callingPackage ->
-                checkLightSdkCert(callingPackage)
-            }
+            isLightSigned =
+                { _, signature -> validSignatures.any { it.equals(signature, ignoreCase = true) } }
+            isLightApproved = { _, _ -> false }
             provideSdkSettings = { settings }
             permissionActivity = LightSdkPermissionActivity::class.java
             onDeviceKeyEvent = { _, request -> handleDeviceKeyEvent(request) }
+            foregroundFileManagerUi = { activity ->
+                if (activity !is FileManagerActivity) {
+                    val intent = Intent(activity, FileManagerActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    activity.startActivity(intent)
+                }
+            }
+            rootFileManagerDataProvider = ::buildFileManagerRoot
+            onApkInstalled = {
+                updateValidSignatures()
+                _installedToolsRefreshCount.value++
+            }
         }
-
+        updateValidSignatures()
         EmulatorHttpServer(this).start()
+    }
+
+    // For the emulator, any apk built with LIGHTSDK_DEV_CERT_SHA256 is considered signed by Light
+    // also include user uploaded signatures
+    private fun updateValidSignatures() {
+        val signatures = mutableListOf(LIGHTSDK_DEV_CERT_SHA256)
+        val userAdded = LightSdkServer.getApkInboxSignaturesDirectory(this)
+            .listFiles { it.isFile }
+            ?.mapNotNull { it.readSigningKeyHash() }
+            .orEmpty()
+        validSignatures = signatures + userAdded
+    }
+
+    private fun buildFileManagerRoot(): RootDataTree {
+        return RootDataTree {
+            val developerMode = developerModeDataView(this, LightSdkServer.getFileManagerKeyCipher())
+            BranchView(
+                RootViewSpec("root", ""),
+                StaticBranchProvider(listOf(developerMode))
+            )
+        }
     }
 
     private fun handleDeviceKeyEvent(request: LightServiceMethod.DeviceKeyEvent.Request) {
@@ -87,26 +134,4 @@ class EmulatorApplication : Application() {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent)
     }
-}
-
-// For the emulator, any apk built with LIGHTSDK_DEV_CERT_SHA256 is considered signed by Light
-// Real LightOS will treat these as Unknown
-private fun Context.checkLightSdkCert(callingPackage: String): ClientCertType {
-    val info = try {
-        packageManager.getPackageInfo(callingPackage, PackageManager.GET_SIGNING_CERTIFICATES)
-    } catch (e: PackageManager.NameNotFoundException) {
-        return ClientCertType.Unknown
-    }
-    val signingInfo = info.signingInfo ?: return ClientCertType.Unknown
-    val signers: Array<Signature> = if (signingInfo.hasMultipleSigners()) {
-        signingInfo.apkContentsSigners
-    } else {
-        signingInfo.signingCertificateHistory
-    }
-    val md = MessageDigest.getInstance("SHA-256")
-    val matches = signers.any { sig ->
-        md.digest(sig.toByteArray()).toHexString()
-            .equals(LIGHTSDK_DEV_CERT_SHA256, ignoreCase = true)
-    }
-    return if (matches) ClientCertType.LightSdkSignedUnverified else ClientCertType.Unknown
 }

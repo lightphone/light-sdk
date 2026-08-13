@@ -48,6 +48,7 @@ ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", 
 light-keyboard = { module = "com.github.lightphone:light-keyboard", version = "v0.0.18"}
 # for local dev
 # light-keyboard = { module = "com.thelightphone.lp3keyboard:ui", version = "0.0.17-dirty"}
+light-filemanager = { module = "com.thelightphone.filemanager:server-android", version = "0.0.6-dirty"} # TODO don't use dirty version
 bouncycastle-provider = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 sol4k = { module = "org.sol4k:sol4k", version.ref = "sol4k" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
