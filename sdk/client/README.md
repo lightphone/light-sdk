@@ -263,6 +263,71 @@ capture.asFlow().collect { pcm ->
 - A capture startup failure throws `LightAudioCaptureException` from collection.
 - Set `CaptureConfig.source` to `Unprocessed` to request raw input when supported; `Mic` uses the standard processed microphone path.
 
+### NFC
+
+`LightNfc` reads NFC tags — and other phones presenting a tag — while your tool is in the foreground.
+Declare the permission in `lighttool.toml`; the plugin emits the matching `<uses-feature android:name="android.hardware.nfc" android:required="false" />` for you, so phones without NFC are never filtered out of the store listing.
+
+```toml
+permissions = ["android.permission.NFC"]
+```
+
+#### Availability
+
+`LightNfc` is a factory constructed from the `SealedLightActivity` your screen already receives. `availability` is read again on every access, because NFC can be switched on or off in Settings while your tool is backgrounded.
+
+```kotlin
+val nfc: LightNfc = DefaultLightNfc(sealedActivity)
+
+val prompt = when (nfc.availability) {
+    LightNfcAvailability.Ready -> "Hold your phone near the other device."
+    LightNfcAvailability.Disabled -> "Turn on NFC in Settings, then try again."
+    LightNfcAvailability.PermissionMissing -> "This tool doesn't have access to NFC."
+    LightNfcAvailability.Unsupported -> "This phone can't use NFC."
+}
+```
+
+- `availability.isReady` is the short form. Gate any tap affordance on it, so a phone without NFC never shows the button.
+- `Unsupported` means no NFC hardware; `Disabled` means the user turned NFC off; `PermissionMissing` means the tool omitted `android.permission.NFC` from `lighttool.toml`, and is logged with that detail.
+- Screens can refresh it from `willShow()`, which runs every time the screen comes back to the front.
+
+#### Reading taps
+
+`LightNfcReader` provides taps as a `Flow<LightNfcTap>`, holding reader mode for as long as it is collected.
+
+```kotlin
+nfc.newReader().asFlow().collect { tap ->
+    val address = tap.uri ?: tap.text
+}
+```
+
+For a one-shot read, `awaitTap()` takes the first tap and stops:
+
+```kotlin
+val tap = nfc.newReader().awaitTap()
+```
+
+- Collection owns reader mode: starting collection arms the reader, or the next time the tool resumes if it is backgrounded; backgrounding disarms it; cancelling releases it.
+- Collection is the boundary, not the screen. A reader collected from a scope that outlives the screen stays armed after the user navigates away, so collect from something that ends with the screen, as `LightNfcTapReader` does.
+- Concurrent collectors share the one reader mode Android grants the Activity: the newest receives taps, earlier ones resume as later ones stop, and the last to stop releases the radio.
+- Release matters: while reader mode is on, no other app sees taps.
+- Every tap carries `serialNumber`, the tag's UID as uppercase hex.
+- `records` holds the decoded NDEF message as `LightNfcRecord.Uri`, `LightNfcRecord.Text`, or `LightNfcRecord.Binary`. `tap.uri` and `tap.text` are shortcuts for the first record of each kind.
+- A tag with no NDEF message — a bare UID badge — reads successfully with an empty `records` list.
+- Failures arrive from collection as a `LightNfcException`: `LightNfcUnavailableException` when NFC is off, absent, not granted to the tool, or couldn't start; `LightNfcReadException` when the tag left the field or its contents couldn't be decoded. The exception message is product copy naming the actual cause.
+- `LightNfcReaderConfig` narrows the technologies polled, skips the platform's NDEF check, silences the platform tap sound, and sets the presence-check delay.
+
+#### Tap prompt
+
+`LightNfcTapReader` is the ready-made counterpart to `LightQrCodeScanner`. It runs the reader while the screen is showing and renders the prompt, so a tool that just needs an address off a tap does not handle availability itself.
+
+```kotlin
+LightNfcTapReader(
+    onTap = { tap -> tap.uri?.let(::onAddressScanned) },
+    onBack = { goBack(Unit) },
+)
+```
+
 ### Talking to LightOS
 
 `callRemoteServiceMethod(method, payload)` sends a typed request to the LightOS server (or to `:sdk:emulator` in dev) and returns a `LightResult<Response>`. The set of available methods lives in `:sdk:shared`'s `LightServiceMethod`. Example:

@@ -12,6 +12,8 @@ work = "2.10.0"
 media3 = "1.10.1"
 kotlinxDatetime = "0.8.0"
 bouncycastle = "1.85"
+sol4k = "0.7.0"
+zxing = "3.5.4"
 
 [libraries]
 unifiedpush-connector = { module = "org.unifiedpush.android:connector", version.ref = "connector" }
@@ -47,6 +49,8 @@ light-keyboard = { module = "com.github.lightphone:light-keyboard", version = "v
 # for local dev
 # light-keyboard = { module = "com.thelightphone.lp3keyboard:ui", version = "0.0.17-dirty"}
 bouncycastle-provider = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+sol4k = { module = "org.sol4k:sol4k", version.ref = "sol4k" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
