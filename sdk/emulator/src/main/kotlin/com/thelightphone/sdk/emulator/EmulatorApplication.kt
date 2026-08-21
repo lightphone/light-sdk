@@ -4,16 +4,16 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.Intent
 import android.util.Log
-import com.thelightphone.filemanager.BranchView
-import com.thelightphone.filemanager.RootViewSpec
-import com.thelightphone.filemanager.datatree.RootDataTree
-import com.thelightphone.filemanager.datatree.StaticBranchProvider
+import com.thelightphone.toolmanager.BranchView
+import com.thelightphone.toolmanager.RootViewSpec
+import com.thelightphone.toolmanager.datatree.RootDataTree
+import com.thelightphone.toolmanager.datatree.StaticBranchProvider
 import com.thelightphone.sdk.emulator.http.EmulatorHttpServer
 import com.thelightphone.sdk.server.DefaultLightSdkServerSettings
 import com.thelightphone.sdk.server.LightSdkServer
-import com.thelightphone.sdk.server.filemanager.developerModeDataView
-import com.thelightphone.sdk.server.filemanager.getApkInboxSignaturesDirectory
-import com.thelightphone.sdk.server.filemanager.readSigningKeyHash
+import com.thelightphone.sdk.server.toolmanager.developerModeDataView
+import com.thelightphone.sdk.server.toolmanager.getApkInboxSignaturesDirectory
+import com.thelightphone.sdk.server.toolmanager.readSigningKeyHash
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.ui.LightModalManager
@@ -64,14 +64,14 @@ class EmulatorApplication : Application() {
             provideSdkSettings = { settings }
             permissionActivity = LightSdkPermissionActivity::class.java
             onDeviceKeyEvent = { _, request -> handleDeviceKeyEvent(request) }
-            foregroundFileManagerUi = { activity ->
-                if (activity !is FileManagerActivity) {
-                    val intent = Intent(activity, FileManagerActivity::class.java)
+            foregroundToolManagerUi = { activity ->
+                if (activity !is ToolManagerActivity) {
+                    val intent = Intent(activity, ToolManagerActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     activity.startActivity(intent)
                 }
             }
-            rootFileManagerDataProvider = ::buildFileManagerRoot
+            rootToolManagerDataProvider = ::buildToolManagerRoot
             onApkInstalled = {
                 updateValidSignatures()
                 _installedToolsRefreshCount.value++
@@ -92,9 +92,9 @@ class EmulatorApplication : Application() {
         validSignatures = signatures + userAdded
     }
 
-    private fun buildFileManagerRoot(): RootDataTree {
+    private fun buildToolManagerRoot(): RootDataTree {
         return RootDataTree {
-            val developerMode = developerModeDataView(this, LightSdkServer.getFileManagerKeyCipher())
+            val developerMode = developerModeDataView(this, LightSdkServer.getToolManagerKeyCipher())
             BranchView(
                 RootViewSpec("root", ""),
                 StaticBranchProvider(listOf(developerMode))

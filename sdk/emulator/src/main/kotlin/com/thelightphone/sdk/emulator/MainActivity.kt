@@ -122,7 +122,7 @@ class MainActivity : ComponentActivity() {
                     }, launchDefaultTool = {
                         when (it) {
                             DefaultTool.Settings -> EmulatorNavController.navigateTo(Settings())
-                            DefaultTool.FileManager -> LightSdkServer.foregroundFileManagerUi(this)
+                            DefaultTool.ToolManager -> LightSdkServer.foregroundToolManagerUi(this)
                         }
                     })
             }
@@ -155,13 +155,13 @@ private sealed class Tool(val label: String)
 private class ExternalTool(label: String, val packageName: String) : Tool(label)
 private sealed class DefaultTool(label: String) : Tool(label) {
     object Settings : DefaultTool("Settings")
-    object FileManager : DefaultTool("File Manager")
+    object ToolManager : DefaultTool("Tool Manager")
 }
 
 
 private val defaultTools: List<Tool> = listOf(
     DefaultTool.Settings,
-    DefaultTool.FileManager
+    DefaultTool.ToolManager
 )
 
 @Composable

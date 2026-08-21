@@ -14,13 +14,13 @@ import android.content.pm.Signature
 import android.os.Process
 import android.os.UserHandle
 import android.util.Log
-import com.thelightphone.filemanager.AndroidKeystoreKeyCipher
-import com.thelightphone.filemanager.BranchView
-import com.thelightphone.filemanager.DataView
-import com.thelightphone.filemanager.KeyCipher
-import com.thelightphone.filemanager.RootViewSpec
-import com.thelightphone.filemanager.datatree.BranchDataTree
-import com.thelightphone.filemanager.datatree.RootDataTree
+import com.thelightphone.toolmanager.AndroidKeystoreKeyCipher
+import com.thelightphone.toolmanager.BranchView
+import com.thelightphone.toolmanager.DataView
+import com.thelightphone.toolmanager.KeyCipher
+import com.thelightphone.toolmanager.RootViewSpec
+import com.thelightphone.toolmanager.datatree.BranchDataTree
+import com.thelightphone.toolmanager.datatree.RootDataTree
 import com.thelightphone.sdk.shared.LightConstants
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
@@ -154,7 +154,7 @@ object LightSdkServer {
         File(it.applicationContext.filesDir, "apkInbox")
     }
 
-    var getFileManagerKeyCipher: () -> KeyCipher = {
+    var getToolManagerKeyCipher: () -> KeyCipher = {
         AndroidKeystoreKeyCipher()
     }
 
@@ -252,11 +252,11 @@ object LightSdkServer {
     }
 
     /**
-     * SDK server should have a singleTask Activity to represent the FileManager's UI
-     * If the FileManager is running and the server app is active, the FileManager UI should always show
+     * SDK server should have a singleTask Activity to represent the ToolManager's UI
+     * If the ToolManager is running and the server app is active, the ToolManager UI should always show
      */
-    var foregroundFileManagerUi: (activityToReplace: Activity) -> Unit = {
-        // if activityToReplace is not the FileManager UI already, relaunch the FileManager UI
+    var foregroundToolManagerUi: (activityToReplace: Activity) -> Unit = {
+        // if activityToReplace is not the ToolManager UI already, relaunch the ToolManager UI
     }
 
     var reportError: (tag: String, exception: Throwable?, message: String) -> Unit = { tag, e, msg ->
@@ -265,7 +265,7 @@ object LightSdkServer {
 
     var verboseLoggingEnabled = true
 
-    var rootFileManagerDataProvider: () -> RootDataTree = {
+    var rootToolManagerDataProvider: () -> RootDataTree = {
         RootDataTree {
             val stubDataTree = object : BranchDataTree {
                 override suspend fun getChildren(): List<DataView<*>> = emptyList()

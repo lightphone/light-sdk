@@ -110,7 +110,7 @@ abstract class UploadToolTask : DefaultTask() {
     abstract val pollIntervalSeconds: Property<Long>
 
     // The server presents a cert for its own *.my.local-ip.co hostname (see
-    // FileManagerServiceAndroid), which will never match when we connect straight to a LAN
+    // ToolManagerServiceAndroid), which will never match when we connect straight to a LAN
     // IP/port. Trusting everything here is fine: this is a local dev-upload tool talking
     // to a device the caller already picked by IP, not a general-purpose HTTP client.
     private fun insecureHttpClient(): HttpClient {

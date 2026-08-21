@@ -1,6 +1,5 @@
 package com.thelightphone.sdk.emulator
 
-import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -30,7 +29,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
-import com.thelightphone.sdk.server.filemanager.FileManagerLifecycleWrapperService
+import com.thelightphone.sdk.server.toolmanager.ToolManagerLifecycleWrapperService
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightText
@@ -51,20 +50,20 @@ import java.net.InetAddress
 
 private const val DEFAULT_STATUS = "Connecting..."
 
-class FileManagerActivity : ComponentActivity() {
+class ToolManagerActivity : ComponentActivity() {
     companion object {
-        private const val TAG = "FileManagerActivity"
+        private const val TAG = "ToolManagerActivity"
     }
 
-    private var fileManagerService: FileManagerLifecycleWrapperService? = null
+    private var toolManagerService: ToolManagerLifecycleWrapperService? = null
     private var monitorJob: Job? = null
 
     private var statusText by mutableStateOf(DEFAULT_STATUS)
-    private var fileManagerUrl by mutableStateOf<String?>(null)
+    private var toolManagerUrl by mutableStateOf<String?>(null)
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-            fileManagerService = (binder as FileManagerLifecycleWrapperService.LocalBinder).getService()
+            toolManagerService = (binder as ToolManagerLifecycleWrapperService.LocalBinder).getService()
             lifecycleScope.launch(Dispatchers.IO) {
                 showServiceState()
             }
@@ -72,7 +71,7 @@ class FileManagerActivity : ComponentActivity() {
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
-            fileManagerService = null
+            toolManagerService = null
         }
     }
 
@@ -87,11 +86,11 @@ class FileManagerActivity : ComponentActivity() {
         setContent {
             val themeColors by LightThemeController.colors.collectAsState()
             LightTheme(colors = themeColors) {
-                FileManagerScreen(
+                ToolManagerScreen(
                     statusText = statusText,
-                    fileManagerUrl = fileManagerUrl,
+                    toolManagerUrl = toolManagerUrl,
                     onBack = {
-                        FileManagerLifecycleWrapperService.stop(this)
+                        ToolManagerLifecycleWrapperService.stop(this)
                         finish()
                     },
                 )
@@ -101,9 +100,9 @@ class FileManagerActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        FileManagerLifecycleWrapperService.start(this)
+        ToolManagerLifecycleWrapperService.start(this)
         bindService(
-            Intent(this, FileManagerLifecycleWrapperService::class.java),
+            Intent(this, ToolManagerLifecycleWrapperService::class.java),
             serviceConnection,
             Context.BIND_AUTO_CREATE,
         )
@@ -115,11 +114,11 @@ class FileManagerActivity : ComponentActivity() {
         monitorJob?.cancel()
         monitorJob = null
         unbindService(serviceConnection)
-        fileManagerService = null
+        toolManagerService = null
     }
 
     private fun showServiceState() {
-        val service = fileManagerService ?: return
+        val service = toolManagerService ?: return
         if (!service.isRunning) {
             statusText = "Failed to start file manager"
             return
@@ -135,7 +134,7 @@ class FileManagerActivity : ComponentActivity() {
             return
         }
         Log.d(TAG, "File manager running at $url")
-        fileManagerUrl = url
+        toolManagerUrl = url
     }
 
     private fun startMonitoring() {
@@ -143,7 +142,7 @@ class FileManagerActivity : ComponentActivity() {
         monitorJob = lifecycleScope.launch {
             while (isActive) {
                 delay(2000)
-                val service = fileManagerService
+                val service = toolManagerService
                 if (service != null && !service.isRunning) {
                     statusText = "File manager has stopped running."
                     Log.e(TAG, "File manager terminated")
@@ -155,9 +154,9 @@ class FileManagerActivity : ComponentActivity() {
 }
 
 @Composable
-private fun FileManagerScreen(
+private fun ToolManagerScreen(
     statusText: String,
-    fileManagerUrl: String?,
+    toolManagerUrl: String?,
     onBack: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -177,10 +176,10 @@ private fun FileManagerScreen(
                 .padding(1f.gridUnitsAsDp()),
             contentAlignment = Alignment.Center,
         ) {
-            if (fileManagerUrl != null) {
+            if (toolManagerUrl != null) {
                 SelectionContainer {
                     LightText(
-                        text = fileManagerUrl,
+                        text = toolManagerUrl,
                         variant = LightTextVariant.Detail,
                         align = TextAlign.Center,
                     )
@@ -198,11 +197,11 @@ private fun FileManagerScreen(
 
 @Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
 @Composable
-private fun FileManagerScreenPreviewLoading() {
+private fun ToolManagerScreenPreviewLoading() {
     LightTheme(colors = LightThemeColors.Dark) {
-        FileManagerScreen(
+        ToolManagerScreen(
             statusText = DEFAULT_STATUS,
-            fileManagerUrl = null,
+            toolManagerUrl = null,
             onBack = {},
         )
     }
@@ -210,11 +209,11 @@ private fun FileManagerScreenPreviewLoading() {
 
 @Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
 @Composable
-private fun FileManagerScreenPreviewUrl() {
+private fun ToolManagerScreenPreviewUrl() {
     LightTheme(colors = LightThemeColors.Dark) {
-        FileManagerScreen(
+        ToolManagerScreen(
             statusText = DEFAULT_STATUS,
-            fileManagerUrl = "https://127-0-0-1.my.local-ip.co:54449/#abc123",
+            toolManagerUrl = "https://127-0-0-1.my.local-ip.co:54449/#abc123",
             onBack = {},
         )
     }

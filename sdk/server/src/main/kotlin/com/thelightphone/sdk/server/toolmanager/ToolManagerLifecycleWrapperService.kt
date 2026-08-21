@@ -1,4 +1,4 @@
-package com.thelightphone.sdk.server.filemanager
+package com.thelightphone.sdk.server.toolmanager
 
 import android.app.Activity
 import android.app.Application
@@ -9,51 +9,51 @@ import android.os.Binder
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
-import com.thelightphone.filemanager.FileManagerServiceAndroid
-import com.thelightphone.filemanager.HTTPS_PORT
-import com.thelightphone.filemanager.Logger
-import com.thelightphone.filemanager.TotpFileManagerAuth
+import com.thelightphone.toolmanager.ToolManagerServiceAndroid
+import com.thelightphone.toolmanager.HTTPS_PORT
+import com.thelightphone.toolmanager.Logger
+import com.thelightphone.toolmanager.TotpToolManagerAuth
 import com.thelightphone.sdk.server.LightSdkServer
 import java.net.InetAddress
 
 /**
- * The FileManager's [FileManagerServiceAndroid] is not a "real" Android service, it's lifecycle is Coroutine based
- * This just pairs it to an actual Android service, and ensures that the [FileManagerActivity] is always showing
+ * The ToolManager's [ToolManagerServiceAndroid] is not a "real" Android service, it's lifecycle is Coroutine based
+ * This just pairs it to an actual Android service, and ensures that the [ToolManagerActivity] is always showing
  * when the coroutine service is running.
  */
-class FileManagerLifecycleWrapperService : Service() {
+class ToolManagerLifecycleWrapperService : Service() {
 
     companion object {
-        private const val TAG = "FileManagerLifecycleWrapperService"
+        private const val TAG = "ToolManagerLifecycleWrapperService"
 
         @Volatile
         private var serviceRunning = false
 
         fun start(context: Context) {
             serviceRunning = true
-            context.startService(Intent(context, FileManagerLifecycleWrapperService::class.java))
+            context.startService(Intent(context, ToolManagerLifecycleWrapperService::class.java))
         }
 
         fun stop(context: Context) {
             serviceRunning = false
-            context.stopService(Intent(context, FileManagerLifecycleWrapperService::class.java))
+            context.stopService(Intent(context, ToolManagerLifecycleWrapperService::class.java))
         }
     }
 
     inner class LocalBinder : Binder() {
-        fun getService(): FileManagerLifecycleWrapperService =
-            this@FileManagerLifecycleWrapperService
+        fun getService(): ToolManagerLifecycleWrapperService =
+            this@ToolManagerLifecycleWrapperService
     }
 
     private val binder = LocalBinder()
-    private lateinit var fileManagerService: FileManagerServiceAndroid
+    private lateinit var toolManagerService: ToolManagerServiceAndroid
 
     private val autoForegroundCallback = object : Application.ActivityLifecycleCallbacks {
         // if Main activity is resumed, but the service is still running -> bring this activity back
-        // we want to make sure if the service is running, the user is looking at FileManagerActivity
+        // we want to make sure if the service is running, the user is looking at ToolManagerActivity
         override fun onActivityResumed(activity: Activity) {
             if (serviceRunning) {
-                LightSdkServer.foregroundFileManagerUi(activity)
+                LightSdkServer.foregroundToolManagerUi(activity)
             }
         }
 
@@ -83,24 +83,24 @@ class FileManagerLifecycleWrapperService : Service() {
         super.onCreate()
         serviceRunning = true
         application.registerActivityLifecycleCallbacks(autoForegroundCallback)
-        fileManagerService = FileManagerServiceAndroid(
-            LightSdkServer.rootFileManagerDataProvider(),
+        toolManagerService = ToolManagerServiceAndroid(
+            LightSdkServer.rootToolManagerDataProvider(),
             this,
             logger,
             port = HTTPS_PORT,
             enableLogging = LightSdkServer.verboseLoggingEnabled,
             provideNewAuth = {
-                TotpFileManagerAuth(
+                TotpToolManagerAuth(
                     keyDirectory = LightSdkServer.getApkInboxAuthDirectory(this),
-                    cipher = LightSdkServer.getFileManagerKeyCipher()
+                    cipher = LightSdkServer.getToolManagerKeyCipher()
                 )
             }
         )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!fileManagerService.isRunning) {
-            val started = fileManagerService.start()
+        if (!toolManagerService.isRunning) {
+            val started = toolManagerService.start()
             if (!started) {
                 Log.e(TAG, "File manager failed to start")
                 stopSelf()
@@ -115,11 +115,11 @@ class FileManagerLifecycleWrapperService : Service() {
         super.onDestroy()
         serviceRunning = false
         application.unregisterActivityLifecycleCallbacks(autoForegroundCallback)
-        fileManagerService.stop()
+        toolManagerService.stop()
         Log.d(TAG, "onDestroy: file manager stopped")
     }
 
-    fun getHttpsUrl(hostOverride: InetAddress? = null): String? = fileManagerService.getHttpsUrl(hostOverride)
+    fun getHttpsUrl(hostOverride: InetAddress? = null): String? = toolManagerService.getHttpsUrl(hostOverride)
 
-    val isRunning: Boolean get() = fileManagerService.isRunning
+    val isRunning: Boolean get() = toolManagerService.isRunning
 }

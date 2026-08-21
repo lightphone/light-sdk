@@ -26,7 +26,7 @@
             android:label="Light SDK Permission"
             android:theme="@style/LightEmulator.Theme.Permission" />
         <activity
-            android:name=".FileManagerActivity"
+            android:name=".ToolManagerActivity"
             android:exported="false"
             android:launchMode="singleTask"
             android:label="File Manager" />
