@@ -101,6 +101,7 @@ Being in the same process allows the tool code and the service to access the sam
 
 - enforcing one detached handle
 - recording the live session's audio usage
+- carrying construction-time configuration to the service before it builds its player, and recording what the live session was built with
 - telling the service whether a tool still holds the detached handle.
 
 The public player API is backed by media3's `Player` interface.
@@ -116,6 +117,14 @@ The SDK maps its audio API onto the media3 components as follows:
 - Releasing `LightAudioPlayer` closes its controller and handle without releasing the service-owned player.
 
 The controller identifies itself as a tool controller and sends its `LightAudioUsage` through connection hints. Other platform controllers, such as Bluetooth, may connect to the session, but they do not own the SDK's detached handle or select its audio usage.
+
+### Configuration that connection hints cannot carry
+
+Audio usage travels as a connection hint because it can be applied to a player that already exists. Where a player reads bytes from cannot: a media source factory is a constructor argument, and `onCreate` has already built the player by the time the first controller connects. Connection hints are therefore too late for anything settled at construction.
+
+Such configuration goes through `DetachedSessionState` instead. The tool stages it there before asking for a controller — which is what starts the service — and the service takes it in `onCreate`. This works only because the service shares the tool's process, and it is the reason `LightMediaCache` is described as data the SDK acts on rather than handed over as a configured media3 object: a lambda holding tool state would run inside a service the tool does not own, and a media3 object built by the tool would make its lifetime the tool's problem.
+
+Because construction is the only chance, a live session's caches cannot be adopted the way its usage can. Reconnecting with a different set throws rather than being silently ignored, and a session the system revived rather than a tool started records that it was built without caches, so a later handle asking for them is refused instead of being handed a player that has none.
 
 ## Foreground-service notification on LP3
 

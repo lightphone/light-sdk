@@ -129,12 +129,60 @@ player.play()
 
 - Use `pause`, `stop`, and `seekTo` for transport controls.
 - `skipBack()` and `skipForward()` seek 15 seconds within the current item; `skipToPrevious()` and `skipToNext()` move through the queue.
+- Edit the queue in place with `addMediaItem`, `removeMediaItem`, `moveMediaItem`, and `replaceMediaItem`. `mediaItemCount` reports its length.
 - Set `speed` to change playback rate; values at or below zero clamp to the minimum supported rate.
 - Use `setSource(File)` as a convenience for a one-item local-file queue.
 - Playback requests audio focus automatically.
 - If focus is unavailable, `play()` does nothing.
 - Observe `isPlaying` for the actual state.
 - Transient focus loss pauses and later resumes playback, while duckable loss lowers the volume.
+
+##### Editing the queue
+
+A negative index is a mistake and throws. An index past the end is not: a queue can change underneath a tool, so `addMediaItem` appends, `moveMediaItem` clamps its destination to the end, and everything else does nothing.
+
+`replaceMediaItem` swaps an item's source while the queue keeps playing, which is how to hand the player a re-resolved URL for audio that is already loaded. Give both items the same `LightAudioItem.id` so they name the same audio:
+
+```kotlin
+val track = LightAudioItem(
+    id = "track-1",
+    source = LightAudioSource.UrlSource(freshUrl),
+    metadata = LightMediaMetadata(title = "Example"),
+)
+player.replaceMediaItem(index, track)
+```
+
+An item without an `id` is identified by its location, which is right whenever the location is stable.
+
+##### Caching what you stream
+
+A player can read through caches the tool describes. The SDK opens each store under your tool's private storage, shares one per directory across your process, and keeps it when the player is released:
+
+```kotlin
+val player = audio.newPlayer(
+    caches = listOf(
+        LightMediaCache("stream", LightCacheEviction.LeastRecentlyUsed(256L * 1024 * 1024)),
+        LightMediaCache("saved", LightCacheEviction.Never),
+    ),
+)
+```
+
+Caches are consulted in the order given, and only then the network. Newly streamed bytes are written to the size-limited cache, so at most one cache may be size-limited and a player without one caches nothing it streams. A cache that never evicts is only read during playback; what goes in it is up to the tool.
+
+Cached bytes are filed under `LightAudioItem.id`, so an item whose URL is re-resolved still finds what it already cached. Files and bundled assets bypass caching, since they are already on the device.
+
+A detached session's caches are fixed when its player is built. Reconnecting with a different set throws `LightAudioPlayerException`, the same way a conflicting `LightAudioUsage` does.
+
+##### Streaming DASH
+
+media3 plays DASH only when a source for it is on the classpath, which the SDK does not ship to every tool. Ask for it in `lighttool.toml`:
+
+```toml
+[tool]
+capabilities = ["audio-dash"]
+```
+
+Nothing else changes: pass the manifest URL as a `LightAudioSource.UrlSource` and the player selects the DASH source itself.
 
 ##### Playback failures
 
