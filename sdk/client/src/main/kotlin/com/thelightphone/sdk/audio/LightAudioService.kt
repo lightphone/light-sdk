@@ -32,14 +32,20 @@ internal class LightAudioService : MediaSessionService() {
 
         assertSharedProcess()
 
-        player = ExoPlayer.Builder(this).build().apply {
-            setAudioAttributes(LightAudioUsage.Music.toMedia3AudioAttributes(), true)
+        // Whatever the starting handle staged, taken now because a player cannot
+        // be told where to read from once it exists. A session the system
+        // revived rather than a tool started has nothing staged, and records
+        // that, so a later handle asking for caches is refused rather than
+        // silently given a player that has none.
+        val caches = detachedSessionState.stagedCaches()
+        player = buildSdkExoPlayer(this, LightAudioUsage.Music, caches).apply {
             addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     refreshIdleStop()
                 }
             })
         }
+        detachedSessionState.adoptCaches(caches)
         session = MediaSession.Builder(this, player)
             .setId(packageName)
             .setCallback(SessionCallback())

@@ -9,6 +9,7 @@ interface LightAudio {
     fun newPlayer(
         usage: LightAudioUsage = LightAudioUsage.Music,
         playback: LightAudioPlayback = LightAudioPlayback.Attached,
+        caches: List<LightMediaCache> = emptyList(),
     ): LightAudioPlayer
     fun newRecorder(cfg: RecorderConfig = RecorderConfig()): LightAudioRecorder
     fun newCapture(cfg: CaptureConfig = CaptureConfig()): LightAudioCapture
@@ -28,17 +29,22 @@ value class DefaultLightAudio(
         get() = sealedActivity.activity.readAudioCapabilities()
 
     /**
-     * Create a player that requests audio focus appropriate for [usage].
+     * Create a player that requests audio focus appropriate for [usage], reading
+     * through [caches] in the order given before reaching the network.
      *
      * Only one [LightAudioPlayback.Detached] player handle may exist in the
-     * process at a time.
+     * process at a time. Reconnecting to a live detached session cannot change
+     * where that session's player reads from, so [caches] must match the ones it
+     * was built with.
      */
     override fun newPlayer(
         usage: LightAudioUsage,
         playback: LightAudioPlayback,
+        caches: List<LightMediaCache>,
     ): LightAudioPlayer {
+        validateMediaCaches(caches)
         if (playback == LightAudioPlayback.Attached) {
-            return LightAudioPlayer(sealedActivity.activity, usage, playback)
+            return LightAudioPlayer(sealedActivity.activity, usage, playback, caches)
         }
 
         sealedActivity.activity.requireDetachedAudioCapability()
@@ -49,16 +55,28 @@ value class DefaultLightAudio(
                     "Reconnect with the active usage or wait for the detached session to stop."
             )
         }
+        val activeCaches = detachedSessionState.activeCaches()
+        if (!isDetachedCacheCompatible(activeCaches, caches)) {
+            throw LightAudioPlayerException(
+                "Detached audio is already reading through $activeCaches; requested $caches. " +
+                    "Its player is already built, so reconnect with the active caches or " +
+                    "stop the detached session first."
+            )
+        }
         if (!detachedSessionState.openHandle()) {
             throw LightAudioPlayerException(
                 "Only one detached LightAudioPlayer may exist at a time; release the existing player first"
             )
         }
+        // Staged before the controller is built, because building it is what
+        // starts the service that reads this.
+        detachedSessionState.stageCaches(caches)
         return try {
             LightAudioPlayer(
                 sealedActivity.activity,
                 usage,
                 playback,
+                caches,
                 detachedSessionState::closeHandle,
             )
         } catch (error: Throwable) {

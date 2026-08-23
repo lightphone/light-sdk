@@ -25,6 +25,8 @@ package com.thelightphone.sdk.audio
 internal class DetachedSessionState {
     private var handleOpen = false
     private var sessionUsage: LightAudioUsage? = null
+    private var stagedCaches: List<LightMediaCache> = emptyList()
+    private var sessionCaches: List<LightMediaCache>? = null
     private var handleChanged: (() -> Unit)? = null
 
     /** Takes the single detached handle, or fails when one is already out. */
@@ -67,11 +69,41 @@ internal class DetachedSessionState {
     @Synchronized
     fun clearSession() {
         sessionUsage = null
+        sessionCaches = null
+        stagedCaches = emptyList()
     }
 
     /** The live session's usage, or `null` when no session is running. */
     @Synchronized
     fun activeUsage(): LightAudioUsage? = sessionUsage
+
+    /**
+     * Leaves the caches a starting service should build its player with.
+     *
+     * Connection hints cannot carry these. The system constructs the service and
+     * `onCreate` builds the player there, which happens before any controller
+     * connects — so the only channel that arrives in time is this process-local
+     * state, written by `newPlayer` before it asks for a controller at all.
+     */
+    @Synchronized
+    fun stageCaches(caches: List<LightMediaCache>) {
+        stagedCaches = caches
+    }
+
+    /** Service side: the caches left for the player being constructed. */
+    @Synchronized
+    fun stagedCaches(): List<LightMediaCache> = stagedCaches
+
+    /** Service side: the live session settled on the caches it was built with. */
+    @Synchronized
+    fun adoptCaches(caches: List<LightMediaCache>) {
+        sessionCaches = caches
+        stagedCaches = emptyList()
+    }
+
+    /** The live session's caches, or `null` when no session is running. */
+    @Synchronized
+    fun activeCaches(): List<LightMediaCache>? = sessionCaches
 }
 
 internal val detachedSessionState = DetachedSessionState()
@@ -80,3 +112,17 @@ internal fun isDetachedUsageCompatible(
     activeUsage: LightAudioUsage?,
     requestedUsage: LightAudioUsage,
 ): Boolean = activeUsage == null || activeUsage == requestedUsage
+
+/**
+ * Whether a connecting handle's caches match the ones the live session was
+ * built with.
+ *
+ * A live session already has its player, and a player cannot be told to read
+ * from somewhere else afterwards. Asking is therefore either redundant or
+ * impossible, and the difference is worth a thrown error rather than a player
+ * that quietly caches nothing the tool asked for.
+ */
+internal fun isDetachedCacheCompatible(
+    activeCaches: List<LightMediaCache>?,
+    requestedCaches: List<LightMediaCache>,
+): Boolean = activeCaches == null || activeCaches == requestedCaches

@@ -3,6 +3,7 @@ package com.thelightphone.sdk.audio
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -10,7 +11,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import java.io.File
@@ -45,6 +46,7 @@ class LightAudioPlayer internal constructor(
     context: Context,
     usage: LightAudioUsage = LightAudioUsage.Music,
     internal val playback: LightAudioPlayback = LightAudioPlayback.Attached,
+    caches: List<LightMediaCache> = emptyList(),
     private val onRelease: () -> Unit = {},
 ) {
     private val scopeJob = SupervisorJob()
@@ -78,11 +80,9 @@ class LightAudioPlayer internal constructor(
 
     init {
         when (playback) {
-            LightAudioPlayback.Attached -> connectPlayer(
-                ExoPlayer.Builder(context).build().apply {
-                    setAudioAttributes(usage.toMedia3AudioAttributes(), true)
-                },
-            )
+            LightAudioPlayback.Attached ->
+                connectPlayer(buildSdkExoPlayer(context, usage, caches))
+            // The detached player was built by the service from staged caches.
             LightAudioPlayback.Detached -> connectDetachedPlayer(context, usage)
         }
     }
@@ -409,9 +409,13 @@ internal suspend fun awaitPlayerReady(
 ): Boolean = availability.first { it != LightAudioPlayerAvailability.Initializing } ==
     LightAudioPlayerAvailability.Ready
 
+@OptIn(UnstableApi::class)
 internal fun LightAudioItem.toMediaItem(): MediaItem = MediaItem.Builder()
     .setUri(Uri.parse(source.uriString()))
     .setMediaId(stableId())
+    // Files cached bytes under the item's identity rather than its location, so
+    // a re-resolved URL still finds what the old one cached.
+    .setCustomCacheKey(stableId())
     .setMediaMetadata(metadata.toMedia3Metadata())
     .build()
 

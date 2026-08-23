@@ -9,6 +9,7 @@ import com.thelightphone.sdk.audio.LightAudioPlayback
 import com.thelightphone.sdk.audio.LightAudioRecorder
 import com.thelightphone.sdk.audio.LightAudioUsage
 import com.thelightphone.sdk.audio.LightAudioVoice
+import com.thelightphone.sdk.audio.LightMediaCache
 import com.thelightphone.sdk.audio.RecorderConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -30,6 +31,7 @@ class ToneScreenTest {
             override fun newPlayer(
                 usage: LightAudioUsage,
                 playback: LightAudioPlayback,
+                caches: List<LightMediaCache>,
             ): LightAudioPlayer {
                 TODO("Should not be called")
             }
