@@ -260,6 +260,13 @@ class LightSdkPlugin : Plugin<Project> {
             throw GradleException("Light SDK: ${e.message}")
         }
 
+        // A capability may need code the SDK does not ship to every tool. Added
+        // here rather than written by the tool, for the same reason its
+        // permissions are: the capability is the single source of truth.
+        metadata.capabilities
+            .flatMap { LightToolPolicy.CAPABILITY_IMPLIED_DEPENDENCIES[it].orEmpty() }
+            .forEach { project.dependencies.add("implementation", it) }
+
         // Generated manifest path. Anchored under build/ so a clean rebuild
         // always regenerates from current metadata.
         val generatedManifestDir = File(project.layout.buildDirectory.asFile.get(), "generated/light-sdk")

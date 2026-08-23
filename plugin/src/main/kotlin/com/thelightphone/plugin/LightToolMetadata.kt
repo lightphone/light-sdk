@@ -188,8 +188,29 @@ object LightToolPolicy {
     )
 
     const val DETACHED_AUDIO: String = "detached-audio"
+    const val AUDIO_DASH: String = "audio-dash"
 
-    val ALLOWED_CAPABILITIES: Set<String> = setOf(DETACHED_AUDIO)
+    val ALLOWED_CAPABILITIES: Set<String> = setOf(DETACHED_AUDIO, AUDIO_DASH)
+
+    /**
+     * The media3 version the SDK is built against. A capability dependency has
+     * to name one, and it has to be this one, or the tool would resolve a media3
+     * split across two versions. `Media3VersionTest` fails if it drifts from the
+     * version catalog.
+     */
+    const val MEDIA3_VERSION: String = "1.10.1"
+
+    /**
+     * Dependencies a capability puts on the tool's classpath.
+     *
+     * Format support is a dependency rather than a switch: media3 finds a
+     * DASH source by looking for one, so shipping it to every tool would cost
+     * every tool size for a format almost none of them play. The capability is
+     * how a tool says it is one of the few.
+     */
+    val CAPABILITY_IMPLIED_DEPENDENCIES: Map<String, List<String>> = mapOf(
+        AUDIO_DASH to listOf("androidx.media3:media3-exoplayer-dash:$MEDIA3_VERSION"),
+    )
 
     /**
      * Permissions a capability contributes to the generated manifest. These are
