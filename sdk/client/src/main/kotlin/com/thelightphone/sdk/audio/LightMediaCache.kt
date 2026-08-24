@@ -3,17 +3,11 @@ package com.thelightphone.sdk.audio
 /**
  * A named on-disk store of media bytes, kept under the tool's own storage.
  *
- * A cache is described rather than handed over: the SDK opens the store, wires
- * it into the player it builds, and shares one store per directory across the
- * tool process. Two players naming the same cache read and write the same
- * bytes, and a cache outlives every player that fills it.
+ * The SDK opens the store, wires it into the player it builds, and shares one
+ * per directory across the process. Bytes are filed under [LightAudioItem.id],
+ * so an item whose location changes still finds what it cached.
  *
- * Caches are named so that bytes can be found again. Bytes are filed under
- * [LightAudioItem.id], so an item whose location changes still finds what it
- * cached — which is what makes a cache useful for audio behind expiring URLs.
- *
- * @property name identifies the store and its directory. Letters, digits, `-`,
- *   and `_` only, since it names a directory
+ * @property name directory name: letters, digits, `-`, and `_` only
  * @property eviction what the store does when it runs out of room
  */
 data class LightMediaCache(
@@ -33,8 +27,7 @@ sealed interface LightCacheEviction {
     /**
      * Discards the bytes read longest ago to stay under [maxBytes].
      *
-     * This is where the SDK writes what it streams, so a player with no such
-     * cache caches nothing the SDK fetched.
+     * This is where the SDK writes what it streams.
      */
     data class LeastRecentlyUsed(val maxBytes: Long) : LightCacheEviction {
         init {
@@ -43,28 +36,13 @@ sealed interface LightCacheEviction {
     }
 
     /**
-     * Discards nothing, leaving the tool to decide what to delete and when.
-     *
-     * The SDK never writes here: streaming into a store that never evicts would
-     * pin every byte played, which is a decision only the tool can make. A
-     * [LightMediaSourceFactory] can write here, since a tool supplying its own
-     * pipeline is already deciding what to keep.
+     * Discards nothing. The SDK never writes here during streaming; a
+     * [LightMediaSourceFactory] may.
      */
     data object Never : LightCacheEviction
 }
 
-/**
- * Rejects cache lists that cannot mean one thing.
- *
- * Names have to be distinct however the caches are used, since a name is a
- * directory and two of them would be one store under two descriptions.
- *
- * The single-writer rule is narrower. It exists because the SDK's own read path
- * has to pick one cache to stream into, and two size-limited caches leave that
- * unsaid. A [hasCustomSource] tool does its own writing and can reasonably fill
- * several stores, so the rule would only be the SDK legislating a decision it
- * no longer makes.
- */
+/** Distinct names always. At most one LRU unless [hasCustomSource] is writing. */
 internal fun validateMediaCaches(caches: List<LightMediaCache>, hasCustomSource: Boolean) {
     val names = caches.map(LightMediaCache::name)
     require(names.size == names.toSet().size) {

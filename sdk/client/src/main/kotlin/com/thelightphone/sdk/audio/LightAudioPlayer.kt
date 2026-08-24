@@ -84,7 +84,6 @@ class LightAudioPlayer internal constructor(
         when (playback) {
             LightAudioPlayback.Attached ->
                 connectPlayer(buildSdkExoPlayer(context, usage, caches, sourceFactory))
-            // The detached player was built by the service from staged caches.
             LightAudioPlayback.Detached -> connectDetachedPlayer(context, usage)
         }
     }
@@ -273,12 +272,8 @@ class LightAudioPlayer internal constructor(
 
     /**
      * Replaces the item at [index] with [item]. An [index] past the end changes
-     * nothing.
-     *
-     * Replacing the current item keeps playing it until the new source is ready,
-     * which is what makes this the way to swap in a re-resolved URL for audio
-     * that is already playing. Give both items the same [LightAudioItem.id] so
-     * the swap reads as one continuing track rather than two.
+     * nothing. Give both items the same [LightAudioItem.id] when swapping a
+     * re-resolved URL for audio that is already playing.
      *
      * @throws IllegalArgumentException when [index] is negative
      */
@@ -397,10 +392,7 @@ class LightAudioPlayer internal constructor(
         _durationMs.value = state.durationMs
     }
 
-    /**
-     * A player that has never been prepared, or was stopped, ignores its queue
-     * until asked again. Adding to such a queue reads as "play this", so ask.
-     */
+    /** Prepare after a mutation if the player is idle. */
     private fun prepareIfIdle(player: Player) {
         if (player.playbackState == Player.STATE_IDLE) player.prepare()
     }
@@ -415,8 +407,6 @@ internal suspend fun awaitPlayerReady(
 internal fun LightAudioItem.toMediaItem(): MediaItem = MediaItem.Builder()
     .setUri(Uri.parse(source.uriString()))
     .setMediaId(stableId())
-    // Files cached bytes under the item's identity rather than its location, so
-    // a re-resolved URL still finds what the old one cached.
     .setCustomCacheKey(stableId())
     .setMediaMetadata(metadata.toMedia3Metadata())
     .build()

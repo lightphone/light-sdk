@@ -85,14 +85,7 @@ internal class DetachedSessionState {
     @Synchronized
     fun activeUsage(): LightAudioUsage? = sessionUsage
 
-    /**
-     * Leaves the caches a starting service should build its player with.
-     *
-     * Connection hints cannot carry these. The system constructs the service and
-     * `onCreate` builds the player there, which happens before any controller
-     * connects — so the only channel that arrives in time is this process-local
-     * state, written by `newPlayer` before it asks for a controller at all.
-     */
+    /** Staged for the service to read in `onCreate`. */
     @Synchronized
     fun stageCaches(caches: List<LightMediaCache>) {
         stagedCaches = caches
@@ -113,23 +106,16 @@ internal class DetachedSessionState {
     @Synchronized
     fun activeCaches(): List<LightMediaCache>? = sessionCaches
 
-    /** Leaves the source factory a starting service should build its player with. */
+    /** Staged for the service to read in `onCreate`. */
     @Synchronized
     fun stageSourceFactory(factory: LightMediaSourceFactory?) {
         stagedSourceFactory = factory
     }
 
-    /** Service side: the factory left for the player being constructed. */
     @Synchronized
     fun stagedSourceFactory(): LightMediaSourceFactory? = stagedSourceFactory
 
-    /**
-     * Service side: the live session settled on its read path.
-     *
-     * Only whether there was a factory is kept. The factory itself is dropped,
-     * because holding a tool's lambda past construction would outlive the screen
-     * that supplied it for no gain: it can never be applied to a second player.
-     */
+    /** Records whether a factory was used, then drops the lambda. */
     @Synchronized
     fun adoptSourceFactory(present: Boolean) {
         sessionHasSourceFactory = present
@@ -148,29 +134,12 @@ internal fun isDetachedUsageCompatible(
     requestedUsage: LightAudioUsage,
 ): Boolean = activeUsage == null || activeUsage == requestedUsage
 
-/**
- * Whether a connecting handle's caches match the ones the live session was
- * built with.
- *
- * A live session already has its player, and a player cannot be told to read
- * from somewhere else afterwards. Asking is therefore either redundant or
- * impossible, and the difference is worth a thrown error rather than a player
- * that quietly caches nothing the tool asked for.
- */
 internal fun isDetachedCacheCompatible(
     activeCaches: List<LightMediaCache>?,
     requestedCaches: List<LightMediaCache>,
 ): Boolean = activeCaches == null || activeCaches == requestedCaches
 
-/**
- * Whether a connecting handle may bring a source factory.
- *
- * Caches can be compared, so a reconnect that asks for the same ones is allowed
- * through. Two factories that would build the same pipeline are
- * indistinguishable from two that would not, so there is no equivalent check to
- * make: reconnecting to a live session means accepting the read path it already
- * has, and the only honest way to say that is to require no factory at all.
- */
+/** Live sessions already have a factory; reconnect must pass none. */
 @OptIn(UnstableApi::class)
 internal fun isDetachedSourceFactoryCompatible(
     activeSourceFactoryPresence: Boolean?,

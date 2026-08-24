@@ -87,8 +87,6 @@ value class DefaultLightAudio(
                 "Only one detached LightAudioPlayer may exist at a time; release the existing player first"
             )
         }
-        // Staged before the controller is built, because building it is what
-        // starts the service that reads this.
         detachedSessionState.stageCaches(caches)
         detachedSessionState.stageSourceFactory(sourceFactory)
         return try {

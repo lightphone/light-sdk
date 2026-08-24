@@ -35,11 +35,7 @@ internal class LightAudioService : MediaSessionService() {
 
         assertSharedProcess()
 
-        // Whatever the starting handle staged, taken now because a player cannot
-        // be told where to read from once it exists. A session the system
-        // revived rather than a tool started has nothing staged, and records
-        // that, so a later handle asking for caches is refused rather than
-        // silently given a player that has none.
+        // Whatever the starting handle staged. Empty if the system revived the service.
         val caches = detachedSessionState.stagedCaches()
         val sourceFactory = detachedSessionState.stagedSourceFactory()
         player = buildSdkExoPlayer(this, LightAudioUsage.Music, caches, sourceFactory).apply {

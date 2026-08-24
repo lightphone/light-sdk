@@ -62,9 +62,7 @@ dependencies {
     api(libs.androidx.room.runtime)
     api(libs.androidx.room.ktx)
     implementation(libs.androidx.work.runtime)
-    // api, not implementation: LightMediaSourceFactory hands tools a media3
-    // MediaSource.Factory and opened Cache, so those types are part of the
-    // audio API for any tool whose audio media3 cannot fetch by itself.
+    // api: LightMediaSourceFactory exposes media3 types to tools.
     api(libs.androidx.media3.common)
     api(libs.androidx.media3.exoplayer)
     api(libs.androidx.media3.datasource)

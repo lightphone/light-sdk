@@ -188,13 +188,11 @@ val player = audio.newPlayer(
 )
 ```
 
-A source factory replaces the SDK's read path rather than layering onto it, since a tool reaching for one has already said media3 cannot fetch this audio. Requested caches are still opened and handed over in `env`, so the tool can bank into the same stores playback reads from. That also means the tool decides what it writes, and the one-size-limited-cache rule does not apply.
+A source factory replaces the SDK's HTTP read path. Requested caches are still opened and handed over in `env`. The one-size-limited-cache rule does not apply.
 
-The SDK keeps the output half either way: audio attributes, focus, the media session, and the queue belong to the player it builds.
+Do not capture UI state: in detached playback the factory runs inside the service. Reconnecting to a live session must pass `sourceFactory = null`.
 
-Because construction happens inside the service for detached playback, the factory outlives the screen that installed it and must not capture UI state. A live detached session already has its read path, so reconnecting to one must pass `sourceFactory = null`; anything else throws `LightAudioPlayerException`.
-
-Using this means working with media3 types (`MediaSource.Factory`, `Cache`, `DataSource.Factory`) directly, which is why they are exposed rather than hidden. Tools that only play URLs never need it.
+This exposes media3 types (`MediaSource.Factory`, `Cache`, `DataSource.Factory`). Tools that only play URLs never need it.
 
 ##### Streaming DASH
 

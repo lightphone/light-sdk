@@ -260,9 +260,6 @@ class LightSdkPlugin : Plugin<Project> {
             throw GradleException("Light SDK: ${e.message}")
         }
 
-        // A capability may need code the SDK does not ship to every tool. Added
-        // here rather than written by the tool, for the same reason its
-        // permissions are: the capability is the single source of truth.
         metadata.capabilities
             .flatMap { LightToolPolicy.CAPABILITY_IMPLIED_DEPENDENCIES[it].orEmpty() }
             .forEach { project.dependencies.add("implementation", it) }

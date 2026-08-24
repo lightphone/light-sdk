@@ -57,11 +57,7 @@ class AudioDashCapabilityTest {
         )
     }
 
-    /**
-     * A tool resolving one media3 version for the SDK and another for its DASH
-     * source is the failure this guards, and nothing in the build would catch
-     * it: both versions exist and both resolve.
-     */
+    /** Keep the plugin's media3 version in sync with the catalog. */
     @Test
     fun `the hardcoded media3 version tracks the version catalog`() {
         val catalog = File(System.getProperty("light.versionCatalog"))

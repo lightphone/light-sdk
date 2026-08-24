@@ -60,10 +60,6 @@ class LightMediaCacheTest {
         }
     }
 
-    /**
-     * The single-writer rule speaks for the SDK's read path. A tool supplying
-     * its own decides for itself which stores it fills.
-     */
     @Test
     fun aCustomSourceMayFillSeveralSizeLimitedCaches() {
         validateMediaCaches(
@@ -91,10 +87,6 @@ class DetachedSessionCacheTest {
         )
     }
 
-    /**
-     * The service reads staged caches in `onCreate`, which is why they are left
-     * behind before a controller is ever built.
-     */
     @Test
     fun stagedCachesSurviveUntilTheServiceBuildsItsPlayer() {
         val state = DetachedSessionState()
@@ -139,10 +131,6 @@ class DetachedSessionCacheTest {
 }
 
 class DetachedSourceFactoryTest {
-    /**
-     * Two factories cannot be compared, so a live session accepts none rather
-     * than pretending to check the one it is offered.
-     */
     @Test
     fun aLiveSessionAcceptsAReconnectOnlyWithoutAFactory() {
         assertTrue(isDetachedSourceFactoryCompatible(null, someSourceFactory))
@@ -162,7 +150,6 @@ class DetachedSourceFactoryTest {
         assertNull(state.activeSourceFactoryPresence())
     }
 
-    /** The lambda is dropped once used; only the fact of it is worth keeping. */
     @Test
     fun adoptingRecordsPresenceAndReleasesTheFactory() {
         val state = DetachedSessionState()
