@@ -42,11 +42,13 @@ enum class LightAudioPlayerAvailability {
  * Transient focus loss pauses and later resumes playback; duckable loss lowers
  * volume. Call [release] when the owning screen is destroyed.
  */
+@OptIn(UnstableApi::class)
 class LightAudioPlayer internal constructor(
     context: Context,
     usage: LightAudioUsage = LightAudioUsage.Music,
     internal val playback: LightAudioPlayback = LightAudioPlayback.Attached,
     caches: List<LightMediaCache> = emptyList(),
+    sourceFactory: LightMediaSourceFactory? = null,
     private val onRelease: () -> Unit = {},
 ) {
     private val scopeJob = SupervisorJob()
@@ -81,7 +83,7 @@ class LightAudioPlayer internal constructor(
     init {
         when (playback) {
             LightAudioPlayback.Attached ->
-                connectPlayer(buildSdkExoPlayer(context, usage, caches))
+                connectPlayer(buildSdkExoPlayer(context, usage, caches, sourceFactory))
             // The detached player was built by the service from staged caches.
             LightAudioPlayback.Detached -> connectDetachedPlayer(context, usage)
         }

@@ -167,11 +167,34 @@ val player = audio.newPlayer(
 )
 ```
 
-Caches are consulted in the order given, and only then the network. Newly streamed bytes are written to the size-limited cache, so at most one cache may be size-limited and a player without one caches nothing it streams. A cache that never evicts is only read during playback; what goes in it is up to the tool.
+Caches are consulted in the order given, and only then the network. Newly streamed bytes are written to the size-limited cache, so at most one cache may be size-limited and a player without one caches nothing it streams. The SDK never writes to a cache that never evicts, since streaming into one would pin every byte played; filling it is the tool's decision, through a source factory or by writing the store directly.
 
 Cached bytes are filed under `LightAudioItem.id`, so an item whose URL is re-resolved still finds what it already cached. Files and bundled assets bypass caching, since they are already on the device.
 
 A detached session's caches are fixed when its player is built. Reconnecting with a different set throws `LightAudioPlayerException`, the same way a conflicting `LightAudioUsage` does.
+
+##### Audio media3 cannot fetch
+
+A cache says where bytes are kept, which is enough when media3 can fetch them itself. Audio that has to be decrypted or pulled out of a session your tool owns cannot be described that way, so supply the read path instead:
+
+```kotlin
+val player = audio.newPlayer(
+    caches = listOf(LightMediaCache("stream", LightCacheEviction.LeastRecentlyUsed(64L * 1024 * 1024))),
+    sourceFactory = { env ->
+        // env.caches["stream"] is already open; env.dataSourceFactory reads
+        // files, assets, and HTTP with no caching of its own.
+        MyDecryptingMediaSourceFactory(env.caches.getValue("stream"))
+    },
+)
+```
+
+A source factory replaces the SDK's read path rather than layering onto it, since a tool reaching for one has already said media3 cannot fetch this audio. Requested caches are still opened and handed over in `env`, so the tool can bank into the same stores playback reads from. That also means the tool decides what it writes, and the one-size-limited-cache rule does not apply.
+
+The SDK keeps the output half either way: audio attributes, focus, the media session, and the queue belong to the player it builds.
+
+Because construction happens inside the service for detached playback, the factory outlives the screen that installed it and must not capture UI state. A live detached session already has its read path, so reconnecting to one must pass `sourceFactory = null`; anything else throws `LightAudioPlayerException`.
+
+Using this means working with media3 types (`MediaSource.Factory`, `Cache`, `DataSource.Factory`) directly, which is why they are exposed rather than hidden. Tools that only play URLs never need it.
 
 ##### Streaming DASH
 

@@ -1,5 +1,8 @@
 package com.thelightphone.sdk.audio
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
+
 /**
  * The one detached session a tool process can have.
  *
@@ -22,11 +25,14 @@ package com.thelightphone.sdk.audio
  * would stop itself 60s into any pause with a tool still attached. The service
  * asserts its process on startup rather than letting that happen quietly.
  */
+@OptIn(UnstableApi::class)
 internal class DetachedSessionState {
     private var handleOpen = false
     private var sessionUsage: LightAudioUsage? = null
     private var stagedCaches: List<LightMediaCache> = emptyList()
     private var sessionCaches: List<LightMediaCache>? = null
+    private var stagedSourceFactory: LightMediaSourceFactory? = null
+    private var sessionHasSourceFactory: Boolean? = null
     private var handleChanged: (() -> Unit)? = null
 
     /** Takes the single detached handle, or fails when one is already out. */
@@ -71,6 +77,8 @@ internal class DetachedSessionState {
         sessionUsage = null
         sessionCaches = null
         stagedCaches = emptyList()
+        sessionHasSourceFactory = null
+        stagedSourceFactory = null
     }
 
     /** The live session's usage, or `null` when no session is running. */
@@ -104,6 +112,33 @@ internal class DetachedSessionState {
     /** The live session's caches, or `null` when no session is running. */
     @Synchronized
     fun activeCaches(): List<LightMediaCache>? = sessionCaches
+
+    /** Leaves the source factory a starting service should build its player with. */
+    @Synchronized
+    fun stageSourceFactory(factory: LightMediaSourceFactory?) {
+        stagedSourceFactory = factory
+    }
+
+    /** Service side: the factory left for the player being constructed. */
+    @Synchronized
+    fun stagedSourceFactory(): LightMediaSourceFactory? = stagedSourceFactory
+
+    /**
+     * Service side: the live session settled on its read path.
+     *
+     * Only whether there was a factory is kept. The factory itself is dropped,
+     * because holding a tool's lambda past construction would outlive the screen
+     * that supplied it for no gain: it can never be applied to a second player.
+     */
+    @Synchronized
+    fun adoptSourceFactory(present: Boolean) {
+        sessionHasSourceFactory = present
+        stagedSourceFactory = null
+    }
+
+    /** Whether the live session has a custom read path, or `null` when idle. */
+    @Synchronized
+    fun activeSourceFactoryPresence(): Boolean? = sessionHasSourceFactory
 }
 
 internal val detachedSessionState = DetachedSessionState()
@@ -126,3 +161,18 @@ internal fun isDetachedCacheCompatible(
     activeCaches: List<LightMediaCache>?,
     requestedCaches: List<LightMediaCache>,
 ): Boolean = activeCaches == null || activeCaches == requestedCaches
+
+/**
+ * Whether a connecting handle may bring a source factory.
+ *
+ * Caches can be compared, so a reconnect that asks for the same ones is allowed
+ * through. Two factories that would build the same pipeline are
+ * indistinguishable from two that would not, so there is no equivalent check to
+ * make: reconnecting to a live session means accepting the read path it already
+ * has, and the only honest way to say that is to require no factory at all.
+ */
+@OptIn(UnstableApi::class)
+internal fun isDetachedSourceFactoryCompatible(
+    activeSourceFactoryPresence: Boolean?,
+    requestedFactory: LightMediaSourceFactory?,
+): Boolean = activeSourceFactoryPresence == null || requestedFactory == null

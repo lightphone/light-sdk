@@ -33,8 +33,8 @@ sealed interface LightCacheEviction {
     /**
      * Discards the bytes read longest ago to stay under [maxBytes].
      *
-     * This is where newly streamed bytes land, so a player with no such cache
-     * caches nothing it streams.
+     * This is where the SDK writes what it streams, so a player with no such
+     * cache caches nothing the SDK fetched.
      */
     data class LeastRecentlyUsed(val maxBytes: Long) : LightCacheEviction {
         init {
@@ -45,8 +45,10 @@ sealed interface LightCacheEviction {
     /**
      * Discards nothing, leaving the tool to decide what to delete and when.
      *
-     * Playback only ever reads such a store, so it holds what the tool put
-     * there deliberately rather than whatever was played recently.
+     * The SDK never writes here: streaming into a store that never evicts would
+     * pin every byte played, which is a decision only the tool can make. A
+     * [LightMediaSourceFactory] can write here, since a tool supplying its own
+     * pipeline is already deciding what to keep.
      */
     data object Never : LightCacheEviction
 }
@@ -54,16 +56,24 @@ sealed interface LightCacheEviction {
 /**
  * Rejects cache lists that cannot mean one thing.
  *
- * Reads consult caches in the order given, so the list is already an ordering.
- * What it must not also be is ambiguous about where bytes are written, which
- * two size-limited caches would make it.
+ * Names have to be distinct however the caches are used, since a name is a
+ * directory and two of them would be one store under two descriptions.
+ *
+ * The single-writer rule is narrower. It exists because the SDK's own read path
+ * has to pick one cache to stream into, and two size-limited caches leave that
+ * unsaid. A [hasCustomSource] tool does its own writing and can reasonably fill
+ * several stores, so the rule would only be the SDK legislating a decision it
+ * no longer makes.
  */
-internal fun validateMediaCaches(caches: List<LightMediaCache>) {
+internal fun validateMediaCaches(caches: List<LightMediaCache>, hasCustomSource: Boolean) {
     val names = caches.map(LightMediaCache::name)
     require(names.size == names.toSet().size) {
         "Each cache must have a distinct name, but got $names"
     }
-    require(caches.count { it.eviction is LightCacheEviction.LeastRecentlyUsed } <= 1) {
+    require(
+        hasCustomSource ||
+            caches.count { it.eviction is LightCacheEviction.LeastRecentlyUsed } <= 1
+    ) {
         "At most one cache may be size-limited, since that is the one written while streaming"
     }
 }

@@ -22,26 +22,42 @@ import java.util.concurrent.ConcurrentHashMap
  * Builds the player the SDK owns, in the one place both playback modes reach.
  *
  * Attached players build here, and so does [LightAudioService] in `onCreate`.
- * Caches have to be settled by now: where a player reads bytes from is a
- * constructor argument, so unlike [LightAudioUsage] it cannot be applied to a
- * player that already exists.
+ * Caches and [sourceFactory] have to be settled by now: where a player reads
+ * bytes from is a constructor argument, so unlike [LightAudioUsage] it cannot
+ * be applied to a player that already exists.
+ *
+ * A [sourceFactory] replaces the SDK's own read path rather than layering onto
+ * it. The tool is saying media3 cannot fetch this audio unaided, so wrapping
+ * its answer in the SDK's HTTP pipeline would only put a fetcher it already
+ * rejected back in front of it. The caches still open, and the factory gets
+ * them, so opting out of the read path does not mean opting out of storage.
  */
 @OptIn(UnstableApi::class)
 internal fun buildSdkExoPlayer(
     context: Context,
     usage: LightAudioUsage,
     caches: List<LightMediaCache>,
+    sourceFactory: LightMediaSourceFactory? = null,
 ): ExoPlayer {
     val builder = ExoPlayer.Builder(context)
-    if (caches.isNotEmpty()) {
-        builder.setMediaSourceFactory(
-            DefaultMediaSourceFactory(cachingDataSourceFactory(context, caches))
+    val opened = caches.associate { it.name to mediaCacheStore.open(context, it) }
+    when {
+        sourceFactory != null -> builder.setMediaSourceFactory(
+            sourceFactory.create(LightMediaEnv(opened, platformDataSourceFactory(context)))
+        )
+        caches.isNotEmpty() -> builder.setMediaSourceFactory(
+            DefaultMediaSourceFactory(cachingDataSourceFactory(context, caches, opened))
         )
     }
     return builder.build().apply {
         setAudioAttributes(usage.toMedia3AudioAttributes(), true)
     }
 }
+
+/** Everything the platform can read without help, and nothing cached. */
+@OptIn(UnstableApi::class)
+private fun platformDataSourceFactory(context: Context): DataSource.Factory =
+    DefaultDataSource.Factory(context, DefaultHttpDataSource.Factory())
 
 /**
  * Puts the tool's caches between the network and the player, consulted in the
@@ -56,11 +72,12 @@ internal fun buildSdkExoPlayer(
 private fun cachingDataSourceFactory(
     context: Context,
     caches: List<LightMediaCache>,
+    opened: Map<String, Cache>,
 ): DataSource.Factory {
     var network: DataSource.Factory = DefaultHttpDataSource.Factory()
     for (cache in caches.asReversed()) {
         val factory = CacheDataSource.Factory()
-            .setCache(mediaCacheStore.open(context, cache))
+            .setCache(requireNotNull(opened[cache.name]))
             .setUpstreamDataSourceFactory(network)
             // A cache that cannot serve a read should cost latency, not playback.
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)

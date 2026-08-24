@@ -126,6 +126,8 @@ Such configuration goes through `DetachedSessionState` instead. The tool stages 
 
 Because construction is the only chance, a live session's caches cannot be adopted the way its usage can. Reconnecting with a different set throws rather than being silently ignored, and a session the system revived rather than a tool started records that it was built without caches, so a later handle asking for them is refused instead of being handed a player that has none.
 
+`LightMediaSourceFactory` travels the same way, with one difference. Caches are data and can be compared, so a reconnect asking for the same ones is allowed through. Two factories are indistinguishable whether or not they would build the same pipeline, so there is no comparison to make: a reconnecting handle must pass no factory at all, and the service keeps only whether the live session had one. The lambda itself is dropped once the player exists, since it can never be applied to a second one.
+
 ## Foreground-service notification on LP3
 
 Android requires a media-playback foreground service to publish a notification.
