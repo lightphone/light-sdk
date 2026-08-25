@@ -79,11 +79,11 @@ dependencies {
 
 /**
  * Uploads the debug APK to a device/emulator running the Light SDK server, via the
- * "developer" file manager branch (see ApkInboxDataTree.kt in sdk/server), and waits for
+ * "developer" tool manager branch (see DeveloperModeDataTree.kt in sdk/server), and waits for
  * the device to report that the tool was (re)installed.
  *
  * Usage:
- *   ./gradlew :tool:uploadTool -Pdevice.host=192.168.1.42 -Pdevice.token=<bearer token> \
+ *   ./gradlew :tool:uploadTool -Pdevice.ip=192.168.1.42 -Pdevice.token=<bearer token> \
  *       [-Pdevice.port=54449] [-Pdevice.timeoutSeconds=60]
  */
 abstract class UploadToolTask : DefaultTask() {
@@ -95,7 +95,7 @@ abstract class UploadToolTask : DefaultTask() {
     abstract val packageName: Property<String>
 
     @get:Internal
-    abstract val host: Property<String>
+    abstract val ipAddress: Property<String>
 
     @get:Internal
     abstract val port: Property<Int>
@@ -129,15 +129,15 @@ abstract class UploadToolTask : DefaultTask() {
             .build()
     }
 
-    private fun baseUrl() = "https://${host.get()}:${port.get()}"
+    private fun localIpHost(ip: String) = "${ip.replace(".", "-")}.my.local-ip.co"
+
+    private fun baseUrl() = "https://${localIpHost(ipAddress.get())}:${port.get()}"
 
     private fun authedRequest(uri: URI): HttpRequest.Builder =
         HttpRequest.newBuilder(uri).header("Authorization", "Bearer ${token.get()}")
 
     // Server serializes the tools list as {"tools":[{"packageName":"...","lastUpdateMillis":n},...]}
-    // in declaration order (ApkInboxDataTree.ToolMeta). A build script doesn't get the
-    // kotlinx-serialization compiler plugin applied, so rather than pull one in just for
-    // this, match the known shape directly.
+    // in declaration order (ApkInboxDataTree.ToolMeta).
     private fun extractLastUpdateMillis(json: String, packageName: String): Long? {
         val pattern = Regex(
             "\\{\"packageName\":\"${Regex.escape(packageName)}\",\"lastUpdateMillis\":(\\d+)\\}"
@@ -148,7 +148,7 @@ abstract class UploadToolTask : DefaultTask() {
     @TaskAction
     fun upload() {
         val missing = listOfNotNull(
-            "device.host".takeUnless { host.isPresent },
+            "device.ip".takeUnless { ipAddress.isPresent },
             "device.token".takeUnless { token.isPresent },
         )
         if (missing.isNotEmpty()) {
@@ -174,7 +174,7 @@ abstract class UploadToolTask : DefaultTask() {
             return extractLastUpdateMillis(response.body(), pkg)
         }
 
-        logger.lifecycle("Checking current install state of $pkg on ${host.get()}:${port.get()}...")
+        logger.lifecycle("Checking current install state of $pkg on ${ipAddress.get()}:${port.get()}...")
         val before = fetchLastUpdateMillis()
         logger.lifecycle(
             if (before == null) "$pkg is not currently installed on the device."
@@ -229,7 +229,7 @@ tasks.register<UploadToolTask>("uploadTool") {
 
     apkDir.set(layout.buildDirectory.dir("outputs/apk/debug"))
     packageName.set(requireNotNull(android.defaultConfig.applicationId) { "applicationId is not set" })
-    host.set(providers.gradleProperty("device.host").orElse("127-0-0-1.my.local-ip.co"))
+    ipAddress.set(providers.gradleProperty("device.ip").orElse("127.0.0.1"))
     port.set(providers.gradleProperty("device.port").map { it.toInt() }.orElse(54449))
     token.set(providers.gradleProperty("device.token").orElse("testKeyPassword"))
     timeoutSeconds.set(providers.gradleProperty("device.timeoutSeconds").map { it.toLong() }.orElse(60L))

@@ -120,7 +120,7 @@ class ToolManagerActivity : ComponentActivity() {
     private fun showServiceState() {
         val service = toolManagerService ?: return
         if (!service.isRunning) {
-            statusText = "Failed to start file manager"
+            statusText = "Failed to start tool manager"
             return
         }
         // in the emulator, the server is only reachable via localhost on the host machine
@@ -130,10 +130,10 @@ class ToolManagerActivity : ComponentActivity() {
         // adb forward tcp:54449 tcp:54449
         val url = service.getHttpsUrl(InetAddress.getByName("localhost"))
         if (url.isNullOrEmpty()) {
-            statusText = "Failed to start file manager"
+            statusText = "Failed to start tool manager"
             return
         }
-        Log.d(TAG, "File manager running at $url")
+        Log.d(TAG, "Tool manager running at $url")
         toolManagerUrl = url
     }
 
@@ -144,8 +144,8 @@ class ToolManagerActivity : ComponentActivity() {
                 delay(2000)
                 val service = toolManagerService
                 if (service != null && !service.isRunning) {
-                    statusText = "File manager has stopped running."
-                    Log.e(TAG, "File manager terminated")
+                    statusText = "Tool manager has stopped running."
+                    Log.e(TAG, "Tool manager terminated")
                     cancel()
                 }
             }
@@ -166,7 +166,7 @@ private fun ToolManagerScreen(
                 onClick = onBack,
                 contentDescription = "Back",
             ),
-            center = LightTopBarCenter.Text("File Manager"),
+            center = LightTopBarCenter.Text("Tool Manager"),
             modifier = Modifier.padding(bottom = 0.25f.gridUnitsAsDp()),
         )
         Box(

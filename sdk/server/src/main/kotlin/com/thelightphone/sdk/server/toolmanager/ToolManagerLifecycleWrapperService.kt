@@ -102,7 +102,7 @@ class ToolManagerLifecycleWrapperService : Service() {
         if (!toolManagerService.isRunning) {
             val started = toolManagerService.start()
             if (!started) {
-                Log.e(TAG, "File manager failed to start")
+                Log.e(TAG, "Tool manager failed to start")
                 stopSelf()
             }
         }
@@ -116,7 +116,7 @@ class ToolManagerLifecycleWrapperService : Service() {
         serviceRunning = false
         application.unregisterActivityLifecycleCallbacks(autoForegroundCallback)
         toolManagerService.stop()
-        Log.d(TAG, "onDestroy: file manager stopped")
+        Log.d(TAG, "onDestroy: tool manager stopped")
     }
 
     fun getHttpsUrl(hostOverride: InetAddress? = null): String? = toolManagerService.getHttpsUrl(hostOverride)

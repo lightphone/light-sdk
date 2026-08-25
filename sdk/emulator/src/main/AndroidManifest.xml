@@ -29,6 +29,6 @@
             android:name=".ToolManagerActivity"
             android:exported="false"
             android:launchMode="singleTask"
-            android:label="File Manager" />
+            android:label="Tool Manager" />
     </application>
 </manifest>
