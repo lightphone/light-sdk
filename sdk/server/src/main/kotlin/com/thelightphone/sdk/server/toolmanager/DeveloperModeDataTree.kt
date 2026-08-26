@@ -72,6 +72,13 @@ class SigningKeyDataTree(root: File) : FileDataTree(root, emptyMap()) {
     }
 }
 
+class AuthKeyDataTree(root: File, cipher: KeyCipher) : EncryptingDataTree(root, cipher) {
+    override suspend fun notify(directoryPath: Path) {
+        super.notify(directoryPath)
+        ToolManagerLifecycleWrapperService.refreshAuth()
+    }
+}
+
 class ApkInboxMetaDataTree(private val context: Context) : CustomDataTree() {
     private val json  = Json {
         ignoreUnknownKeys = true
@@ -128,7 +135,7 @@ fun developerModeDataView(
     )
     val authView = LeafView(
         spec = authSpec,
-        provider = EncryptingDataTree(authDir, cipher)
+        provider = AuthKeyDataTree(authDir, cipher)
     )
     val metaView = LeafView(
         spec = CustomSpec("toolMeta", "toolMeta"),

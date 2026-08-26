@@ -64,6 +64,8 @@ class EmulatorApplication : Application() {
             provideSdkSettings = { settings }
             permissionActivity = LightSdkPermissionActivity::class.java
             onDeviceKeyEvent = { _, request -> handleDeviceKeyEvent(request) }
+            // emulator is running on local device, automatically approve network
+            isNetworkApprovedForToolManager = { true }
             foregroundToolManagerUi = { activity ->
                 if (activity !is ToolManagerActivity) {
                     val intent = Intent(activity, ToolManagerActivity::class.java)

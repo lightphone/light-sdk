@@ -36,15 +36,21 @@ Suppose you have an APK that you want to install on your computer.
 We have provided a [Gradle task](../../tool/build.gradle.kts#L89) that lets you skip the process of opening your browser and manually uploading your tool's APK.
 
 To set this up, follow steps 1-6 in the `Process` section above. Then,
-1. In the `Authentication` file browser, upload a file with a private passcode that your dev machine will use to authenticate with the Tool Manager. It should be a plain text file, and the only content should be your desired "password". **When the Tool Manager runs, the contained password can be used to access _any_ of the API endpoints. Keep it safe!** These files are encrypted before being saved to disk on the device.
-2. Run the `uploadTool` Gradle task from the `tool` module, pointing it at your LP3/emulator's IP address and the passcode you just uploaded:
+1. In the `Authentication` file browser, upload a file containing a private key that your dev machine will use to authenticate with the Tool Manager. Every request is HMAC-signed with this key, so **it must be a 64-character hex string**, not an arbitrary password - for example, the output of:
 
    ```
-   ./gradlew :tool:uploadTool -Pdevice.ip=192.168.1.42 -Pdevice.token=<your passcode>
+   openssl rand -hex 32
+   ```
+
+   Upload it as a plain text file containing only that hex string. **When the Tool Manager runs, this key can be used to access _any_ of the API endpoints. Keep it safe!** These files are encrypted before being saved to disk on the device.
+2. Run the `uploadTool` Gradle task from the `tool` module, pointing it at your LP3/emulator's IP address and the key you just uploaded:
+
+   ```
+   ./gradlew :tool:uploadTool -Pdevice.ip=192.168.1.42 -Pdevice.token=<your hex key>
    ```
 
    - `device.ip` is the plain IP address of your LP3/emulator on the local network. Defaults to `127.0.0.1`.
-   - `device.token` is the passcode you uploaded in step 1, above.
+   - `device.token` is the hex key you uploaded in step 1, above.
    - `device.port` defaults to `54449`. Override it if your Tool Manager is listening elsewhere.
    - `device.timeoutSeconds` defaults to `60`; increase it if the device is slow to install.
 

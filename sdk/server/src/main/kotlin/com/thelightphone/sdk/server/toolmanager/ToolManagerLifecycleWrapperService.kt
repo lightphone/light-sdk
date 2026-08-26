@@ -29,6 +29,13 @@ class ToolManagerLifecycleWrapperService : Service() {
         @Volatile
         private var serviceRunning = false
 
+        @Volatile
+        private var activeAuth: TotpToolManagerAuth? = null
+
+        fun refreshAuth() {
+            activeAuth?.invalidateKeyCache()
+        }
+
         fun start(context: Context) {
             serviceRunning = true
             context.startService(Intent(context, ToolManagerLifecycleWrapperService::class.java))
@@ -89,11 +96,12 @@ class ToolManagerLifecycleWrapperService : Service() {
             logger,
             port = HTTPS_PORT,
             enableLogging = LightSdkServer.verboseLoggingEnabled,
+            onNetworkNeedsApproval = { LightSdkServer.isNetworkApprovedForToolManager(it) },
             provideNewAuth = {
                 TotpToolManagerAuth(
                     keyDirectory = LightSdkServer.getApkInboxAuthDirectory(this),
                     cipher = LightSdkServer.getToolManagerKeyCipher()
-                )
+                ).also { activeAuth = it }
             }
         )
     }
@@ -116,6 +124,7 @@ class ToolManagerLifecycleWrapperService : Service() {
         serviceRunning = false
         application.unregisterActivityLifecycleCallbacks(autoForegroundCallback)
         toolManagerService.stop()
+        activeAuth = null
         Log.d(TAG, "onDestroy: tool manager stopped")
     }
 

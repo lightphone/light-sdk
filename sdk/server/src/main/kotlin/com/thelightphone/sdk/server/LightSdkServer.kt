@@ -14,6 +14,7 @@ import android.content.pm.Signature
 import android.os.Process
 import android.os.UserHandle
 import android.util.Log
+import com.thelightphone.sdk.server.toolmanager.getApkInboxAuthDirectory
 import com.thelightphone.toolmanager.AndroidKeystoreKeyCipher
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.DataView
@@ -24,6 +25,9 @@ import com.thelightphone.toolmanager.datatree.RootDataTree
 import com.thelightphone.sdk.shared.LightConstants
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
+import com.thelightphone.toolmanager.LocalNetworkInfo
+import com.thelightphone.toolmanager.ToolManagerAuth
+import com.thelightphone.toolmanager.TotpToolManagerAuth
 import java.io.File
 import java.security.MessageDigest
 
@@ -257,6 +261,11 @@ object LightSdkServer {
      */
     var foregroundToolManagerUi: (activityToReplace: Activity) -> Unit = {
         // if activityToReplace is not the ToolManager UI already, relaunch the ToolManager UI
+    }
+
+    var isNetworkApprovedForToolManager: (LocalNetworkInfo) -> Boolean = {
+        // by default don't trust any network. This MUST be overridden
+        false
     }
 
     var reportError: (tag: String, exception: Throwable?, message: String) -> Unit = { tag, e, msg ->

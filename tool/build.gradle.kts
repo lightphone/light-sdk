@@ -4,6 +4,8 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLParameters
 import javax.net.ssl.X509TrustManager
@@ -83,8 +85,13 @@ dependencies {
  * the device to report that the tool was (re)installed.
  *
  * Usage:
- *   ./gradlew :tool:uploadTool -Pdevice.ip=192.168.1.42 -Pdevice.token=<bearer token> \
+ *   ./gradlew :tool:uploadTool -Pdevice.ip=192.168.1.42 -Pdevice.token=<hex signing key> \
  *       [-Pdevice.port=54449] [-Pdevice.timeoutSeconds=60]
+ *
+ * device.token must be one of the device's HMAC signing keys, hex-encoded - either its
+ * primaryKey (shown in the Tool Manager URL, e.g. "...#abc123") or a key minted/persisted under
+ * the "Authentication" branch. Every request is signed with it (see authedRequest/sign below);
+ * it is not sent as a bearer token.
  */
 abstract class UploadToolTask : DefaultTask() {
 
@@ -133,8 +140,32 @@ abstract class UploadToolTask : DefaultTask() {
 
     private fun baseUrl() = "https://${localIpHost(ipAddress.get())}:${port.get()}"
 
-    private fun authedRequest(uri: URI): HttpRequest.Builder =
-        HttpRequest.newBuilder(uri).header("Authorization", "Bearer ${token.get()}")
+    // The server has no idea what an "Authorization: Bearer" header is - every /api/ request
+    // must instead be signed with HMAC-SHA256 over "method\npath\ntimestampMillis", keyed by the
+    // hex-decoded device.token (see RequestSigning.kt/ToolManagerAuth.kt in the toolmanager lib).
+    // device.token must therefore be a hex string - i.e. one of the keys the device itself
+    // generated (its primaryKey, shown in the Tool Manager URL) or minted (persisted, encrypted,
+    // under the "Authentication" branch) - not an arbitrary human-chosen password.
+    private fun String.hexToBytes(): ByteArray {
+        require(length % 2 == 0) { "device.token must be a hex-encoded key (odd length: $length)" }
+        return ByteArray(length / 2) { i -> ((this[2 * i].digitToInt(16) shl 4) or this[2 * i + 1].digitToInt(16)).toByte() }
+    }
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+
+    private fun sign(method: String, path: String, timestampMillis: Long): String {
+        val canonical = "$method\n$path\n$timestampMillis"
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(token.get().hexToBytes(), "HmacSHA256"))
+        return mac.doFinal(canonical.toByteArray(Charsets.UTF_8)).toHex()
+    }
+
+    private fun authedRequest(uri: URI, method: String): HttpRequest.Builder {
+        val timestampMillis = System.currentTimeMillis()
+        return HttpRequest.newBuilder(uri)
+            .header("X-Tm-Timestamp", timestampMillis.toString())
+            .header("X-Tm-Signature", sign(method, uri.rawPath, timestampMillis))
+    }
 
     // Server serializes the tools list as {"tools":[{"packageName":"...","lastUpdateMillis":n},...]}
     // in declaration order (ApkInboxDataTree.ToolMeta).
@@ -167,7 +198,7 @@ abstract class UploadToolTask : DefaultTask() {
         val toolMetaUri = URI("${baseUrl()}/api/data/developer/toolMeta")
 
         fun fetchLastUpdateMillis(): Long? {
-            val response = client.send(authedRequest(toolMetaUri).GET().build(), HttpResponse.BodyHandlers.ofString())
+            val response = client.send(authedRequest(toolMetaUri, "GET").GET().build(), HttpResponse.BodyHandlers.ofString())
             check(response.statusCode() == 200) {
                 "Failed to query toolMeta: HTTP ${response.statusCode()} - ${response.body()}"
             }
@@ -184,7 +215,7 @@ abstract class UploadToolTask : DefaultTask() {
         val uploadFileName = "$pkg.apk"
         logger.lifecycle("Uploading ${apk.name} (${apk.length()} bytes) as $uploadFileName...")
         val uploadResponse = client.send(
-            authedRequest(URI("${baseUrl()}/api/upload/developer/apkInbox/$uploadFileName"))
+            authedRequest(URI("${baseUrl()}/api/upload/developer/apkInbox/$uploadFileName"), "POST")
                 .POST(HttpRequest.BodyPublishers.ofFile(apk.toPath()))
                 .build(),
             HttpResponse.BodyHandlers.ofString()
@@ -194,7 +225,7 @@ abstract class UploadToolTask : DefaultTask() {
         }
 
         val notifyResponse = client.send(
-            authedRequest(URI("${baseUrl()}/api/notify/developer/apkInbox/$uploadFileName"))
+            authedRequest(URI("${baseUrl()}/api/notify/developer/apkInbox/$uploadFileName"), "POST")
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build(),
             HttpResponse.BodyHandlers.ofString()
@@ -231,7 +262,7 @@ tasks.register<UploadToolTask>("uploadTool") {
     packageName.set(requireNotNull(android.defaultConfig.applicationId) { "applicationId is not set" })
     ipAddress.set(providers.gradleProperty("device.ip").orElse("127.0.0.1"))
     port.set(providers.gradleProperty("device.port").map { it.toInt() }.orElse(54449))
-    token.set(providers.gradleProperty("device.token").orElse("testKeyPassword"))
+    token.set(providers.gradleProperty("device.token"))
     timeoutSeconds.set(providers.gradleProperty("device.timeoutSeconds").map { it.toLong() }.orElse(60L))
     pollIntervalSeconds.set(2L)
 }
