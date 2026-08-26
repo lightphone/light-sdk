@@ -7,14 +7,14 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
-from lightsigner.keys import generate_key
+from lightsigner.build_recipe import sha256
 from lightsigner.errors import SignerError
-from lightsigner.recipe import sha256
+from lightsigner.keys import generate_key
 from lightsigner.signing import sign_apk
 from lightsigner.stamp import stamp_apk
 from lightsigner.tools import resolve_tool, run_tool
 from lightsigner.verify import verify_apk
+
 
 # Runs the complete workflow using real JDK and Android tools.
 ## In the future this can be extended to do the full build -> stamp -> sign -> verify flow
@@ -54,8 +54,8 @@ def test_real_android_signing_round_trip(tmp_path, monkeypatch) -> None:
 
     # Stamp the apk with a trust statement
     ## we'll need to mock the build recipe
-    recipe = tmp_path / "recipe.json"
-    recipe.write_text(json.dumps({
+    build_recipe = tmp_path / "recipe.json"
+    build_recipe.write_text(json.dumps({
         "schemaVersion": 1,
         "artifact": {"sha256": sha256(unsigned)},
         "tool": {"id": tool_id, "versionCode": 1, "versionName": "1.0.0", "gitUrl": "https://example.test/tool", "gitCommit": "a" * 40},
@@ -67,19 +67,19 @@ def test_real_android_signing_round_trip(tmp_path, monkeypatch) -> None:
     stamped = tmp_path / "stamped.apk"
     signed = tmp_path / "signed.apk"
     signed_metadata = tmp_path / "signed.json"
-    stamp_apk(apk=unsigned, recipe_path=recipe, registry_path=registry, dev_id="dev_integration",
+    stamp_apk(apk=unsigned, build_recipe_path=build_recipe, registry_path=registry, dev_id="dev_integration",
               build_id="build_integration", attestation_key=private_key, keys_dir=keys_dir,
               output=stamped, apkanalyzer=apkanalyzer)
 
     # Sign apk after stamped
-    result = sign_apk(apk=stamped, recipe_path=recipe, registry_path=registry,
+    result = sign_apk(apk=stamped, build_recipe_path=build_recipe, registry_path=registry,
                       build_id="build_integration", keys_dir=keys_dir, output=signed,
                       metadata_output=signed_metadata, apksigner=apksigner)
 
     # Verify stamped and signed apk
-    statement = verify_apk(apk=signed, attestation_public_key=public_key,
+    trust_statement = verify_apk(apk=signed, attestation_public_key=public_key,
                            apksigner=apksigner, apkanalyzer=apkanalyzer)
-    assert statement["signerSha256"] == result["signerSha256"]
+    assert trust_statement["signerSha256"] == result["signerSha256"]
     assert result["apkSha256"] == sha256(signed)
 
     foreign_private = tmp_path / "foreign-private.pem"

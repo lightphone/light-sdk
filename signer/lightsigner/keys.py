@@ -8,7 +8,6 @@ from .errors import SignerError
 from .registry import validate_tool_id
 from .tools import run_tool
 
-
 KEY_ALIAS = "light-tool"
 PASSWORD_ENV = "LIGHT_SIGNER_KEY_PASSWORD"
 
@@ -34,6 +33,8 @@ def generate_key(tool_id: str, keys_dir: Path, keytool: Path) -> str:
     certificate = certificate_path(keys_dir, tool_id)
     if directory.exists():
         raise SignerError("key_exists", f"key already exists for {tool_id}")
+    # Octal maps each Unix owner/group/other permission triplet to one digit.
+    # Owner-only access: this directory contains the APK private-key keystore.
     directory.mkdir(parents=True, mode=0o700)
     try:
         _ = run_tool(
@@ -78,7 +79,9 @@ def generate_key(tool_id: str, keys_dir: Path, keytool: Path) -> str:
                 str(certificate),
             ]
         )
+        # Owner read/write only: the PKCS#12 file contains the APK private key.
         os.chmod(keystore, 0o600)
+        # Publicly readable, owner writable: the DER certificate contains no secret.
         os.chmod(certificate, 0o644)
         return certificate_sha256(certificate)
     except Exception:

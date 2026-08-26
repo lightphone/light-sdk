@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from lightsigner.errors import SignerError
 from lightsigner.registry import load_registry, require_owner
 

@@ -11,9 +11,7 @@ import os
 from pathlib import Path
 
 import pytest
-
 from lightbuilder.extract import ExtractionError, extract
-
 
 VALID_BUILD_GRADLE = """\
 plugins {

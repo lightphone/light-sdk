@@ -25,7 +25,7 @@ def canonical_bytes(document: Mapping[str, Any]) -> bytes:
 
 def _reject_floats(value: Any) -> None:
     if isinstance(value, float):
-        raise ValueError("floats are not allowed in trust documents")
+        raise TypeError("floats are not allowed in trust documents")
     if isinstance(value, Mapping):
         for child in value.values():
             _reject_floats(child)
@@ -49,8 +49,7 @@ def sign_ed25519(payload: bytes, private_key: Path) -> bytes:
                 "-in",
                 payload_file.name,
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=False,
         )
     if result.returncode != 0:
@@ -78,8 +77,7 @@ def verify_ed25519(payload: bytes, signature: bytes, public_key: Path) -> bool:
                 "-sigfile",
                 signature_file.name,
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=False,
         )
     return result.returncode == 0

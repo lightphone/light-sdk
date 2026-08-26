@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Protocol, cast
 
 from .errors import SignerError
 from .keys import generate_key
@@ -12,29 +13,95 @@ from .tools import resolve_tool
 from .verify import verify_apk
 
 
+class KeygenArgs(Protocol):
+    tool_id: str
+    keys_dir: Path
+    keytool: Path | None
+
+
+class StampArgs(Protocol):
+    apk: Path
+    build_recipe: Path
+    registry: Path
+    keys_dir: Path
+    out: Path
+    dev_id: str
+    build_id: str
+    attestation_key: Path
+    issued_at: str | None
+    apkanalyzer: Path | None
+
+
+class SignArgs(Protocol):
+    apk: Path
+    build_recipe: Path
+    registry: Path
+    keys_dir: Path
+    out: Path
+    build_id: str
+    signed_metadata: Path
+    apksigner: Path | None
+
+
+class VerifyArgs(Protocol):
+    apk: Path
+    attestation_public_key: Path
+    attestation_key_id: str
+    apksigner: Path | None
+    apkanalyzer: Path | None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     try:
-        match args.command:
+        match cast(str, args.command):
             case "keygen":
-                print(generate_key(args.tool_id, args.keys_dir, resolve_tool("keytool", args.keytool)))
+                keygen_args = cast(KeygenArgs, cast(object, args))
+                print(
+                    generate_key(
+                        keygen_args.tool_id,
+                        keygen_args.keys_dir,
+                        resolve_tool("keytool", keygen_args.keytool),
+                    )
+                )
             case "stamp":
-                _ = stamp_apk(apk=args.apk, recipe_path=args.recipe, registry_path=args.registry,
-                      dev_id=args.dev_id, build_id=args.build_id,
-                      attestation_key=args.attestation_key, keys_dir=args.keys_dir,
-                      output=args.out, apkanalyzer=resolve_tool("apkanalyzer", args.apkanalyzer),
-                      issued_at=args.issued_at)
+                stamp_args = cast(StampArgs, cast(object, args))
+                _ = stamp_apk(
+                    apk=stamp_args.apk,
+                    build_recipe_path=stamp_args.build_recipe,
+                    registry_path=stamp_args.registry,
+                    dev_id=stamp_args.dev_id,
+                    build_id=stamp_args.build_id,
+                    attestation_key=stamp_args.attestation_key,
+                    keys_dir=stamp_args.keys_dir,
+                    output=stamp_args.out,
+                    apkanalyzer=resolve_tool("apkanalyzer", stamp_args.apkanalyzer),
+                    issued_at=stamp_args.issued_at,
+                )
             case "sign":
-                _ = sign_apk(apk=args.apk, recipe_path=args.recipe, registry_path=args.registry,
-                     build_id=args.build_id, keys_dir=args.keys_dir, output=args.out,
-                     metadata_output=args.signed_metadata,
-                     apksigner=resolve_tool("apksigner", args.apksigner))
+                sign_args = cast(SignArgs, cast(object, args))
+                _ = sign_apk(
+                    apk=sign_args.apk,
+                    build_recipe_path=sign_args.build_recipe,
+                    registry_path=sign_args.registry,
+                    build_id=sign_args.build_id,
+                    keys_dir=sign_args.keys_dir,
+                    output=sign_args.out,
+                    metadata_output=sign_args.signed_metadata,
+                    apksigner=resolve_tool("apksigner", sign_args.apksigner),
+                )
             case "verify":
-                _ = verify_apk(apk=args.apk, attestation_public_key=args.attestation_public_key,
-                       apksigner=resolve_tool("apksigner", args.apksigner),
-                       apkanalyzer=resolve_tool("apkanalyzer", args.apkanalyzer),
-                       expected_key_id=args.attestation_key_id)
+                verify_args = cast(VerifyArgs, cast(object, args))
+                _ = verify_apk(
+                    apk=verify_args.apk,
+                    attestation_public_key=verify_args.attestation_public_key,
+                    apksigner=resolve_tool("apksigner", verify_args.apksigner),
+                    apkanalyzer=resolve_tool("apkanalyzer", verify_args.apkanalyzer),
+                    expected_key_id=verify_args.attestation_key_id,
+                )
+            case unknown:
+                parser.error(f"unknown command: {unknown}")
         return 0
     except SignerError as error:
         print(f"{error.code}: {error}", file=sys.stderr)
@@ -74,7 +141,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def _artifact_args(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--apk", required=True, type=Path)
-    _ = parser.add_argument("--recipe", required=True, type=Path)
+    _ = parser.add_argument("--build-recipe", required=True, type=Path)
     _ = parser.add_argument("--registry", required=True, type=Path)
     _ = parser.add_argument("--keys-dir", required=True, type=Path)
     _ = parser.add_argument("--out", required=True, type=Path)

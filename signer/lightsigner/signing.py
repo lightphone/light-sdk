@@ -3,25 +3,25 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .apk import verify_apk_signature
+from .apk import read_trust_statement, verify_apk_signature
+from .build_recipe import load_build_recipe, sha256
 from .errors import SignerError
 from .keys import KEY_ALIAS, PASSWORD_ENV, keystore_path, require_password
-from .recipe import load_recipe, sha256
 from .registry import load_registry
-from .stamp import read_statement
 from .tools import run_tool
 
+
 # sign apk using android sdk apksigner
-def sign_apk(*, apk: Path, recipe_path: Path, registry_path: Path, build_id: str,
+def sign_apk(*, apk: Path, build_recipe_path: Path, registry_path: Path, build_id: str,
              keys_dir: Path, output: Path, metadata_output: Path, apksigner: Path) -> dict[str, object]:
     if apk.resolve() == output.resolve():
         raise SignerError("output_overwrites_input", "output must differ from input")
     require_password()
 
-    recipe = load_recipe(recipe_path)
-    entry = load_registry(registry_path).get(recipe.tool.id)
+    build_recipe = load_build_recipe(build_recipe_path)
+    entry = load_registry(registry_path).get(build_recipe.tool.id)
     if entry is None:
-        raise SignerError("unregistered_tool", f"tool is not registered: {recipe.tool.id}")
+        raise SignerError("unregistered_tool", f"tool is not registered: {build_recipe.tool.id}")
     output.parent.mkdir(parents=True, exist_ok=True)
 
     run_tool([
@@ -31,13 +31,13 @@ def sign_apk(*, apk: Path, recipe_path: Path, registry_path: Path, build_id: str
     ])
 
     signer_hash = verify_apk_signature(output, apksigner)
-    if read_statement(output).get("signerSha256") != signer_hash:
+    if read_trust_statement(output).get("signerSha256") != signer_hash:
         output.unlink(missing_ok=True)
-        raise SignerError("signer_mismatch", "statement signer does not match APK signing key")
+        raise SignerError("signer_mismatch", "trust statement signer does not match APK signing key")
 
     metadata: dict[str, object] = {
         "buildId": build_id,
-        "unsignedSha256": recipe.unsigned_sha256,
+        "unsignedSha256": build_recipe.unsigned_sha256,
         "apkSha256": sha256(output),
         "signerSha256": signer_hash,
     }

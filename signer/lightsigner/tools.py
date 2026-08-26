@@ -34,8 +34,7 @@ def resolve_tool(name: str, explicit: Path | None = None) -> Path:
 def run_tool(command: list[str], *, env: dict[str, str] | None = None) -> str:
     result = subprocess.run(
         command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         env=env,
         check=False,

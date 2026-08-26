@@ -23,9 +23,10 @@ import argparse
 import json
 import shutil
 import sys
-import tomllib
 import zipfile
 from pathlib import Path
+
+import tomllib
 
 from . import extract, recipe
 

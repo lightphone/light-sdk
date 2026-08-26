@@ -10,20 +10,20 @@ the command or a subcommand for all arguments.
 
 ```sh
 export LIGHT_SIGNER_KEY_PASSWORD='replace-me'
-# generate signing key
+# Generate the APK signing key.
 python -m lightsigner keygen --tool-id com.example.tool --keys-dir keys
 
-# stamp apk with signed trust statement
-python -m lightsigner stamp --apk tool-unsigned.apk --recipe recipe.json \
+# Stamp the APK with a signed trust statement.
+python -m lightsigner stamp --apk tool-unsigned.apk --build-recipe recipe.json \
   --registry registry.json --dev-id dev_example --build-id build_example \
   --attestation-key attestation-private.pem --keys-dir keys --out tool-stamped.apk
 
-# signs and verfies stamped apk
-python -m lightsigner sign --apk tool-stamped.apk --recipe recipe.json \
+# Sign and verify the stamped APK.
+python -m lightsigner sign --apk tool-stamped.apk --build-recipe recipe.json \
   --registry registry.json --build-id build_example --keys-dir keys \
   --out tool.apk --signed-metadata signed.json
 
-# performs offline verification of builds
+# Perform offline verification of the APK.
 python -m lightsigner verify --apk tool.apk \
   --attestation-public-key attestation-public.pem
 ```

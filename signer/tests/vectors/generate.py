@@ -6,12 +6,12 @@ import base64
 import json
 from pathlib import Path
 
-from lightsigner.statement import canonical_bytes, sign_ed25519
+from lightsigner.trust_statement import canonical_bytes, sign_ed25519
 
 VECTORS = Path(__file__).resolve().parent
 
 
-statement: dict[str, object] = {
+trust_statement: dict[str, object] = {
     "schemaVersion": 1,
     "tool": {
         "id": "com.example.tool",
@@ -27,9 +27,9 @@ statement: dict[str, object] = {
     "unsignedSha256": "d" * 64,
     "issuedAt": "2026-08-25T00:00:00Z",
 }
-canonical = canonical_bytes(statement)
+canonical = canonical_bytes(trust_statement)
 signature = sign_ed25519(canonical, VECTORS / "test-attestation-private.pem")
-statement["attestation"] = {
+trust_statement["attestation"] = {
     "keyId": "test-attestation-1",
     "alg": "Ed25519",
     "sig": base64.b64encode(signature).decode("ascii"),
@@ -37,5 +37,5 @@ statement["attestation"] = {
 
 (VECTORS / "statement.canonical.json").write_bytes(canonical)
 (VECTORS / "statement.json").write_text(
-    json.dumps(statement, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    json.dumps(trust_statement, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
 )

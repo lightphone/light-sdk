@@ -8,8 +8,11 @@ from typing import Any
 
 from .errors import SignerError
 
-
 TOOL_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
+
+# This local JSON registry is only the PoC substitute for the developer portal.
+# Production will use an authenticated portal/database as the ownership authority
+# and store KMS/HSM key identifiers rather than filesystem private-key locations.
 
 
 @dataclass(frozen=True)
@@ -25,7 +28,7 @@ def validate_tool_id(tool_id: str) -> str:
 
 
 def load_registry(path: Path) -> dict[str, RegistryEntry]:
-    raw = _load_json_object(path, "registry")
+    raw = load_json_object(path, "registry")
     registry: dict[str, RegistryEntry] = {}
     for tool_id, value in raw.items():
         validate_tool_id(tool_id)
@@ -54,7 +57,7 @@ def require_owner(
     return entry
 
 
-def _load_json_object(path: Path, label: str) -> dict[str, Any]:
+def load_json_object(path: Path, label: str) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object)
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
