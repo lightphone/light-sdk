@@ -206,6 +206,7 @@ commit.
 ```sh
 # Python (extraction policy)
 cd builder
+# Python 3.11 or newer is required (`tomllib` is part of the standard library).
 python3 -m venv .venv
 .venv/bin/pip install pytest
 .venv/bin/python -m pytest tests/

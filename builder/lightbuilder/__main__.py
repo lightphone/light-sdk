@@ -110,6 +110,7 @@ def cmd_collect(args: argparse.Namespace) -> int:
         sdk_git_ref=args.sdk_git_ref,
         build=recipe.Build(
             image_digest=args.image_digest,
+            tool_git_ref=args.tool_git_ref,
             gradle_command=tuple(json.loads(args.gradle_command)),
             source_date_epoch=args.source_date_epoch,
             extracted_files=extracted_files,
@@ -173,6 +174,7 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     coll.add_argument("--image-digest", required=True)
     coll.add_argument("--sdk-git-ref", required=True)
     coll.add_argument("--tool-git-url", required=True)
+    coll.add_argument("--tool-git-ref", required=True)
     coll.add_argument("--tool-git-commit", required=True)
     coll.add_argument("--gradle-command", required=True, help="JSON-encoded argv array")
     coll.add_argument("--source-date-epoch", type=int, required=True)

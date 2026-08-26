@@ -23,6 +23,7 @@ def test_recipe_uses_shared_tool_and_sdk_objects(tmp_path: Path) -> None:
         sdk_git_ref="v0.1.1",
         build=recipe.Build(
             image_digest="sha256:image",
+            tool_git_ref="v1.2.0",
             gradle_command=("./gradlew", ":tool:assembleRelease"),
             source_date_epoch=1_787_616_000,
             extracted_files=("lighttool.toml",),
@@ -38,4 +39,5 @@ def test_recipe_uses_shared_tool_and_sdk_objects(tmp_path: Path) -> None:
         "gitCommit": "a" * 40,
     }
     assert record["sdkGitRef"] == "v0.1.1"
+    assert record["build"]["toolGitRef"] == "v1.2.0"
     assert json.loads(destination.read_text(encoding="utf-8")) == record

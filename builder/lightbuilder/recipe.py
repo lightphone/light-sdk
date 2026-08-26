@@ -25,6 +25,7 @@ class Tool:
 @dataclass(frozen=True)
 class Build:
     image_digest: str
+    tool_git_ref: str
     gradle_command: tuple[str, ...]
     source_date_epoch: int
     extracted_files: tuple[str, ...] = field(default_factory=tuple)
@@ -64,6 +65,7 @@ def write(
         "sdkGitRef": sdk_git_ref,
         "build": {
             "imageDigest": build.image_digest,
+            "toolGitRef": build.tool_git_ref,
             "gradleCommand": list(build.gradle_command),
             "sourceDateEpoch": build.source_date_epoch,
             "extractedFiles": list(build.extracted_files),

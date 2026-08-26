@@ -147,6 +147,7 @@ python3 -m lightbuilder collect \
     --image-digest "$LIGHT_IMAGE_DIGEST" \
     --sdk-git-ref "$LIGHT_SDK_GIT_REF" \
     --tool-git-url "$GIT_URL" \
+    --tool-git-ref "$GIT_REF" \
     --tool-git-commit "$DEV_GIT_COMMIT" \
     --gradle-command "$GRADLE_CMD_JSON" \
     --source-date-epoch "$DEV_COMMIT_EPOCH"
