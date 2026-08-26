@@ -8,18 +8,23 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 
 @dataclass(frozen=True)
-class BuildInputs:
+class Tool:
+    id: str
+    version_code: int
+    version_name: str
+    git_url: str
+    git_commit: str
+
+
+@dataclass(frozen=True)
+class Build:
     image_digest: str
-    sdk_git_ref: str
-    dev_git_url: str
-    dev_git_ref: str
-    dev_git_commit: str
     gradle_command: tuple[str, ...]
     source_date_epoch: int
     extracted_files: tuple[str, ...] = field(default_factory=tuple)
@@ -36,7 +41,9 @@ def sha256(path: Path) -> str:
 def write(
     *,
     artifact: Path,
-    inputs: BuildInputs,
+    tool: Tool,
+    sdk_git_ref: str,
+    build: Build,
     dest: Path,
 ) -> dict[str, Any]:
     artifact_hash = sha256(artifact)
@@ -47,7 +54,20 @@ def write(
             "sizeBytes": artifact.stat().st_size,
             "sha256": artifact_hash,
         },
-        "inputs": asdict(inputs),
+        "tool": {
+            "id": tool.id,
+            "versionCode": tool.version_code,
+            "versionName": tool.version_name,
+            "gitUrl": tool.git_url,
+            "gitCommit": tool.git_commit,
+        },
+        "sdkGitRef": sdk_git_ref,
+        "build": {
+            "imageDigest": build.image_digest,
+            "gradleCommand": list(build.gradle_command),
+            "sourceDateEpoch": build.source_date_epoch,
+            "extractedFiles": list(build.extracted_files),
+        },
     }
     # sort_keys for deterministic JSON output — the recipe itself should be
     # byte-stable when the inputs are.

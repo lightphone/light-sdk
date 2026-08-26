@@ -5,5 +5,6 @@ Topics:
 - [Navigating this repository](repo)
 - [Overview of Light primitives (tool building blocks)](../sdk/client)
 - [Declaring tool metadata (name, version, etc.)](tool_metadata)
+- [Tool signing and trust statements](tool_signing)
 - [Using the LightOS Emulator](system_app)
 - [Why parts of the SDK are built the way they are](design_decisions)

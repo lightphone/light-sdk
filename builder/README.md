@@ -79,7 +79,7 @@ flag and AGP signs with the shared dev keystore as usual.
 DOCKER_BUILDKIT=1 docker build \
   -f builder/Dockerfile \
   --build-arg SDK_GIT_URL=https://github.com/lightphone/light-sdk \
-  --build-arg SDK_GIT_REF=<commit-sha-or-tag> \
+  --build-arg SDK_GIT_REF=<tag-or-commit> \
   -t lightphone/light-builder:<tag> \
   builder/
 ```
@@ -149,7 +149,7 @@ Inside `--output-dir`:
 | File             | Purpose                                                                |
 |------------------|------------------------------------------------------------------------|
 | `tool-unsigned.apk` | The build artifact.                                                 |
-| `recipe.json`    | SHA-256 + every input that fed the build. The signing job must verify the dev-commit hash against this before signing. |
+| `recipe.json`    | SHA-256 + every input that fed the build. The signing job must verify the tool commit against this before signing. |
 | `extraction.json`| List of files the extractor accepted from the dev's repo.              |
 | `extracted-source.zip` | The accepted source files themselves, zipped exactly as staged into the tool module (`build.gradle.kts`, `lighttool.toml`, `src/main/**`). Deterministic archive — same commit produces a byte-identical zip. |
 | `build.log`      | Gradle stdout/stderr, plus the extractor's log.                        |
@@ -158,6 +158,24 @@ Inside `--output-dir`:
 `recipe.json` is the source-of-truth for what was actually built. Pass its
 `sha256` into the signing queue alongside the build ID, and have the signer
 refuse to sign if the artifact's hash doesn't match.
+
+Its `tool` object and `sdkGitRef` are copied unchanged into the trust statement:
+
+```json
+{
+  "tool": {
+    "id": "com.example.mytool",
+    "versionCode": 1,
+    "versionName": "1.0.0",
+    "gitUrl": "https://github.com/example/mytool",
+    "gitCommit": "<full commit SHA>"
+  },
+  "sdkGitRef": "v0.1.1"
+}
+```
+
+Artifact metadata and builder-specific inputs remain in the recipe's `artifact`
+and `build` objects.
 
 ## `lighttool.toml` schema
 

@@ -23,6 +23,7 @@ import argparse
 import json
 import shutil
 import sys
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -94,14 +95,21 @@ def cmd_collect(args: argparse.Namespace) -> int:
     if report_path.exists():
         extracted_files = tuple(json.loads(report_path.read_text())["files"])
 
+    tool_config = tomllib.loads(
+        (args.workspace / "tool" / "lighttool.toml").read_text(encoding="utf-8")
+    )["tool"]
     result = recipe.write(
         artifact=out_apk,
-        inputs=recipe.BuildInputs(
+        tool=recipe.Tool(
+            id=tool_config["id"],
+            version_code=tool_config["versionCode"],
+            version_name=tool_config["versionName"],
+            git_url=args.tool_git_url,
+            git_commit=args.tool_git_commit,
+        ),
+        sdk_git_ref=args.sdk_git_ref,
+        build=recipe.Build(
             image_digest=args.image_digest,
-            sdk_git_ref=args.sdk_git_ref,
-            dev_git_url=args.dev_git_url,
-            dev_git_ref=args.dev_git_ref,
-            dev_git_commit=args.dev_git_commit,
             gradle_command=tuple(json.loads(args.gradle_command)),
             source_date_epoch=args.source_date_epoch,
             extracted_files=extracted_files,
@@ -164,9 +172,8 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     coll.add_argument("--output-dir", type=Path, required=True)
     coll.add_argument("--image-digest", required=True)
     coll.add_argument("--sdk-git-ref", required=True)
-    coll.add_argument("--dev-git-url", required=True)
-    coll.add_argument("--dev-git-ref", required=True)
-    coll.add_argument("--dev-git-commit", required=True)
+    coll.add_argument("--tool-git-url", required=True)
+    coll.add_argument("--tool-git-commit", required=True)
     coll.add_argument("--gradle-command", required=True, help="JSON-encoded argv array")
     coll.add_argument("--source-date-epoch", type=int, required=True)
 

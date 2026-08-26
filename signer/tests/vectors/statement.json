@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "id": "com.example.tool",
+    "versionCode": 3,
+    "versionName": "1.2.0",
+    "gitUrl": "https://github.com/example/luz-☀",
+    "gitCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "sdkGitRef": "v0.1.1",
+  "devId": "dev_test_01",
+  "signerSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "buildId": "build_test_01",
+  "unsignedSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "issuedAt": "2026-08-25T00:00:00Z",
+  "attestation": {
+    "keyId": "test-attestation-1",
+    "alg": "Ed25519",
+    "sig": "W05u8BVCmTPn3zL9QHN0ApQHQML2C851h5AOjzx1Ziehj1vdowlBucfAKOBYdZwNFG9YAAH6/aGWNnTQMde1Aw=="
+  }
+}

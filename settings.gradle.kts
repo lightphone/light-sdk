@@ -22,6 +22,7 @@ rootProject.name = "light-sdk"
 includeBuild("plugin")
 include(":lint-rules")
 include(":sdk:shared")
+include(":sdk:trust")
 include(":sdk:ui")
 include(":sdk:client")
 include(":sdk:server")
