@@ -17,6 +17,7 @@ import com.thelightphone.chess.engine.WHITE
 import com.thelightphone.chess.engine.colorOf
 import com.thelightphone.chess.engine.moveFrom
 import com.thelightphone.chess.engine.moveTo
+import com.thelightphone.chess.engine.parseSquare
 import com.thelightphone.chess.engine.sq64
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SimpleLightScreen
@@ -51,9 +52,13 @@ class GameViewModel(
     private var result: GameResult? = null
     private var lastFrom: Int? = null
     private var lastTo: Int? = null
+    private var hintFrom: Int? = null
+    private var hintTo: Int? = null
     private var lastTickElapsed: Long = 0
     private var clockJob: Job? = null
+    private var hintJob: Job? = null
     private var started: Boolean = false
+    private var searchGen: Int = 0
 
     private val _ui = MutableStateFlow(GameUiState())
     val ui: StateFlow<GameUiState> = _ui.asStateFlow()
@@ -84,6 +89,7 @@ class GameViewModel(
 
     override fun onCleared() {
         cancelSearch.set(true)
+        hintJob?.cancel()
         clockJob?.cancel()
         super.onCleared()
     }
@@ -95,6 +101,22 @@ class GameViewModel(
         if (board.whiteToMove != playerIsWhite) return
 
         val selected = state.selected
+        if (hintFrom != null && hintTo != null && sq == hintTo) {
+            val from = hintFrom ?: return
+            val options = board.legalMovesFrom(from).filter { it.to == sq }
+            if (options.size > 1 && options.any { it.isPromotion }) {
+                _ui.update { it.copy(overlay = GameOverlay.Promotion(from, sq), selected = from) }
+                return
+            }
+            val move = options.firstOrNull() ?: return
+            playUserMove(move)
+            return
+        }
+        if (hintFrom != null && sq == hintFrom) return
+
+        hintFrom = null
+        hintTo = null
+
         if (selected != null && sq in state.targets) {
             val options = board.legalMovesFrom(selected).filter { it.to == sq }
             if (options.size > 1 && options.any { it.isPromotion }) {
@@ -110,9 +132,9 @@ class GameViewModel(
         val own = piece != EMPTY && (colorOf(piece) == WHITE) == playerIsWhite
         if (own) {
             val targets = board.legalMovesFrom(sq).map { it.to }.toSet()
-            _ui.update { it.copy(selected = sq, targets = targets) }
+            _ui.update { it.copy(selected = sq, targets = targets, hintFrom = null, hintTo = null) }
         } else {
-            _ui.update { it.copy(selected = null, targets = emptySet()) }
+            _ui.update { it.copy(selected = null, targets = emptySet(), hintFrom = null, hintTo = null) }
         }
     }
 
@@ -127,6 +149,82 @@ class GameViewModel(
 
     fun cancelPromotion() {
         _ui.update { it.copy(overlay = GameOverlay.None, selected = null, targets = emptySet()) }
+    }
+
+    fun requestHint() {
+        val state = _ui.value
+        if (!state.inProgress || state.thinking || state.overlay !is GameOverlay.None) return
+        if (board.whiteToMove != playerIsWhite) return
+        hintJob?.cancel()
+        hintJob = viewModelScope.launch {
+            val snapshot = board.copy()
+            val move = withContext(Dispatchers.Default) {
+                Search.pickMove(
+                    board = snapshot,
+                    level = BotLevel.HARD,
+                    remainingMs = null,
+                    rng = rng,
+                    cancelled = { !isActive },
+                )
+            }
+            if (move == 0 || result != null || board.whiteToMove != playerIsWhite) return@launch
+            hintFrom = moveFrom(move)
+            hintTo = moveTo(move)
+            _ui.update {
+                it.copy(
+                    selected = null,
+                    targets = emptySet(),
+                    hintFrom = hintFrom,
+                    hintTo = hintTo,
+                )
+            }
+        }
+    }
+
+    fun undoUserMove() {
+        val overlay = _ui.value.overlay
+        if (overlay is GameOverlay.Promotion) {
+            cancelPromotion()
+            return
+        }
+        if (overlay is GameOverlay.ResignConfirm || overlay is GameOverlay.GameOver) return
+        val index = lastUserMoveIndex()
+        if (index < 0 || result != null) return
+        cancelSearch.set(true)
+        hintJob?.cancel()
+        val kept = movesUci.take(index)
+        board.loadFen(startFen)
+        kept.forEach { board.applyUci(it) }
+        movesUci.clear()
+        movesUci.addAll(kept)
+        result = null
+        searchGen++
+        cancelSearch.set(false)
+        if (kept.isNotEmpty()) {
+            val last = kept.last()
+            lastFrom = parseSquare(last.substring(0, 2))
+            lastTo = parseSquare(last.substring(2, 4))
+        } else {
+            lastFrom = null
+            lastTo = null
+        }
+        hintFrom = null
+        hintTo = null
+        lastTickElapsed = SystemClock.elapsedRealtime()
+        startClock()
+        viewModelScope.launch { persist() }
+        publish(overlay = GameOverlay.None)
+    }
+
+    private fun lastUserMoveIndex(): Int {
+        if (movesUci.isEmpty()) return -1
+        val index = if (playerIsWhite) {
+            if (movesUci.size % 2 == 1) movesUci.lastIndex else movesUci.lastIndex - 1
+        } else {
+            if (movesUci.size % 2 == 0) movesUci.lastIndex else movesUci.lastIndex - 1
+        }
+        val userPly = if (playerIsWhite) index % 2 == 0 else index % 2 == 1
+        return if (index >= 0 && userPly) index else -1
     }
 
     fun requestResign() {
@@ -219,6 +317,9 @@ class GameViewModel(
     }
 
     private fun playUserMove(move: ChessMove) {
+        hintJob?.cancel()
+        hintFrom = null
+        hintTo = null
         applyMove(move.encoded)
         maybeComputerMove()
     }
@@ -243,6 +344,7 @@ class GameViewModel(
         if (board.whiteToMove == playerIsWhite) return
         cancelSearch.set(false)
         _ui.update { it.copy(thinking = true, selected = null, targets = emptySet()) }
+        val gen = ++searchGen
         viewModelScope.launch {
             val remaining = timerMs?.let {
                 if (board.whiteToMove) whiteTimeMs else blackTimeMs
@@ -255,10 +357,10 @@ class GameViewModel(
                     level = level,
                     remainingMs = remaining,
                     rng = rng,
-                    cancelled = { cancelSearch.get() },
+                    cancelled = { cancelSearch.get() || gen != searchGen },
                 )
             }
-            if (cancelSearch.get()) return@launch
+            if (gen != searchGen || cancelSearch.get()) return@launch
             if (move != 0 && result == null) {
                 applyMove(move)
             } else {
@@ -348,6 +450,8 @@ class GameViewModel(
             },
             lastFrom = lastFrom,
             lastTo = lastTo,
+            hintFrom = hintFrom,
+            hintTo = hintTo,
             whiteTimeMs = whiteTimeMs,
             blackTimeMs = blackTimeMs,
             hasTimer = timerMs != null,
@@ -355,6 +459,7 @@ class GameViewModel(
             overlay = overlay,
             inProgress = result == null,
             botLabel = botLevel.label,
+            canUndo = result == null && lastUserMoveIndex() >= 0,
         )
     }
 

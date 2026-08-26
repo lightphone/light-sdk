@@ -67,6 +67,8 @@ data class GameUiState(
     val targets: Set<Int> = emptySet(),
     val lastFrom: Int? = null,
     val lastTo: Int? = null,
+    val hintFrom: Int? = null,
+    val hintTo: Int? = null,
     val whiteTimeMs: Long = 0,
     val blackTimeMs: Long = 0,
     val hasTimer: Boolean = false,
@@ -74,6 +76,7 @@ data class GameUiState(
     val overlay: GameOverlay = GameOverlay.None,
     val inProgress: Boolean = true,
     val botLabel: String = "",
+    val canUndo: Boolean = false,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -84,13 +87,16 @@ data class GameUiState(
             targets == other.targets &&
             lastFrom == other.lastFrom &&
             lastTo == other.lastTo &&
+            hintFrom == other.hintFrom &&
+            hintTo == other.hintTo &&
             whiteTimeMs == other.whiteTimeMs &&
             blackTimeMs == other.blackTimeMs &&
             hasTimer == other.hasTimer &&
             thinking == other.thinking &&
             overlay == other.overlay &&
             inProgress == other.inProgress &&
-            botLabel == other.botLabel
+            botLabel == other.botLabel &&
+            canUndo == other.canUndo
     }
 
     override fun hashCode(): Int {
@@ -100,6 +106,8 @@ data class GameUiState(
         result = 31 * result + targets.hashCode()
         result = 31 * result + (lastFrom ?: 0)
         result = 31 * result + (lastTo ?: 0)
+        result = 31 * result + (hintFrom ?: 0)
+        result = 31 * result + (hintTo ?: 0)
         result = 31 * result + whiteTimeMs.hashCode()
         result = 31 * result + blackTimeMs.hashCode()
         result = 31 * result + hasTimer.hashCode()
@@ -107,6 +115,7 @@ data class GameUiState(
         result = 31 * result + overlay.hashCode()
         result = 31 * result + inProgress.hashCode()
         result = 31 * result + botLabel.hashCode()
+        result = 31 * result + canUndo.hashCode()
         return result
     }
 }

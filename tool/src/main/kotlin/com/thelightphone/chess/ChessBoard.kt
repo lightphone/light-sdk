@@ -31,6 +31,8 @@ fun ChessBoard(
     targets: Set<Int>,
     lastFrom: Int?,
     lastTo: Int?,
+    hintFrom: Int?,
+    hintTo: Int?,
     enabled: Boolean,
     onSquare: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -56,13 +58,14 @@ fun ChessBoard(
                         val dark = ((file + rank) and 1) == 0
                         val isSelected = selected == sq
                         val isLast = sq == lastFrom || sq == lastTo
+                        val isHint = sq == hintFrom || sq == hintTo
                         val bg = if (dark) darkSquare else lightSquare
                         Box(
                             modifier = Modifier
                                 .size(square)
                                 .background(bg)
                                 .then(
-                                    if (isSelected || isLast) {
+                                    if (isSelected || isLast || isHint) {
                                         Modifier.border(2.dp, mark)
                                     } else {
                                         Modifier
@@ -78,14 +81,15 @@ fun ChessBoard(
                                         .padding(0.1f.gridUnitsAsDp()),
                                 )
                             }
-                            if (sq in targets && piece == EMPTY) {
+                            val showTarget = sq in targets || sq == hintTo
+                            if (showTarget && piece == EMPTY) {
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.Center)
                                         .size(0.5f.gridUnitsAsDp())
                                         .background(mark, CircleShape),
                                 )
-                            } else if (sq in targets) {
+                            } else if (showTarget && sq != hintFrom) {
                                 Box(
                                     modifier = Modifier
                                         .matchParentSize()

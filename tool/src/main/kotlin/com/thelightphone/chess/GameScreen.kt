@@ -72,6 +72,8 @@ class GameScreen(
                         targets = state.targets,
                         lastFrom = state.lastFrom,
                         lastTo = state.lastTo,
+                        hintFrom = state.hintFrom,
+                        hintTo = state.hintTo,
                         enabled = state.inProgress && !state.thinking && state.overlay is GameOverlay.None,
                         onSquare = viewModel::onSquare,
                         modifier = Modifier
@@ -81,10 +83,34 @@ class GameScreen(
 
                     LightBottomBar(
                         items = listOf(
-                            LightBarButton.Text(
-                                text = if (state.inProgress) "RESIGN" else "",
-                                onClick = if (state.inProgress) {
+                            LightBarButton.LightIcon(
+                                icon = LightIcons.STAR,
+                                contentDescription = "Hint",
+                                onClick = if (state.inProgress &&
+                                    !state.thinking &&
+                                    state.overlay is GameOverlay.None
+                                ) {
+                                    { viewModel.requestHint() }
+                                } else {
+                                    null
+                                },
+                            ),
+                            LightBarButton.LightIcon(
+                                icon = LightIcons.TRASH,
+                                contentDescription = "Resign",
+                                onClick = if (state.inProgress && state.overlay is GameOverlay.None) {
                                     { viewModel.requestResign() }
+                                } else {
+                                    null
+                                },
+                            ),
+                            LightBarButton.LightIcon(
+                                icon = LightIcons.REWIND,
+                                contentDescription = "Undo",
+                                onClick = if (state.canUndo &&
+                                    state.overlay !is GameOverlay.ResignConfirm
+                                ) {
+                                    { viewModel.undoUserMove() }
                                 } else {
                                     null
                                 },
