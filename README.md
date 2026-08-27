@@ -20,21 +20,21 @@ This repository is a Light SDK tool. The game lives in [`tool/`](./tool); packag
 
 **New game.** Before the first move you choose:
 
-| Setting | Options | Default |
-| --- | --- | --- |
-| Timer | No timer, 5 min, 10 min, 30 min | No timer |
-| Your color | White, Black, Random | White |
-| Bot | Easy, Medium, Hard, Grand master | Medium |
+| Setting    | Options                          | Default  |
+| ---------- | -------------------------------- | -------- |
+| Timer      | No timer, 5 min, 10 min, 30 min  | No timer |
+| Your color | White, Black, Random             | White    |
+| Bot        | Easy, Medium, Hard, Grand master | Medium   |
 
 **The board.** Tap a piece, then a highlighted square. Empty targets get a dot; captures get a ring. The last move is outlined. Rank and file labels sit on the near edges, and the board flips if you are playing Black.
 
-On a timed game the top bar is `Medium - 9:42` (bot name plus *your* remaining clock). Untimed games show only the bot name.
+On a timed game the top bar is `Medium - 9:42` (bot name plus _your_ remaining clock). Untimed games show only the bot name.
 
 **During a game** the bottom bar is:
 
-- **Star** — hint. The engine looks at the position at Hard strength and outlines a suggested from/to. Tap the destination to play it.
-- **Trash** — resign, with a confirm screen.
-- **Rewind** — undo your last move (and the bot’s reply). Disabled until you have moved.
+- **Star** - hint. The engine looks at the position at Hard strength and outlines a suggested from/to. Tap the destination to play it.
+- **Trash** - resign, with a confirm screen.
+- **Rewind** - undo your last move (and the bot’s reply). Disabled until you have moved.
 
 Pawns that reach the last rank open a **Promote** screen (Queen, Rook, Bishop, Knight). Games end with a full-screen result: checkmate, draw, flag, or resign.
 
@@ -44,12 +44,12 @@ Leaving the board, pausing the app, or killing the process saves an in-progress 
 
 Search is iterative deepening with alpha-beta and Michniewski’s Simplified Evaluation Function ([Chess Programming Wiki](https://www.chessprogramming.org/Simplified_Evaluation_Function)). Easy and Medium also blunder on purpose so they are not just a shallow search.
 
-| Level | Search | Notes |
-| --- | --- | --- |
-| Easy | Depth 1, ~350 ms | Often picks a random legal move; otherwise can swap the best move for a worse one |
-| Medium | Depth 1, ~400 ms | Same idea, a bit more reliable |
-| Hard | Depth 4, ~2 s | Full search, no forced blunders |
-| Grand master | Depth 6, ~4.5 s | Same eval, longer think |
+| Level        | Search           | Notes                                                                             |
+| ------------ | ---------------- | --------------------------------------------------------------------------------- |
+| Easy         | Depth 1, ~350 ms | Often picks a random legal move; otherwise can swap the best move for a worse one |
+| Medium       | Depth 1, ~400 ms | Same idea, a bit more reliable                                                    |
+| Hard         | Depth 4, ~2 s    | Full search, no forced blunders                                                   |
+| Grand master | Depth 6, ~4.5 s  | Same eval, longer think                                                           |
 
 On a clock the search budget shrinks with remaining time. Hints always search at Hard, independent of the bot you are playing.
 
@@ -80,11 +80,11 @@ The UI is Compose on top of the SDK’s `LightScreen` / `LightViewModel` pair, u
 
 ## Layout
 
-| Path | What it is |
-| --- | --- |
-| [`tool/src/main/kotlin/com/thelightphone/chess/`](tool/src/main/kotlin/com/thelightphone/chess/) | Screens, view models, board widget |
-| [`tool/src/main/kotlin/com/thelightphone/chess/engine/`](tool/src/main/kotlin/com/thelightphone/chess/engine/) | Rules + search |
-| [`sdk/`](sdk/) | Light SDK (client, UI, emulator) |
-| [`docs/`](docs/) | SDK docs, including the emulator walkthrough |
+| Path                                                                                                           | What it is                                   |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| [`tool/src/main/kotlin/com/thelightphone/chess/`](tool/src/main/kotlin/com/thelightphone/chess/)               | Screens, view models, board widget           |
+| [`tool/src/main/kotlin/com/thelightphone/chess/engine/`](tool/src/main/kotlin/com/thelightphone/chess/engine/) | Rules + search                               |
+| [`sdk/`](sdk/)                                                                                                 | Light SDK (client, UI, emulator)             |
+| [`docs/`](docs/)                                                                                               | SDK docs, including the emulator walkthrough |
 
 This tree still includes the upstream Light SDK so the tool can build and run against it. Chess-specific code is the `tool` module.
