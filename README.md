@@ -1,52 +1,90 @@
-# light-sdk
-or: a tool for building Tools
+# light-chess
 
-## tl;dr
-This repository contains the scaffolding for building simple tools for the Light Phone III. Included are a library ([:sdk:client](./sdk/client)) and placeholder application ([:tool](./tool)) that depends on it. To create a tool that is fully compatible with LightOS, you must write your application code within the `tool` module, using the primitives provided by the sdk client library.
+Chess for the [Light Phone III](https://www.thelightphone.com/). Play a game against the phone, with LightOS chrome and a grayscale board that matches the rest of the device.
 
-You can and should use current Android best practices: Kotlin for all source code, Compose for UI, Coroutines for async programming, and MVVM architecture. **Although this is appears to be a fairly standard Android dev environment, you will quickly find out that we are (gently but broadly) restricting which Android APIs and third-party libraries can be used. This is in an effort to provide a secure and distinctly _light_ experience for our users. These restrictions are _not_ set in stone and should ease up over time. If there is a stable, open-source library that you'd like us to allow, please let us know! More on this later.**
+This repository is a Light SDK tool. The game lives in [`tool/`](./tool); package id `com.thelightphone.chess`.
 
-## IMPORTANT!! July 1, 2026 Update
-If you're reading this, welcome! You're early! (in a cool way)
-This repo is a work-in-progress and will remain so for a while. Things are going to change _fast_ in the coming weeks. If you're going to start building right away, be sure to `git pull` frequently.
-Before you do, though, please be aware that **while we feel good about letting everybody start to explore and build, we are still working on the infrastructure to properly deploy your new tools.**
-The currently builds of LightOS in the wild are not yet ready to "play nice" with the tools built here. If you're someone who's already comfortable working with ADB to sideload APKs on your
-Light Phone III, you can totally do that with whatever you do here! But we're shooting to make these tools feel as seamless as the ones already available in LightOS, and that's going to take a bit more work. 
-We're hoping to have an update on that front later this month. In the meantime, the best way to start working is to use an Android emulator running our new [LightOS Emulator](sdk/emulator). The instructions for getting that up and running
-are [right here](docs/system_app).
+<p>
+  <img src="docs/screenshots/home.png" width="240" alt="Home: play a game against the phone">
+  <img src="docs/screenshots/new-game.png" width="240" alt="New game: timer and color">
+  <img src="docs/screenshots/new-game-bot.png" width="240" alt="New game: bot difficulty">
+</p>
+<p>
+  <img src="docs/screenshots/board-selected.png" width="240" alt="Board with a pawn selected and legal-move dots">
+  <img src="docs/screenshots/board-in-play.png" width="240" alt="Board after 1.e4 Nc6, last move highlighted">
+</p>
 
-## Quickstart
+## What you can do
 
-### Running your Tool
-**You can test your tool on any Android device or emulator**, but certain functionality (receiving push notifications, requesting special permissions) can only be tested with:
-A) Real Light Phone hardware running LightOS
-B) An Android emulator (on your computer) set up to run our LightOS emulator app as a _system app_ ([see advanced instructions](docs/system_app))
+**Home.** If nothing is in progress, the home screen is just a prompt and **NEW GAME**. If a game is still going, **Continue** shows a one-line summary (your color, timer, bot) so you can pick it back up.
 
-You can quickly [create an emulator](https://developer.android.com/studio/run/managing-avds) that generally feels like an LPIII by using the following settings:
-* 1080 X 1240, 3.92" display
-* Android API 34
-* NO Google Play Services installed
+**New game.** Before the first move you choose:
 
-### Start Building
-1. Fork and/or clone this repository into your local dev environment.
-2. Install Android Studio and open this project within it. (IntelliJ IDEA should also work)
+| Setting | Options | Default |
+| --- | --- | --- |
+| Timer | No timer, 5 min, 10 min, 30 min | No timer |
+| Your color | White, Black, Random | White |
+| Bot | Easy, Medium, Hard, Grand master | Medium |
 
-3. Edit the code in `HomeScreen` and `HomeScreenViewModel` to get started. `Homescreen` surfaces a `@Composable` method named `Content`. This is the UI that is shown when the tool first boots. You'll notice this UI sources data from it's `viewModel` field, which is an instance of `HomeScreenViewModel`. Edit that class with your screen's logic and expose the data to the UI using either Compose `State` or Coroutine `Flow`s. If you want to create a new screen, create a new Screen/ViewModel pair: your screen should extend from `LightScreen` and your VM from `LightScreenViewModel`. Your screen implementation will need:
-   1. A direct reference to your ViewModel's class type
-   2. A factory method for creating a new instance of your ViewModel.
+**The board.** Tap a piece, then a highlighted square. Empty targets get a dot; captures get a ring. The last move is outlined. Rank and file labels sit on the near edges, and the board flips if you are playing Black.
 
-Look at `HomeScreen` as an example for how this is done. To navigate to your new screen, use the `navigateTo` function built into `LightScreen` - just pass it a lambda to create an instance of your new screen. Note that the `LightScreen` constructor takes in a `SealedLightActivity`. The lambda is provided an instance of this as a default parameter.
+On a timed game the top bar is `Medium - 9:42` (bot name plus *your* remaining clock). Untimed games show only the bot name.
 
-Since LightOS does not use Android system navigation, we provide a back button for you. As long as you use `navigateTo` to move between screens, our back button should work great. If need be, you can override the `onBackPressed` method in your `LightViewModel`.
+**During a game** the bottom bar is:
 
-### Sharing Your Tool
-**As of July 1, 2026, there's no "easy" way to share your tool with a Light Phone III user. We're working hard on that. This is how we believe it's going to look.**
+- **Star** — hint. The engine looks at the position at Hard strength and outlines a suggested from/to. Tap the destination to play it.
+- **Trash** — resign, with a confirm screen.
+- **Rewind** — undo your last move (and the bot’s reply). Disabled until you have moved.
 
-Given our relatively limited resources and desire to keep our users safe, we're requiring that all community tools be open source (including our own!). We will be building and signing these tools directly from a publicly available git commit, and we'll be archiving the source at build time. You're free to build and share privately, but LightOS won't let you install tools that are not signed by us without acknowledging privacy and performance risks. We won't block users from performing these "dangerous" sideloads, but we're not going to encourage it either. In the near future, you'll be able to queue up a build of your tool on our servers, and if it follows our guidelines and compiles cleanly, we will hand you back a signed, shareable APK.
+Pawns that reach the last rank open a **Promote** screen (Queen, Rook, Bishop, Knight). Games end with a full-screen result: checkmate, draw, flag, or resign.
 
-Once we release a version of LightOS that supports community tools, users will have an option to choose what kind of tools they want to be able to run on their device:
-- **Light-approved tools**: These include tools that are either built internally by the Light team, or built by the community and officially tested/signed-off by the Light team. We don't know _exactly_ what that sign-off process is going to look like, but as a heads-up: we're going to be looking pretty hard at whether a submitted tool matches the Light ethos both functionally and aesthetically. We've included a UX/UI library to make this as easy as possible! From a technical standpoint, these approved tools are both signed by us _and_ added to an "allow-list" within LightOS. Phones with this option selected will only install and display tools that meet both criteria.
-- **SDK-built tools**: This is a slightly more permissive choice. Phones with this option selected will install and launch any tool that was built and signed by Light. These don't require any manual approval by us (though we can block them in extreme cases). If a user wants to be able to install a tool that was shared locally or somewhere outside of Light's dashboard, but they still want to be confident that it will run well and integrate nicely with LightOS, they might choose this option!
-- **Any tools**: A user will have the option to make any APK launchable from LightOS, but they will own the responsibility of getting them un/installed. When a user selects this option, we will be warning them that they are potentially opening their device up to security risks, and in doing so will limit our ability to support them if something goes wrong.
+Leaving the board, pausing the app, or killing the process saves an in-progress game. Finished games are cleared.
 
-## [Complete Documentation](./docs)
+## Bot
+
+Search is iterative deepening with alpha-beta and Michniewski’s Simplified Evaluation Function ([Chess Programming Wiki](https://www.chessprogramming.org/Simplified_Evaluation_Function)). Easy and Medium also blunder on purpose so they are not just a shallow search.
+
+| Level | Search | Notes |
+| --- | --- | --- |
+| Easy | Depth 1, ~350 ms | Often picks a random legal move; otherwise can swap the best move for a worse one |
+| Medium | Depth 1, ~400 ms | Same idea, a bit more reliable |
+| Hard | Depth 4, ~2 s | Full search, no forced blunders |
+| Grand master | Depth 6, ~4.5 s | Same eval, longer think |
+
+On a clock the search budget shrinks with remaining time. Hints always search at Hard, independent of the bot you are playing.
+
+## Engine and pieces
+
+Move generation is a 0x88 mailbox, with make/unmake, FEN, castling, en passant, promotion, threefold, fifty-move, and insufficient material. Unit tests cover start-position perft, Kiwipete, castling, and en passant.
+
+Piece drawings are from [FreeChessIcons](https://github.com/POWERHACK69/FreeChessIcons) (Uray M. János, [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)).
+
+## Run it
+
+You can sideload the APK onto a Light Phone III, or run it on an Android emulator that looks like an LP3:
+
+- 1080 × 1240, 3.92" display
+- Android API 34
+- No Google Play
+
+```bash
+./gradlew :tool:installDebug
+adb shell am start -n com.thelightphone.chess/com.thelightphone.sdk.LightActivity
+```
+
+For LightOS-as-a-system-app (toolbox, theme, the way a real phone launches tools), follow [Using the LightOS Emulator](docs/system_app). The tool’s `serverPackage` in [`tool/lighttool.toml`](tool/lighttool.toml) is set to `com.thelightphone.sdk.emulator` for that setup; switch it to `com.lightos` for hardware.
+
+Open the repo in Android Studio (or IntelliJ) and run the `:tool` configuration if you prefer a GUI.
+
+The UI is Compose on top of the SDK’s `LightScreen` / `LightViewModel` pair, using `LightTopBar`, `LightBottomBar`, `LightScrollView`, `LightText`, and `LightIcons`. Game state is a DataStore JSON blob.
+
+## Layout
+
+| Path | What it is |
+| --- | --- |
+| [`tool/src/main/kotlin/com/thelightphone/chess/`](tool/src/main/kotlin/com/thelightphone/chess/) | Screens, view models, board widget |
+| [`tool/src/main/kotlin/com/thelightphone/chess/engine/`](tool/src/main/kotlin/com/thelightphone/chess/engine/) | Rules + search |
+| [`sdk/`](sdk/) | Light SDK (client, UI, emulator) |
+| [`docs/`](docs/) | SDK docs, including the emulator walkthrough |
+
+This tree still includes the upstream Light SDK so the tool can build and run against it. Chess-specific code is the `tool` module.

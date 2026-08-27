@@ -17,7 +17,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "light-sdk"
+rootProject.name = "light-chess"
 
 includeBuild("plugin")
 include(":lint-rules")
