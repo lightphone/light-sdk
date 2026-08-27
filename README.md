@@ -57,7 +57,7 @@ On a clock the search budget shrinks with remaining time. Hints always search at
 
 Move generation is a 0x88 mailbox, with make/unmake, FEN, castling, en passant, promotion, threefold, fifty-move, and insufficient material. Unit tests cover start-position perft, Kiwipete, castling, and en passant.
 
-Piece drawings are from [FreeChessIcons](https://github.com/POWERHACK69/FreeChessIcons) (Uray M. János, [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)).
+Piece drawings are from [Wikimedia Commons SVG chess pieces](https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces).
 
 ## Run it
 

@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Inverted copy of chess_white_queen.xml
-  From FreeChessIcons https://github.com/POWERHACK69/FreeChessIcons
-  Uray M. Janos, CC BY-SA 3.0
+  From https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="45dp"
