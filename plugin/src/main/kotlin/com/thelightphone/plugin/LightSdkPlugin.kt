@@ -31,6 +31,7 @@ class LightSdkPlugin : Plugin<Project> {
             "org.unifiedpush.android:connector",
             "androidx.core:core-splashscreen",
             "com.thelightphone.lp3keyboard",
+            "com.thelightphone.toolmanager",
             "com.github.lightphone:light-keyboard",
             "androidx.room",
             "androidx.work",
