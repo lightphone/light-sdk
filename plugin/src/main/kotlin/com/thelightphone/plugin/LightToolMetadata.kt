@@ -188,8 +188,9 @@ object LightToolPolicy {
     )
 
     const val DETACHED_AUDIO: String = "detached-audio"
+    const val TOOL_MANAGER_PROVIDER: String = "tool-manager-provider"
 
-    val ALLOWED_CAPABILITIES: Set<String> = setOf(DETACHED_AUDIO)
+    val ALLOWED_CAPABILITIES: Set<String> = setOf(DETACHED_AUDIO, TOOL_MANAGER_PROVIDER)
 
     /**
      * Permissions a capability contributes to the generated manifest. These are
@@ -211,6 +212,10 @@ object LightToolPolicy {
      */
     fun capabilityMarker(capability: String): String =
         "com.thelightphone.sdk.CAPABILITY_" + capability.uppercase().replace('-', '_')
+
+    // <provider> <meta-data> key a LightFileProvider-compatible provider must
+    // declare (value "true") to be discoverable by the tool manager.
+    const val META_DATA_TOOL_MANAGER_PROVIDER: String = "com.thelightphone.toolmanager.TOOL_MANAGER_PROVIDER"
 
     /**
      * Permissions that Play Store / lint infer as also requiring a hardware
