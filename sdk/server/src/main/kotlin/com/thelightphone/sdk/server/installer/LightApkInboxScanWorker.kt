@@ -49,7 +49,7 @@ class LightApkInboxScanWorker(context: Context, params: WorkerParameters) : Work
             WorkManager.getInstance(applicationContext)
                 .enqueueUniqueWork(
                     "apk_install_${apk.name}",
-                    ExistingWorkPolicy.KEEP,
+                    ExistingWorkPolicy.REPLACE,
                     installRequest
                 )
         }
