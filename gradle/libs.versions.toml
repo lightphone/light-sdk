@@ -18,6 +18,7 @@ zxing = "3.5.4"
 [libraries]
 unifiedpush-connector = { module = "org.unifiedpush.android:connector", version.ref = "connector" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+apksig = { module = "com.android.tools.build:apksig", version.ref = "agp" }
 
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
 compose-ui = { module = "androidx.compose.ui:ui" }
