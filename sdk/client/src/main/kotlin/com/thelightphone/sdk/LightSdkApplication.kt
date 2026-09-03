@@ -49,6 +49,7 @@ open class LightSdkApplication : Application() {
         val entryPoint = LightSdkRegistry.entryPoint ?: return
         LightFileProvider.manifest = entryPoint::getToolManagerManifest
         LightFileProvider.onToolManagerDataUpdate = { enqueueLightManagerNotifyJob() }
+        LightFileProvider.jobs = LightToolManagerJobBridge(SealedLightContext(this))
         applicationScope.launch {
             entryPoint.onToolCreate(lightOsData)
         }

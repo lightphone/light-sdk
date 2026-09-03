@@ -26,7 +26,10 @@ import com.thelightphone.sdk.EntryPoint
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightEntryPoint
 import com.thelightphone.sdk.LightFileShare
+import com.thelightphone.sdk.LightRemoteJob
+import com.thelightphone.sdk.LightRemoteJobHandler
 import com.thelightphone.sdk.SealedLightActivity
+import com.thelightphone.sdk.SealedLightContext
 import com.thelightphone.sdk.SimpleLightScreen
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightIcon
@@ -41,7 +44,10 @@ import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.toolmanager.ClientLeafNode
 import com.thelightphone.toolmanager.ClientToolManifest
 import com.thelightphone.toolmanager.FileBrowserSpec
+import com.thelightphone.toolmanager.JobSpec
+import io.ktor.util.encodeBase64
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlin.io.encoding.Base64
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -125,17 +131,45 @@ private fun InnerContent(
     }
 }
 
+@LightRemoteJob("remote-job")
+object RemoteJob : LightRemoteJobHandler {
+
+    fun redirectPage(url: String) = Base64.encode("""<button onclick="location.href='$url'">Go</button>""".toByteArray())
+        .let { "https://itty.bitty.site/#light_auth_sim.html/data:text/html;base64,$it" }
+
+    override fun getRedirectUrl(
+        context: SealedLightContext,
+        callbackUrl: String?,
+        inputParams: Map<String, String>
+    ): String? {
+        println("calback $callbackUrl")
+        return callbackUrl.takeUnless { it.isNullOrBlank() }?.let { redirectPage(it) }.also { println("redirect  url: $it") }
+    }
+
+    override fun onComplete(
+        context: SealedLightContext,
+        jobId: String,
+        output: Map<String, String>
+    ): Boolean {
+        println("JOBBBYYYYY $output")
+        return true
+    }
+}
+
 @EntryPoint
 object ToolEntryPoint : LightEntryPoint {
     val directories = listOf(
         FileBrowserSpec(label = "Main Directory", path = "main"),
         FileBrowserSpec(label = "Other Directory", path = "other")
     )
+    private val remoteJobSpec = ClientLeafNode(
+        JobSpec("Job", "remote-job", buttonText = "Click Me")
+    )
     internal val updateFlow = MutableStateFlow<Long>(0)
     override fun getToolManagerManifest(): ClientToolManifest {
         return ClientToolManifest(
             title = "Tool Manager Demo",
-            roots = directories.map { ClientLeafNode(it) }
+            roots = directories.map { ClientLeafNode(it) } + remoteJobSpec
         )
     }
 
