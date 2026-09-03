@@ -50,3 +50,6 @@ bin/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+### Signing keys ###
+/signer/keys/
