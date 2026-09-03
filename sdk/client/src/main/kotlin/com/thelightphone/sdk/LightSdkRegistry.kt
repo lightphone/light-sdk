@@ -22,4 +22,10 @@ internal object LightSdkRegistry {
         (generated::class.java.getMethod("getJobs").invoke(generated)
             as? Map<String, LightJobHandler>) ?: emptyMap()
     }
+
+    @Suppress("UNCHECKED_CAST")
+    val remoteJobs: Map<String, LightRemoteJobHandler> by lazy {
+        (generated::class.java.getMethod("getRemoteJobs").invoke(generated)
+            as? Map<String, LightRemoteJobHandler>) ?: emptyMap()
+    }
 }
