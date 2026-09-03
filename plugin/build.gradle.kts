@@ -34,6 +34,12 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
+    // Lets a test check the media3 version the plugin hardcodes against the
+    // catalog the SDK builds with, which is outside this included build.
+    systemProperty(
+        "light.versionCatalog",
+        rootDir.resolve("../gradle/libs.versions.toml").absolutePath,
+    )
 }
 
 gradlePlugin {

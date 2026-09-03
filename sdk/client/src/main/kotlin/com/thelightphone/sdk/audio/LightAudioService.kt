@@ -3,7 +3,9 @@ package com.thelightphone.sdk.audio
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.OptIn
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -20,6 +22,7 @@ import androidx.media3.session.MediaSessionService
  * stopped by itself once playback is paused and no tool holds a handle — see
  * [shouldStartIdleStop].
  */
+@OptIn(UnstableApi::class)
 internal class LightAudioService : MediaSessionService() {
 
     private lateinit var player: ExoPlayer
@@ -32,14 +35,18 @@ internal class LightAudioService : MediaSessionService() {
 
         assertSharedProcess()
 
-        player = ExoPlayer.Builder(this).build().apply {
-            setAudioAttributes(LightAudioUsage.Music.toMedia3AudioAttributes(), true)
+        // Whatever the starting handle staged. Empty if the system revived the service.
+        val caches = detachedSessionState.stagedCaches()
+        val sourceFactory = detachedSessionState.stagedSourceFactory()
+        player = buildSdkExoPlayer(this, LightAudioUsage.Music, caches, sourceFactory).apply {
             addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     refreshIdleStop()
                 }
             })
         }
+        detachedSessionState.adoptCaches(caches)
+        detachedSessionState.adoptSourceFactory(sourceFactory != null)
         session = MediaSession.Builder(this, player)
             .setId(packageName)
             .setCallback(SessionCallback())

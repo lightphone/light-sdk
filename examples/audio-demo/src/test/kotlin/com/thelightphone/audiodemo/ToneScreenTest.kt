@@ -9,6 +9,10 @@ import com.thelightphone.sdk.audio.LightAudioPlayback
 import com.thelightphone.sdk.audio.LightAudioRecorder
 import com.thelightphone.sdk.audio.LightAudioUsage
 import com.thelightphone.sdk.audio.LightAudioVoice
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
+import com.thelightphone.sdk.audio.LightMediaCache
+import com.thelightphone.sdk.audio.LightMediaSourceFactory
 import com.thelightphone.sdk.audio.RecorderConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,9 +31,12 @@ class ToneScreenTest {
         val vm = ToneViewModel(object : LightAudio {
             override val capabilities: AudioCapabilities = AudioCapabilities(67)
 
+            @OptIn(UnstableApi::class)
             override fun newPlayer(
                 usage: LightAudioUsage,
                 playback: LightAudioPlayback,
+                caches: List<LightMediaCache>,
+                sourceFactory: LightMediaSourceFactory?,
             ): LightAudioPlayer {
                 TODO("Should not be called")
             }

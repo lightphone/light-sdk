@@ -216,10 +216,13 @@ sealed interface LightAudioSource {
  *
  * @property source playable media location
  * @property metadata descriptive values forwarded to playback surfaces
+ * @property id stable identity, unique within the queue. Use when [source] can
+ *   change while naming the same audio. Defaults to the source location.
  */
 data class LightAudioItem(
     val source: LightAudioSource,
     val metadata: LightMediaMetadata,
+    val id: String? = null,
 )
 
 internal const val DEFAULT_SAMPLE_RATE = 48_000
