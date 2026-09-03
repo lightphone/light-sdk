@@ -199,7 +199,6 @@ fun LightTextInputEditor(
                 additionalBottomHeight = 5f.gridUnitsAsDp(),
                 bottomBar = {
                     LightBottomBar(
-                        topPadding = 0.dp,
                         items = listOf(
                             when (submitIcon) {
                                 null -> LightBarButton.Text(

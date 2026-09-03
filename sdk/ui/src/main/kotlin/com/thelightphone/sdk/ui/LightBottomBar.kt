@@ -14,10 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 private const val BOTTOMBAR_HEIGHT_UNITS = 4f
 private const val HORIZONTAL_PADDING_MULTI_UNITS = 2f
-private const val TOP_MARGIN_UNITS = 1f
 
 private val BOTTOMBAR_TEXT_VARIANT = LightTextVariant.Button
 
@@ -31,7 +31,7 @@ private val BOTTOMBAR_TEXT_VARIANT = LightTextVariant.Button
 fun LightBottomBar(
     items: List<LightBottomBarItem?>,
     modifier: Modifier = Modifier,
-    topPadding: Dp = TOP_MARGIN_UNITS.gridUnitsAsDp()
+    topPadding: Dp = 0.dp,
 ) {
     require(items.size <= 5) { "LightBottomBar supports at most 5 items" }
 
