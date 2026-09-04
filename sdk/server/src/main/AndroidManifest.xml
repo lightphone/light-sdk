@@ -6,6 +6,7 @@
     <protected-broadcast android:name="org.unifiedpush.android.connector.UNREGISTERED" />
     <protected-broadcast android:name="org.unifiedpush.android.connector.MESSAGE" />
 
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application>
         <receiver
             android:name=".LightPushDistributor"
@@ -17,6 +18,11 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".installer.LightApkInstallResultReceiver"
+            android:exported="false" />
+        <service android:name=".toolmanager.ToolManagerLifecycleWrapperService"
+            android:exported="false"/>
         <service
             android:name=".LightSdkService"
             android:exported="true" >

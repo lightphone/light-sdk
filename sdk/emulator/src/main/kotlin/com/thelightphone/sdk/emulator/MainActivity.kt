@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.thelightphone.sdk.emulator.Nav.*
 import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.sdk.server.LightSdkServer.queryEnabledClients
 import com.thelightphone.sdk.server.LightSdkServer.runningAsSystemApp
@@ -120,7 +121,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }, launchDefaultTool = {
                         when (it) {
-                            DefaultTool.Settings -> EmulatorNavController.navigateTo(Nav.Settings())
+                            DefaultTool.Settings -> EmulatorNavController.navigateTo(Settings())
+                            DefaultTool.ToolManager -> LightSdkServer.foregroundToolManagerUi(this)
                         }
                     })
             }
@@ -153,11 +155,13 @@ private sealed class Tool(val label: String)
 private class ExternalTool(label: String, val packageName: String) : Tool(label)
 private sealed class DefaultTool(label: String) : Tool(label) {
     object Settings : DefaultTool("Settings")
+    object ToolManager : DefaultTool("Tool Manager")
 }
 
 
 private val defaultTools: List<Tool> = listOf(
-    DefaultTool.Settings
+    DefaultTool.Settings,
+    DefaultTool.ToolManager
 )
 
 @Composable
@@ -175,7 +179,8 @@ private fun ToolList(
             pages.getOrNull(currentPageIndex) ?: pages.first()
         }
     }
-    LaunchedEffect(Unit) {
+    val refreshCount by EmulatorApplication.installedToolsRefreshCount.collectAsState()
+    LaunchedEffect(refreshCount) {
         val externalTools = fetchExternalTools()
         pages = (defaultTools + externalTools).chunked(toolPageSize)
     }
@@ -192,7 +197,7 @@ private fun ToolList(
                     }
                 }
             ),
-            verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             for (tool in currentPage) {

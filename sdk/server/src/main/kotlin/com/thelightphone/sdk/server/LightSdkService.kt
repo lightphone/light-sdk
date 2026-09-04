@@ -42,7 +42,7 @@ class LightSdkService : Service() {
                 Intent(LightConstants.ACTION_SDK_MARKER).setPackage(packageName),
                 PackageManager.GET_META_DATA
             ).isNotEmpty()
-            hasMarker && LightSdkServer.isPackageAllowed(clientFilterLevel, packageName)
+            hasMarker && LightSdkServer.isPackageAllowed(clientFilterLevel, this, packageName)
         }
     }
 

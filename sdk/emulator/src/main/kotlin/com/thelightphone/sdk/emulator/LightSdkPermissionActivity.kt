@@ -39,7 +39,8 @@ class LightSdkPermissionActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.hide(WindowInsetsCompat.Type.systemBars())
-        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         window.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
         fun exit(message: String) {
             Log.e(TAG, message)
@@ -51,8 +52,9 @@ class LightSdkPermissionActivity : ComponentActivity() {
             requester,
             PackageManager.PackageInfoFlags.of(0)
         )
-        val permission = intent.getStringExtra(LightServiceMethod.RequestPermissionComponent.PERMISSION_NAME_KEY)
-            ?: return exit("Missing permission extra, exiting")
+        val permission =
+            intent.getStringExtra(LightServiceMethod.RequestPermissionComponent.PERMISSION_NAME_KEY)
+                ?: return exit("Missing permission extra, exiting")
 
         val permissionAllowed = LightSdkServer.androidPermissionAllowed(requesterUid, permission)
         if (!permissionAllowed) {
@@ -69,8 +71,14 @@ class LightSdkPermissionActivity : ComponentActivity() {
             var packageAllowed by remember { mutableStateOf(false) }
             LaunchedEffect(Unit) {
                 withContext(Dispatchers.IO) {
-                    val clientFilterLevel = LightSdkServer.provideSdkSettings(this@LightSdkPermissionActivity).clientFilterLevel
-                    packageAllowed = permissionAllowed && LightSdkServer.isPackageAllowed(clientFilterLevel, requester)
+                    val context = this@LightSdkPermissionActivity
+                    val clientFilterLevel =
+                        LightSdkServer.provideSdkSettings(context).clientFilterLevel
+                    packageAllowed = permissionAllowed && LightSdkServer.isPackageAllowed(
+                        clientFilterLevel,
+                        context,
+                        requester
+                    )
                     loading = false
                 }
             }
