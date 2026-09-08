@@ -13,6 +13,10 @@ kotlin {
     }
 }
 
+sourceSets.main {
+    resources.srcDir(rootProject.file("trust-format"))
+}
+
 dependencies {
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.kotlin.test)
