@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import tempfile
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,19 +27,20 @@ SHA256_FIELDS = {"signerSha256", "apkSha256"}
 def load_json(path: Path) -> Any:
     try:
         with path.open("r", encoding="utf-8") as source:
-            return json.load(source, object_pairs_hook=_reject_duplicate_keys)
+            return _check_depth(json.load(source, object_pairs_hook=_reject_duplicate_keys))
     except SignerError:
         raise
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, ValueError, RecursionError) as error:
         raise SignerError("invalid_json", f"could not read {path}: {error}") from error
 
 
 def build_bundle(*, portal: Path, output_dir: Path, private_key: Path, openssl: Path) -> bytes:
     source = _object(load_json(portal), "portal input")
+    _exact_fields(source, REQUIRED_BUNDLE_FIELDS - {"schemaVersion"}, "portal input")
     bundle: dict[str, Any] = {
         "schemaVersion": SUPPORTED_SCHEMA_VERSION,
         "version": source.get("version"),
-        "issuedAt": source.get("issuedAt") or datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "issuedAt": source["issuedAt"],
         "allow": source.get("allow"),
         "block": source.get("block"),
         "trustedStampCerts": source.get("trustedStampCerts"),
@@ -49,9 +51,16 @@ def build_bundle(*, portal: Path, output_dir: Path, private_key: Path, openssl: 
     bundle_path = output_dir / "bundle.json"
     _require_newer_version(bundle["version"], bundle_path)
     bundle_bytes = json.dumps(bundle, indent=2, sort_keys=True).encode("utf-8") + b"\n"
-    bundle_path.write_bytes(bundle_bytes)
-    signature = _sign(openssl, private_key, SIGNED_PAYLOAD_PREFIX + bundle_path.read_bytes())
-    (output_dir / "bundle.sig").write_bytes(signature)
+    # Prepare both files before replacing the published pair; signing failure
+    # must not advance the directory's version floor.
+    with tempfile.TemporaryDirectory(dir=output_dir) as staging:
+        staged_bundle = Path(staging) / "bundle.json"
+        staged_signature = Path(staging) / "bundle.sig"
+        staged_bundle.write_bytes(bundle_bytes)
+        signature = _sign(openssl, private_key, SIGNED_PAYLOAD_PREFIX + staged_bundle.read_bytes())
+        staged_signature.write_bytes(signature)
+        staged_signature.replace(output_dir / "bundle.sig")
+        staged_bundle.replace(bundle_path)
     return bundle_bytes
 
 
@@ -67,24 +76,32 @@ def verify_bundle(*, bundle: Path, signature: Path, public_keys: list[Path], ope
     if not any(_verify(openssl, key, payload, signature_bytes) for key in public_keys):
         raise SignerError("invalid_bundle_signature", "bundle signature did not match a pinned key")
     try:
-        document = json.loads(bundle_bytes, object_pairs_hook=_reject_duplicate_keys)
+        document = _check_depth(json.loads(bundle_bytes, object_pairs_hook=_reject_duplicate_keys))
     except SignerError:
         raise
-    except (UnicodeError, json.JSONDecodeError) as error:
+    except (UnicodeError, ValueError, RecursionError) as error:
         raise SignerError("invalid_json", f"bundle is not valid JSON: {error}") from error
     return validate_bundle(document)
 
 
 def validate_bundle(value: Any) -> dict[str, Any]:
     bundle = _object(value, "bundle")
-    _exact_fields(bundle, REQUIRED_BUNDLE_FIELDS, "bundle")
+    if "schemaVersion" not in bundle:
+        raise SignerError("missing_bundle_field", "bundle missing required field: schemaVersion")
     schema_version = _integer(bundle["schemaVersion"], "schemaVersion")
     if schema_version > SUPPORTED_SCHEMA_VERSION:
         raise SignerError("unsupported_schema_version", f"schemaVersion {schema_version} is newer than supported version 1")
     if schema_version != SUPPORTED_SCHEMA_VERSION:
         raise SignerError("invalid_schema_version", "schemaVersion must be 1")
+    _exact_fields(bundle, REQUIRED_BUNDLE_FIELDS, "bundle")
     _nonnegative_integer(bundle["version"], "version")
-    _nonempty_string(bundle["issuedAt"], "issuedAt")
+    issued_at = _nonempty_string(bundle["issuedAt"], "issuedAt")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", issued_at):
+        raise SignerError("invalid_issued_at", "issuedAt must be UTC YYYY-MM-DDTHH:MM:SSZ")
+    try:
+        datetime.strptime(issued_at, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError as error:
+        raise SignerError("invalid_issued_at", "issuedAt must be a valid UTC date-time") from error
     _validate_cert_list(bundle["trustedStampCerts"], "trustedStampCerts")
     _validate_cert_list(bundle["revokedStampCerts"], "revokedStampCerts")
     allow = _list(bundle["allow"], "allow")
@@ -124,7 +141,7 @@ def validate_bundle(value: Any) -> dict[str, Any]:
                 _nonnegative_integer(field_value, f"block[{index}].match.versionCode")
             else:
                 _nonempty_string(field_value, f"block[{index}].match.toolId")
-        if entry["action"] not in {"block", "purge"}:
+        if not isinstance(entry["action"], str) or entry["action"] not in {"block", "purge"}:
             raise SignerError("invalid_block_action", f"block[{index}].action must be block or purge")
         _nonempty_string(entry["reason"], f"block[{index}].reason")
     return bundle
@@ -139,6 +156,7 @@ def _require_newer_version(version: int, bundle_path: Path) -> None:
 
 
 def _sign(openssl: Path, private_key: Path, payload: bytes) -> bytes:
+    _require_ed25519(openssl, private_key, public=False)
     with tempfile.NamedTemporaryFile() as payload_file:
         payload_file.write(payload)
         payload_file.flush()
@@ -152,6 +170,7 @@ def _sign(openssl: Path, private_key: Path, payload: bytes) -> bytes:
 
 
 def _verify(openssl: Path, public_key: Path, payload: bytes, signature: bytes) -> bool:
+    _require_ed25519(openssl, public_key, public=True)
     command = [str(openssl), "pkeyutl", "-verify", "-rawin", "-pubin", "-inkey", str(public_key)]
     with tempfile.NamedTemporaryFile() as payload_file, tempfile.NamedTemporaryFile() as signature_file:
         payload_file.write(payload)
@@ -167,6 +186,20 @@ def _verify(openssl: Path, public_key: Path, payload: bytes, signature: bytes) -
     return verified.returncode == 0
 
 
+def _require_ed25519(openssl: Path, key: Path, *, public: bool) -> None:
+    command = [str(openssl), "pkey", "-in", str(key), "-pubout", "-outform", "DER"]
+    if public:
+        command.append("-pubin")
+    else:
+        command.extend(["-passin", "pass:"])
+    result = subprocess.run(command, capture_output=True, check=False)
+    if result.returncode:
+        raise SignerError("invalid_bundle_key", "could not read bundle key")
+    # RFC 8410 SubjectPublicKeyInfo: Ed25519 OID, absent parameters, 32-byte key.
+    if len(result.stdout) != 44 or not result.stdout.startswith(bytes.fromhex("302a300506032b6570032100")):
+        raise SignerError("invalid_bundle_key", "bundle key must be Ed25519")
+
+
 def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -174,6 +207,19 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise SignerError("duplicate_json_key", f"duplicate JSON key: {key}")
         result[key] = value
     return result
+
+
+def _check_depth(document: Any) -> Any:
+    pending = [(document, 0)]
+    while pending:
+        value, depth = pending.pop()
+        if depth > 64:
+            raise SignerError("invalid_json", "JSON nesting exceeds 64 levels")
+        if isinstance(value, dict):
+            pending.extend((child, depth + 1) for child in value.values())
+        elif isinstance(value, list):
+            pending.extend((child, depth + 1) for child in value)
+    return document
 
 
 def _object(value: Any, field: str) -> dict[str, Any]:
@@ -196,8 +242,8 @@ def _integer(value: Any, field: str) -> int:
 
 def _nonnegative_integer(value: Any, field: str) -> int:
     result = _integer(value, field)
-    if result < 0:
-        raise SignerError("invalid_bundle_structure", f"{field} must be non-negative")
+    if not 0 <= result <= 9223372036854775807:
+        raise SignerError("invalid_bundle_structure", f"{field} must be between 0 and 9223372036854775807")
     return result
 
 

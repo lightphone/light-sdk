@@ -64,3 +64,9 @@ under `ANDROID_SDK_ROOT` or `ANDROID_HOME`.
 
 The checked-in bundle vectors use keys prefixed `INSECURE-`. They are test-only
 and must never be configured as device trust anchors.
+
+`portal.json` requires `version`, `issuedAt`, `allow`, `block`,
+`trustedStampCerts`, and `revokedStampCerts`, with no extra fields.
+Do not include `schemaVersion`; the builder supplies it. Timestamps must use
+UTC `YYYY-MM-DDTHH:MM:SSZ`. See [the format contract](../trust-format/README.md)
+for numeric limits, image-pin ownership, and publication/retry behavior.

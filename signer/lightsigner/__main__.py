@@ -150,6 +150,9 @@ def main(argv: list[str] | None = None) -> int:
     except SignerError as error:
         print(f"{error.code}: {error}", file=sys.stderr)
         return 1
+    except OSError as error:
+        print(f"io_error: {error}", file=sys.stderr)
+        return 1
 
 
 def _parser() -> argparse.ArgumentParser:
