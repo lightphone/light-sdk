@@ -188,8 +188,17 @@ object LightToolPolicy {
     )
 
     const val DETACHED_AUDIO: String = "detached-audio"
+    const val AUDIO_DASH: String = "audio-dash"
 
-    val ALLOWED_CAPABILITIES: Set<String> = setOf(DETACHED_AUDIO)
+    val ALLOWED_CAPABILITIES: Set<String> = setOf(DETACHED_AUDIO, AUDIO_DASH)
+
+    /** media3 version the SDK is built against. Keep in sync with the catalog. */
+    const val MEDIA3_VERSION: String = "1.10.1"
+
+    /** Dependencies a capability puts on the tool's classpath. */
+    val CAPABILITY_IMPLIED_DEPENDENCIES: Map<String, List<String>> = mapOf(
+        AUDIO_DASH to listOf("androidx.media3:media3-exoplayer-dash:$MEDIA3_VERSION"),
+    )
 
     /**
      * Permissions a capability contributes to the generated manifest. These are

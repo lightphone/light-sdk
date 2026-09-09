@@ -3,13 +3,15 @@ package com.thelightphone.sdk.audio
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.common.Timeline
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import java.io.File
@@ -40,10 +42,13 @@ enum class LightAudioPlayerAvailability {
  * Transient focus loss pauses and later resumes playback; duckable loss lowers
  * volume. Call [release] when the owning screen is destroyed.
  */
+@OptIn(UnstableApi::class)
 class LightAudioPlayer internal constructor(
     context: Context,
     usage: LightAudioUsage = LightAudioUsage.Music,
     internal val playback: LightAudioPlayback = LightAudioPlayback.Attached,
+    caches: List<LightMediaCache> = emptyList(),
+    sourceFactory: LightMediaSourceFactory? = null,
     private val onRelease: () -> Unit = {},
 ) {
     private val scopeJob = SupervisorJob()
@@ -52,6 +57,7 @@ class LightAudioPlayer internal constructor(
     private val _durationMs = MutableStateFlow(0L)
     private val _isPlaying = MutableStateFlow(false)
     private val _currentMediaItemIndex = MutableStateFlow(NO_MEDIA_ITEM)
+    private val _mediaItemCount = MutableStateFlow(0)
     private val _error = MutableStateFlow<LightAudioError?>(null)
     private val commands = PendingPlayerCommands()
     private var positionJob: Job? = null
@@ -67,6 +73,8 @@ class LightAudioPlayer internal constructor(
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
     /** Current queue index, or `-1` when the queue is empty. */
     val currentMediaItemIndex: StateFlow<Int> = _currentMediaItemIndex.asStateFlow()
+    /** Number of items in the queue, including ones added by another controller. */
+    val mediaItemCount: StateFlow<Int> = _mediaItemCount.asStateFlow()
     /** Current playback failure, or `null` after successful re-preparation. */
     val error: StateFlow<LightAudioError?> = _error.asStateFlow()
     /** Connection and command-acceptance lifecycle of this player. */
@@ -74,11 +82,8 @@ class LightAudioPlayer internal constructor(
 
     init {
         when (playback) {
-            LightAudioPlayback.Attached -> connectPlayer(
-                ExoPlayer.Builder(context).build().apply {
-                    setAudioAttributes(usage.toMedia3AudioAttributes(), true)
-                },
-            )
+            LightAudioPlayback.Attached ->
+                connectPlayer(buildSdkExoPlayer(context, usage, caches, sourceFactory))
             LightAudioPlayback.Detached -> connectDetachedPlayer(context, usage)
         }
     }
@@ -96,6 +101,12 @@ class LightAudioPlayer internal constructor(
                 } else {
                     connectedPlayer.currentMediaItemIndex
                 }
+            }
+
+            // Editing the queue can move the current item without transitioning to
+            // it, and in detached mode another controller may edit it at any time.
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                refreshQueueState(connectedPlayer)
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -122,6 +133,7 @@ class LightAudioPlayer internal constructor(
         })
         val state = connectedPlayer.snapshotState()
         _currentMediaItemIndex.value = state.currentMediaItemIndex
+        _mediaItemCount.value = state.mediaItemCount
         _positionMs.value = state.positionMs
         _durationMs.value = state.durationMs
         _isPlaying.value = state.isPlaying
@@ -192,13 +204,84 @@ class LightAudioPlayer internal constructor(
             return
         }
         require(startIndex in items.indices) { "Start index must reference a queue item" }
-        val mediaItems = items.mapIndexed { index, item -> item.toMediaItem(index) }
+        val mediaItems = items.map(LightAudioItem::toMediaItem)
         commands.dispatch { player ->
             player.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
             _currentMediaItemIndex.value = startIndex
             player.prepare()
             updateDuration(player)
             updatePosition(player)
+        }
+    }
+
+    /**
+     * Appends [item] to the queue, preparing playback when the queue was idle.
+     */
+    fun addMediaItem(item: LightAudioItem) {
+        val mediaItem = item.toMediaItem()
+        commands.dispatch { player ->
+            player.addMediaItem(mediaItem)
+            prepareIfIdle(player)
+        }
+    }
+
+    /**
+     * Inserts [item] at [index], shifting later items back. An [index] past the
+     * end appends.
+     *
+     * @throws IllegalArgumentException when [index] is negative
+     */
+    fun addMediaItem(index: Int, item: LightAudioItem) {
+        require(index >= 0) { "Queue index must not be negative" }
+        val mediaItem = item.toMediaItem()
+        commands.dispatch { player ->
+            player.addMediaItem(index.coerceAtMost(player.mediaItemCount), mediaItem)
+            prepareIfIdle(player)
+        }
+    }
+
+    /**
+     * Removes the item at [index]. Removing the current item advances to the
+     * next one. An [index] past the end changes nothing.
+     *
+     * @throws IllegalArgumentException when [index] is negative
+     */
+    fun removeMediaItem(index: Int) {
+        require(index >= 0) { "Queue index must not be negative" }
+        commands.dispatch { player ->
+            if (index < player.mediaItemCount) player.removeMediaItem(index)
+        }
+    }
+
+    /**
+     * Moves the item at [fromIndex] to [toIndex] without interrupting playback
+     * of the current item. A [toIndex] past the end moves to the end, and a
+     * [fromIndex] past the end changes nothing.
+     *
+     * @throws IllegalArgumentException when either index is negative
+     */
+    fun moveMediaItem(fromIndex: Int, toIndex: Int) {
+        require(fromIndex >= 0 && toIndex >= 0) { "Queue indices must not be negative" }
+        commands.dispatch { player ->
+            val lastIndex = player.mediaItemCount - 1
+            if (fromIndex <= lastIndex) {
+                player.moveMediaItem(fromIndex, toIndex.coerceAtMost(lastIndex))
+            }
+        }
+    }
+
+    /**
+     * Replaces the item at [index] with [item]. An [index] past the end changes
+     * nothing. Give both items the same [LightAudioItem.id] when swapping a
+     * re-resolved URL for audio that is already playing.
+     *
+     * @throws IllegalArgumentException when [index] is negative
+     */
+    fun replaceMediaItem(index: Int, item: LightAudioItem) {
+        require(index >= 0) { "Queue index must not be negative" }
+        val mediaItem = item.toMediaItem()
+        commands.dispatch { player ->
+            if (index < player.mediaItemCount) player.replaceMediaItem(index, mediaItem)
         }
     }
 
@@ -301,6 +384,18 @@ class LightAudioPlayer internal constructor(
     private fun updateDuration(player: Player) {
         _durationMs.value = player.duration.validDuration()
     }
+
+    private fun refreshQueueState(player: Player) {
+        val state = player.snapshotState()
+        _mediaItemCount.value = state.mediaItemCount
+        _currentMediaItemIndex.value = state.currentMediaItemIndex
+        _durationMs.value = state.durationMs
+    }
+
+    /** Prepare after a mutation if the player is idle. */
+    private fun prepareIfIdle(player: Player) {
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
+    }
 }
 
 internal suspend fun awaitPlayerReady(
@@ -308,14 +403,16 @@ internal suspend fun awaitPlayerReady(
 ): Boolean = availability.first { it != LightAudioPlayerAvailability.Initializing } ==
     LightAudioPlayerAvailability.Ready
 
-internal fun LightAudioItem.toMediaItem(queueIndex: Int): MediaItem {
-    val uri = Uri.parse(source.uriString())
-    return MediaItem.Builder()
-        .setUri(uri)
-        .setMediaId(uri.toString())
-        .setMediaMetadata(metadata.toMedia3Metadata(queueIndex))
-        .build()
-}
+@OptIn(UnstableApi::class)
+internal fun LightAudioItem.toMediaItem(): MediaItem = MediaItem.Builder()
+    .setUri(Uri.parse(source.uriString()))
+    .setMediaId(stableId())
+    .setCustomCacheKey(stableId())
+    .setMediaMetadata(metadata.toMedia3Metadata())
+    .build()
+
+/** This item's [LightAudioItem.id], or its location when identity is location. */
+internal fun LightAudioItem.stableId(): String = id ?: source.uriString()
 
 internal fun LightAudioSource.uriString(): String = when (this) {
     is LightAudioSource.FileSource -> Uri.fromFile(file).toString()
@@ -323,13 +420,12 @@ internal fun LightAudioSource.uriString(): String = when (this) {
     is LightAudioSource.UrlSource -> url
 }
 
-private fun LightMediaMetadata.toMedia3Metadata(queueIndex: Int): MediaMetadata {
+private fun LightMediaMetadata.toMedia3Metadata(): MediaMetadata {
     return MediaMetadata.Builder()
         .setTitle(title)
         .setArtist(artist)
         .setAlbumTitle(album)
         .setDurationMs(durationMs)
-        .setTrackNumber(queueIndex + 1)
         .build()
 }
 
@@ -339,6 +435,7 @@ internal fun skipPosition(positionMs: Long, durationMs: Long, deltaMs: Long): Lo
 
 internal data class ConnectedPlayerState(
     val currentMediaItemIndex: Int,
+    val mediaItemCount: Int,
     val positionMs: Long,
     val durationMs: Long,
     val isPlaying: Boolean,
@@ -346,6 +443,7 @@ internal data class ConnectedPlayerState(
 
 internal fun Player.snapshotState(): ConnectedPlayerState = ConnectedPlayerState(
     currentMediaItemIndex = if (mediaItemCount == 0) NO_MEDIA_ITEM else currentMediaItemIndex,
+    mediaItemCount = mediaItemCount,
     positionMs = currentPosition.coerceAtLeast(0L),
     durationMs = duration.validDuration(),
     isPlaying = isPlaying,

@@ -101,6 +101,7 @@ Being in the same process allows the tool code and the service to access the sam
 
 - enforcing one detached handle
 - recording the live session's audio usage
+- staging caches and source factory for `onCreate`, then recording what the live session was built with
 - telling the service whether a tool still holds the detached handle.
 
 The public player API is backed by media3's `Player` interface.
@@ -116,6 +117,8 @@ The SDK maps its audio API onto the media3 components as follows:
 - Releasing `LightAudioPlayer` closes its controller and handle without releasing the service-owned player.
 
 The controller identifies itself as a tool controller and sends its `LightAudioUsage` through connection hints. Other platform controllers, such as Bluetooth, may connect to the session, but they do not own the SDK's detached handle or select its audio usage.
+
+Caches and `LightMediaSourceFactory` are construction-time, so they are staged on `DetachedSessionState` before the controller starts the service. Reconnecting must match the live session's caches and must not pass a source factory.
 
 ## Foreground-service notification on LP3
 

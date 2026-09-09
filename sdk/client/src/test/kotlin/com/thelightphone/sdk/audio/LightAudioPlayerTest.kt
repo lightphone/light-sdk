@@ -68,6 +68,7 @@ class LightAudioPlayerTest {
         assertEquals(
             ConnectedPlayerState(
                 currentMediaItemIndex = 1,
+                mediaItemCount = 3,
                 positionMs = 12_345L,
                 durationMs = 60_000L,
                 isPlaying = true,
@@ -94,7 +95,23 @@ class LightAudioPlayerTest {
 
         val state = freshPlayer.snapshotState()
         assertEquals(NO_MEDIA_ITEM, state.currentMediaItemIndex)
+        assertEquals(0, state.mediaItemCount)
         assertEquals(0L, state.durationMs)
+    }
+
+    @Test
+    fun itemIdentityFallsBackToLocationAndSurvivesRelocation() {
+        val located = LightAudioItem(
+            source = LightAudioSource.UrlSource("https://cdn.example.com/a.mp3?token=first"),
+            metadata = LightMediaMetadata("Track"),
+        )
+        assertEquals("https://cdn.example.com/a.mp3?token=first", located.stableId())
+
+        val identified = located.copy(id = "track-1")
+        val reResolved = identified.copy(
+            source = LightAudioSource.UrlSource("https://cdn.example.com/a.mp3?token=second"),
+        )
+        assertEquals(identified.stableId(), reResolved.stableId())
     }
 
     @Test
