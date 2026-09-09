@@ -61,6 +61,20 @@ object ManifestGenerator {
                 """        </service>""",
             )
         )
+
+        val toolManagerProvider = marginBlock(
+            if (LightToolPolicy.TOOL_MANAGER_PROVIDER !in metadata.capabilities) emptyList() else listOf(
+                """        <provider""",
+                """            android:name="com.thelightphone.toolmanager.LightFileProvider"""",
+                """            android:authorities="${'$'}{applicationId}.lightfileprovider"""",
+                """            android:exported="true">""",
+                """            <meta-data""",
+                """                android:name="${xmlAttr(LightToolPolicy.META_DATA_TOOL_MANAGER_PROVIDER)}"""",
+                """                android:value="true" />""",
+                """        </provider>""",
+            )
+        )
+
         appendLine(
             """
             |    <application
@@ -91,7 +105,7 @@ object ManifestGenerator {
             |            <meta-data
             |                android:name="com.thelightphone.sdk.SDK_VERSION"
             |                android:value="${'$'}{sdkVersion}" />
-            |        </receiver>$detachedAudioService
+            |        </receiver>$detachedAudioService$toolManagerProvider
             |    </application>
             |    <queries>
             |        <intent>
