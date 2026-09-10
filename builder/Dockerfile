@@ -15,7 +15,7 @@
 # Example:
 #   docker build \
 #     --build-arg SDK_GIT_URL=https://github.com/lightphone/light-sdk \
-#     --build-arg SDK_GIT_REF=<commit-sha> \
+#     --build-arg SDK_GIT_REF=<tag-or-commit> \
 #     -t lightphone/light-builder:<tag> builder/
 #
 # Runtime:
@@ -79,7 +79,6 @@ FROM --platform=linux/amd64 base AS sdk
 ARG SDK_GIT_URL=https://github.com/lightphone/light-sdk
 ARG SDK_GIT_REF
 
-# SDK_GIT_REF must be a commit-ish; fail loud if the caller forgot it.
 RUN test -n "${SDK_GIT_REF}" || (echo "SDK_GIT_REF build arg required" >&2; exit 1)
 
 RUN git clone --no-tags "${SDK_GIT_URL}" /opt/light-sdk; \

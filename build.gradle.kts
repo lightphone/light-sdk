@@ -12,7 +12,7 @@ group = "com.thelightphone"
 
 ext["compileSdk"] = 36
 ext["minSdk"] = 34
-ext["targetSdk"] = 36
+ext["targetSdk"] = 34
 ext["jvmTarget"] = "17"
 ext["lintVersion"] = "31.12.3"
 

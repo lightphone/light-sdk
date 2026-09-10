@@ -11,9 +11,7 @@ import os
 from pathlib import Path
 
 import pytest
-
 from lightbuilder.extract import ExtractionError, extract
-
 
 VALID_BUILD_GRADLE = """\
 plugins {
@@ -129,6 +127,14 @@ def test_meta_inf_directory_skipped(tmp_path: Path) -> None:
 
     report = extract(dev, dst)
     assert not any("META-INF" in f for f in report.files_copied)
+
+
+def test_source_stamp_marker_at_tool_root_rejected(tmp_path: Path) -> None:
+    dev = _make_dev_repo(tmp_path / "dev")
+    (dev / "tool" / "stamp-cert-sha256").write_text("forged\n")
+
+    with pytest.raises(ExtractionError, match="stamp-cert-sha256"):
+        extract(dev, tmp_path / "workspace" / "tool")
 
 
 def test_symlinked_file_rejected(tmp_path: Path) -> None:
