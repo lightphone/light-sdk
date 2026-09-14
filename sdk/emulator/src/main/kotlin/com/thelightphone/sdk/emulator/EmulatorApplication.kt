@@ -4,6 +4,11 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.Intent
 import android.util.Log
+import androidx.work.Configuration
+import com.thelightphone.backup.BackupWorkerFactory
+import com.thelightphone.sdk.emulator.backup.EmulatorBackupDependencyProvider
+import com.thelightphone.sdk.emulator.backup.EmulatorBackupPreferences
+import com.thelightphone.sdk.emulator.backup.dummyCloudBackupDataTree
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.RootViewSpec
 import com.thelightphone.toolmanager.datatree.RootDataTree
@@ -26,7 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
 private const val LIGHTSDK_DEV_CERT_SHA256 =
     "B9C33E29B0CCAD2BFF11ACAB55F65A3C517EF4BC92CD9C77785366FA353D5F28"
 
-class EmulatorApplication : Application() {
+class EmulatorApplication : Application(), Configuration.Provider {
     companion object {
         // bumped whenever installed tools may have changed (e.g. an APK finished installing via
         // the SDK), so MainActivity's tool list can re-fetch. safe to update from any thread.
@@ -36,6 +41,15 @@ class EmulatorApplication : Application() {
 
     val lightAudioManager by lazy { LightAudioManager(this) }
     val deviceKeyHandler by lazy { EmulatorDeviceKeyHandler(lightAudioManager) }
+
+    val backupPreferences by lazy {
+        EmulatorBackupPreferences(
+            getSharedPreferences(
+                "emulator-backup",
+                MODE_PRIVATE
+            )
+        )
+    }
 
     val settings by lazy { DefaultLightSdkServerSettings(this) }
 
@@ -86,6 +100,15 @@ class EmulatorApplication : Application() {
         EmulatorHttpServer(this).start()
     }
 
+    private val dependencyProvider by lazy {
+        EmulatorBackupDependencyProvider(this, toolManagerLogger, "EmulatorBackup")
+    }
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(BackupWorkerFactory(backupPreferences, dependencyProvider))
+            .build()
+
     // For the emulator, any apk built with LIGHTSDK_DEV_CERT_SHA256 is considered signed by Light
     // also include user uploaded signatures
     private fun updateValidSignatures() {
@@ -115,12 +138,13 @@ class EmulatorApplication : Application() {
         return RootDataTree {
             val developerMode =
                 developerModeDataView(this, LightSdkServer.getToolManagerKeyCipher())
+            val backupBranch = dummyCloudBackupDataTree(this, dependencyProvider.tokenStorage, "light-oauth-relay.dupontgu.workers.dev")
             val toolBranch = DiscoveredToolsBranchProvider(this, toolManagerLogger) {
                 LightSdkServer.isPackageAllowed(settings.clientFilterLevel, this, it)
             }
             BranchView(
                 RootViewSpec("root", ""),
-                StaticBranchProvider(listOf(developerMode) + toolBranch.getChildren())
+                StaticBranchProvider(listOf(developerMode, backupBranch) + toolBranch.getChildren())
             )
         }
     }

@@ -44,6 +44,10 @@ android {
         versionName = "1.0"
         buildConfigField("String", "PUSH_DOMAIN", "\"${localProps.getProperty("pushDomain", "")}\"")
         buildConfigField("String", "MOLLYSOCKET_URI", "\"${localProps.getProperty("mollysocketUri", "")}\"")
+        buildConfigField("String", "BACKUP_WORKER_HOST", "\"${localProps.getProperty("backupWorkerHost", "")}\"")
+        buildConfigField("String", "BACKUP_GOOGLE_CLIENT_ID", "\"${localProps.getProperty("backupGoogleClientId", "")}\"")
+        buildConfigField("String", "BACKUP_DROPBOX_CLIENT_ID", "\"${localProps.getProperty("backupDropboxClientId", "")}\"")
+        buildConfigField("String", "BACKUP_ONEDRIVE_CLIENT_ID", "\"${localProps.getProperty("backupOneDriveClientId", "")}\"")
     }
 
     buildFeatures {
@@ -89,6 +93,11 @@ dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.server.auth)
+    implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.serialization.json)
     implementation(libs.androidx.splashscreen)
+    implementation(libs.androidx.work.runtime)
 }
