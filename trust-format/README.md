@@ -13,9 +13,15 @@ The portal input has exactly the signed document's fields except
 are errors. The builder supplies schema version 1.
 
 `bundle-domain-separator.txt` is the shared signature prefix definition. Its
-trailing newline is excluded, and a NUL byte precedes the exact JSON bytes.
+trailing CR/LF bytes are excluded identically in both languages, and a NUL byte
+precedes the exact JSON bytes. Git attributes enforce LF for `trust-format/**`;
+both language suites independently assert the expected prefix bytes.
 Bundle keys must be Ed25519, with unencrypted PEM private keys for this offline
 PoC. Public keys use SubjectPublicKeyInfo PEM encoding.
+Every configured public key is validated before signature attempts. Any missing,
+unreadable, malformed, or non-Ed25519 pin rejects the configuration regardless of
+list order. A valid Ed25519 pin that does not match the signature permits trying
+the remaining validated pins.
 
 ## Image pins and ownership
 

@@ -18,6 +18,38 @@ HASH_A = "a" * 64
 HASH_B = "b" * 64
 
 
+def test_signed_payload_prefix_bytes() -> None:
+    from lightsigner.bundle_format import SIGNED_PAYLOAD_PREFIX
+
+    assert SIGNED_PAYLOAD_PREFIX == b"lightos-trust-bundle-v1\x00"
+
+
+@pytest.mark.parametrize("ending", [b"\n", b"\r\n", b""])
+def test_separator_line_endings(ending: bytes, monkeypatch: Any) -> None:
+    import runpy
+    from lightsigner import bundle_format
+
+    monkeypatch.setattr(Path, "read_bytes", lambda _: b"lightos-trust-bundle-v1" + ending)
+    loaded = runpy.run_path(bundle_format.__file__)
+    assert loaded["SIGNED_PAYLOAD_PREFIX"] == b"lightos-trust-bundle-v1\x00"
+
+
+@pytest.mark.parametrize("bad_kind", ["ec", "junk", "missing"])
+@pytest.mark.parametrize("bad_first", [True, False])
+def test_invalid_pin_rejected_in_any_order(tmp_path: Path, keypair: tuple[Path, Path], bad_kind: str, bad_first: bool) -> None:
+    private, public = keypair
+    bundle, signature = build(tmp_path, private)
+    bad = tmp_path / "bad.pem"
+    if bad_kind == "ec":
+        ec_private = tmp_path / "ec-private.pem"
+        subprocess.run([OPENSSL, "genpkey", "-algorithm", "EC", "-pkeyopt", "ec_paramgen_curve:P-256", "-out", ec_private], check=True)
+        subprocess.run([OPENSSL, "pkey", "-in", ec_private, "-pubout", "-out", bad], check=True)
+    elif bad_kind == "junk":
+        bad.write_text("not a key")
+    pins = [bad, public] if bad_first else [public, bad]
+    assert_code("invalid_bundle_key", lambda: verify_bundle(bundle=bundle, signature=signature, public_keys=pins, openssl=OPENSSL))
+
+
 @pytest.fixture
 def keypair(tmp_path: Path) -> tuple[Path, Path]:
     private = tmp_path / "private.pem"
@@ -210,14 +242,14 @@ def test_later_pinned_key_and_signed_duplicate(tmp_path: Path, keypair: tuple[Pa
 
 
 def test_non_ed25519_keys_rejected(tmp_path: Path, keypair: tuple[Path, Path]) -> None:
-    from lightsigner.bundle import _sign, _verify
+    from lightsigner.bundle import _sign, _require_ed25519
 
     private = tmp_path / "ec.pem"
     public = tmp_path / "ec-public.pem"
     subprocess.run([OPENSSL, "genpkey", "-algorithm", "EC", "-pkeyopt", "ec_paramgen_curve:P-256", "-out", private], check=True)
     subprocess.run([OPENSSL, "pkey", "-in", private, "-pubout", "-out", public], check=True)
     assert_code("invalid_bundle_key", lambda: _sign(OPENSSL, private, b"test"))
-    assert_code("invalid_bundle_key", lambda: _verify(OPENSSL, public, b"test", b"x" * 64))
+    assert_code("invalid_bundle_key", lambda: _require_ed25519(OPENSSL, public, public=True))
 
 
 def test_cli_io_error(tmp_path: Path, keypair: tuple[Path, Path], capsys: Any) -> None:

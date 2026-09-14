@@ -72,6 +72,8 @@ def verify_bundle(*, bundle: Path, signature: Path, public_keys: list[Path], ope
         raise SignerError("bundle_io_error", str(error)) from error
     if not public_keys:
         raise SignerError("no_bundle_keys", "at least one bundle public key is required")
+    for key in public_keys:
+        _require_ed25519(openssl, key, public=True)
     payload = SIGNED_PAYLOAD_PREFIX + bundle_bytes
     if not any(_verify(openssl, key, payload, signature_bytes) for key in public_keys):
         raise SignerError("invalid_bundle_signature", "bundle signature did not match a pinned key")
@@ -170,7 +172,6 @@ def _sign(openssl: Path, private_key: Path, payload: bytes) -> bytes:
 
 
 def _verify(openssl: Path, public_key: Path, payload: bytes, signature: bytes) -> bool:
-    _require_ed25519(openssl, public_key, public=True)
     command = [str(openssl), "pkeyutl", "-verify", "-rawin", "-pubin", "-inkey", str(public_key)]
     with tempfile.NamedTemporaryFile() as payload_file, tempfile.NamedTemporaryFile() as signature_file:
         payload_file.write(payload)
