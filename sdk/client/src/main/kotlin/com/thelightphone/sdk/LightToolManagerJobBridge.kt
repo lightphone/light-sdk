@@ -19,7 +19,7 @@ class LightToolManagerJobBridge(
         callbackUrl: String?
     ): JobStartResponse? {
         if (LightSdkRegistry.jobs.containsKey(path)) {
-            LightWork.enqueue(sealedContext, jobKey = path, inputData = params)
+            LightWork.enqueue(sealedContext, jobKey = path, inputData = params, tag = jobId)
             return JobStartResponse(jobId)
         }
 
@@ -34,7 +34,7 @@ class LightToolManagerJobBridge(
     override fun getJobStatus(
         path: String,
         jobId: String
-    ): JobStatusResponse? {
+    ): JobStatusResponse {
         // check remote jobs first
         remoteJobStatusMap[jobId]?.let {
             return JobStatusResponse(jobId, it)
@@ -55,9 +55,10 @@ class LightToolManagerJobBridge(
             LightJobState.Running -> JobStatusResponse(jobId, JobState.RUNNING)
             is LightJobState.Succeeded -> {
                 val resultPath = state.outputData[LIGHT_SUCCESS_OUTPUT_FILE]
-                JobStatusResponse(jobId, JobState.SUCCEEDED, resultPath = resultPath)
+                val message = state.outputData[LIGHT_SUCCESS_MESSAGE]
+                JobStatusResponse(jobId, JobState.SUCCEEDED, resultPath = resultPath, message = message)
             }
-        }
+        }.also { println("status: $it") }
     }
 
     override fun completeJob(

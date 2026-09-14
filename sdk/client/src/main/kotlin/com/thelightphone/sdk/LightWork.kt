@@ -56,11 +56,12 @@ annotation class LightJob(val key: String)
 annotation class LightRemoteJob(val key: String)
 
 const val LIGHT_FAIL_REASON = "LIGHT_FAIL_REASON"
+const val LIGHT_SUCCESS_MESSAGE = "LIGHT_SUCCESS_MESSAGE"
 const val LIGHT_SUCCESS_OUTPUT_FILE = "LIGHT_SUCCESS_OUTPUT_FILE"
 
 sealed interface LightJobResult {
     /** Job finished successfully. */
-    class Success(val outputData: Map<String, String> = emptyMap(), val outputFilePath: String?) : LightJobResult
+    class Success(val outputData: Map<String, String> = emptyMap(), val outputFilePath: String?, val message: String?) : LightJobResult
 
     /** Job hit a transient failure. Will automatically reschedule with backoff. */
     object Retry : LightJobResult
@@ -258,7 +259,9 @@ class LightJobWorkManagerWrapper(
         val sealedLightContext = SealedLightContext(applicationContext)
         return when (val result = handler(sealedLightContext, input)) {
             is LightJobResult.Success -> {
-                val outputData = result.outputData + (LIGHT_SUCCESS_OUTPUT_FILE to result.outputFilePath)
+                val outputData = result.outputData +
+                        (LIGHT_SUCCESS_OUTPUT_FILE to result.outputFilePath) +
+                        (LIGHT_SUCCESS_MESSAGE to result.message)
                 Result.success(outputData.toData())
             }
             is LightJobResult.Retry -> Result.retry()
