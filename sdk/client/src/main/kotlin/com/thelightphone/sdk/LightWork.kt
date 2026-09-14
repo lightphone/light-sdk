@@ -44,17 +44,6 @@ import kotlin.time.toJavaDuration
 @Retention(AnnotationRetention.SOURCE)
 annotation class LightJob(val key: String)
 
-/**
- * Marks a top-level `object` implementing [LightRemoteJobHandler] as a remote job,
- * registered under [key] for the rest of the app. The object must be callable without
- * instantiation, so KSP requires it be a Kotlin `object` rather than a class.
- *
- * @property key the stable identifier used to look up this job at dispatch time.
- */
-@Target(AnnotationTarget.CLASS)
-@Retention(AnnotationRetention.SOURCE)
-annotation class LightRemoteJob(val key: String)
-
 const val LIGHT_FAIL_REASON = "LIGHT_FAIL_REASON"
 const val LIGHT_SUCCESS_MESSAGE = "LIGHT_SUCCESS_MESSAGE"
 const val LIGHT_SUCCESS_OUTPUT_FILE = "LIGHT_SUCCESS_OUTPUT_FILE"
@@ -71,11 +60,6 @@ sealed interface LightJobResult {
 }
 
 typealias LightJobHandler = suspend (SealedLightContext, Map<String, String>) -> LightJobResult
-
-interface LightRemoteJobHandler {
-    fun getRedirectUrl(context: SealedLightContext, callbackUrl: String?, inputParams: Map<String, String>): String? = null
-    fun onComplete(context: SealedLightContext, jobId: String, output: Map<String, String>): Boolean = false
-}
 
 /**
  * Current state of a scheduled [LightJob] instance.

@@ -29,8 +29,6 @@ import com.thelightphone.sdk.LightFileShare
 import com.thelightphone.sdk.LightJob
 import com.thelightphone.sdk.LightJobHandler
 import com.thelightphone.sdk.LightJobResult
-import com.thelightphone.sdk.LightRemoteJob
-import com.thelightphone.sdk.LightRemoteJobHandler
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SealedLightContext
 import com.thelightphone.sdk.SimpleLightScreen
@@ -156,16 +154,16 @@ object ToolEntryPoint : LightEntryPoint {
         FileBrowserSpec(label = "Main Directory", path = "main"),
         FileBrowserSpec(label = "Other Directory", path = "other")
     )
-    private val remoteJobSpec = ClientLeafNode(
+    private val exportJobSpec = ClientLeafNode(
         // The path is associated with the job key as well, whatever goes here should be used as the key
         // for the associated @LightJob
-        JobSpec("Job", EXPORT_JOB_TITLE, headerText = "This is an example job that exports a file. The file will be presented for download upon completion.", buttonText = "Start Export")
+        JobSpec("Export File", EXPORT_JOB_TITLE, headerText = "This is an example job that exports a file. The file will be presented for download upon completion.", buttonText = "Start Export")
     )
     internal val updateFlow = MutableStateFlow<Long>(0)
     override fun getToolManagerManifest(): ClientToolManifest {
         return ClientToolManifest(
             title = "Tool Manager Demo",
-            roots = directories.map { ClientLeafNode(it) } + remoteJobSpec
+            roots = directories.map { ClientLeafNode(it) } + exportJobSpec
         )
     }
 
