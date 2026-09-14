@@ -149,7 +149,7 @@ class TrustBundleTest {
         }
     }
 
-    @Test fun `Python vectors verify byte exact`() {
+    @Test fun `bundle signed in the python script verifies fine`() {
         val verify = verifier()
         val valid = fixture("valid")
         assertEquals(42, success(verify.verify(valid.bytes, valid.signature)).version)
@@ -168,22 +168,43 @@ class TrustBundleTest {
         assertIs<TrustFailure.InvalidJson>(failure(verifier().verify(authenticated.bytes, authenticated.signature)))
     }
 
-    @Test fun `all pins checked regardless of order and later good pin works`() {
+    @Test fun `one invalid pin rejects the whole set, but a non-matching valid pin does not`() {
         val good = pem("INSECURE-bundle-public.pem")
         val foreign = pem("INSECURE-foreign-public.pem")
         val pair = fixture("valid")
-        for (pins in listOf(listOf(good, byteArrayOf(1)), listOf(byteArrayOf(1), good), emptyList())) {
+        val cases = listOf(
+            listOf(good, byteArrayOf(1)),
+            listOf(byteArrayOf(1), good),
+            emptyList()
+        )
+        for (pins in cases) {
             assertEquals(TrustFailure.InvalidKey, failure(LightTrustBundleVerifier(pins).verify(pair.bytes, pair.signature)))
         }
         success(LightTrustBundleVerifier(listOf(foreign, good)).verify(pair.bytes, pair.signature))
     }
 
-    @Test fun `threat rows retain state on rejected updates`() {
+    @Test fun `state, version floor and storage bundle remain untouched on rejected update`() {
         val cases = listOf(
-            Triple("8 rollback", signed(validText().replace("\"version\": 42", "\"version\": 41")), TrustFailure.VersionNotNewer::class),
-            Triple("9 foreign key", fixture("foreign-key"), TrustFailure.InvalidSignature::class),
-            Triple("14 lower approval floor", signed(validText().replace("\"version\": 42", "\"version\": 41").replace("\"minVersionCode\": 7", "\"minVersionCode\": 1")), TrustFailure.VersionNotNewer::class),
-            Triple("18 newer schema", fixture("newer-schema"), TrustFailure.UnsupportedSchema::class),
+            Triple(
+                "8 rollback",
+                signed(validText().replace("\"version\": 42", "\"version\": 41")),
+                TrustFailure.VersionNotNewer::class
+            ),
+            Triple(
+                "9 foreign key",
+                fixture("foreign-key"),
+                TrustFailure.InvalidSignature::class
+            ),
+            Triple(
+                "14 lower approval floor",
+                signed(validText().replace("\"version\": 42", "\"version\": 41").replace("\"minVersionCode\": 7", "\"minVersionCode\": 1")),
+                TrustFailure.VersionNotNewer::class
+            ),
+            Triple(
+                "18 newer schema",
+                fixture("newer-schema"),
+                TrustFailure.UnsupportedSchema::class
+            ),
         )
         for ((name, candidate, expected) in cases) {
             val memory = Memory()
@@ -196,52 +217,79 @@ class TrustBundleTest {
         }
     }
 
-    @Test fun `rows 17 and 19 deny wins including image pins and declarative correction`() {
-        val a = "a".repeat(64); val b = "b".repeat(64); val c = "c".repeat(64); val d = "d".repeat(64)
+    @Test fun `revocation can remove pins from built-in bundle and a later bundle update can restore it`() {
+        // dummy certificate hashes used by the fixture
+        val a = "a".repeat(64);
+        val b = "b".repeat(64);
+        val c = "c".repeat(64);
+        val d = "d".repeat(64)
+
         val memory = Memory()
         val expected = Json.parseToJsonElement(resource("expected-trust-set.json").decodeToString()).jsonObject
         fun hashes(name: String) = expected.getValue(name).jsonArray.map { it.jsonPrimitive.content }.toSet()
+
+        // the image pins A, B and D
+        // v42 bundle trusts C and revokes A and B
+        // D stays because the bundle never mentions it,
+        // C is added
         val store = success(LightTrustStore.open(verifier(), memory, hashes("imagePins"), fixture("valid")))
         assertEquals(hashes("trusted"), store.state().trustedStampCerts)
+
+        // a newer bundle that revokes nothing
         val next = signed("""{"schemaVersion":1,"version":43,"issuedAt":"2026-08-25T00:00:00Z","allow":[],"block":[],"trustedStampCerts":[],"revokedStampCerts":[]}""")
         success(store.accept(next))
         assertEquals(setOf(a, b, d), store.state().trustedStampCerts)
+
+        // reopen from the same storage with no built-in bundle
         assertEquals(store.state(), success(LightTrustStore.open(verifier(), memory, setOf(a, b, d))).state())
+
+        // no old bundle can be replayed to undo a change
         assertIs<TrustFailure.VersionNotNewer>(failure(store.accept(next)))
     }
 
-    @Test fun `trust set table denies revocation and preserves omitted image pins`() {
-        val a = "a".repeat(64); val b = "b".repeat(64)
+    @Test fun `omission keeps an image pin, explicit revocation removes it, deny wins`() {
+        val a = "a".repeat(64);
+        val b = "b".repeat(64)
+
         data class Case(val name: String, val trust: String, val revoke: String, val expected: Set<String>)
-        for (case in listOf(
+        val cases = listOf(
             Case("image pin cannot be removed by omission", "", "", setOf(a)),
             Case("delegated cert added", "\"$b\"", "", setOf(a, b)),
             Case("17 revoked image cert", "", "\"$a\"", emptySet()),
-            Case("19 deny wins", "\"$a\",\"$b\"", "\"$a\",\"$b\"", emptySet()),
-        )) {
+            Case("19 deny wins", "\"$a\",\"$b\"", "\"$a\",\"$b\"", emptySet())
+        )
+        for (case in cases) {
             val record = signed("""{"schemaVersion":1,"version":1,"issuedAt":"2026-08-25T00:00:00Z","allow":[],"block":[],"trustedStampCerts":[${case.trust}],"revokedStampCerts":[${case.revoke}]}""")
             val store = success(LightTrustStore.open(verifier(), Memory(), setOf(a), record))
             assertEquals(case.expected, store.state().trustedStampCerts, case.name)
         }
     }
 
-    @Test fun `restart verifies disk and upgrades disk below image floor`() {
+    @Test fun `boot re-checks stored bytes and adopts the newer image and storage`() {
         val memory = Memory()
+
+        // 1. storage has somehow a bundle signed by the wrong key
         memory.record = fixture("foreign-key")
         assertEquals(TrustFailure.InvalidSignature, failure(LightTrustStore.open(verifier(), memory, emptySet())))
+
+        // 2. got an OTA upgrade: storage has v41, and fw image has v42.
         memory.record = signed(validText().replace("\"version\": 42", "\"version\": 41"))
         val upgraded = success(LightTrustStore.open(verifier(), memory, emptySet(), fixture("valid")))
         assertEquals(42, upgraded.state().version)
         assertContentEquals(fixture("valid").bytes, memory.record!!.bytes)
+
+        // 3. storage can't be read
         val broken = object : TrustPersistence {
             override fun read(): SignedTrustBundle? = error("read failed")
             override fun write(bundle: SignedTrustBundle) = Unit
         }
         assertEquals(TrustFailure.PersistenceFailed, failure(LightTrustStore.open(verifier(), broken, emptySet())))
+
+        // 4. empty storage and firmware
         assertNull(success(LightTrustStore.open(verifier(), Memory(), emptySet())).state().version)
     }
 
-    @Test fun `caller mutation cannot alter authenticated state`() {
+    @Test fun `nothing the caller holds is shared with verified state`() {
         val public = pem("INSECURE-bundle-public.pem")
         val verify = LightTrustBundleVerifier(listOf(public))
         public.fill(0)
@@ -257,7 +305,7 @@ class TrustBundleTest {
         assertFailsWith<UnsupportedOperationException> { (store.state().trustedStampCerts as MutableSet).clear() }
     }
 
-    @Test fun `arbitrary bounded input cannot escape parsers`() {
+    @Test fun `parsers return a typed failure and not exception` () {
         val random = Random(5)
         repeat(1000) {
             val bytes = random.nextBytes(random.nextInt(0, 256))
