@@ -26,6 +26,9 @@ import com.thelightphone.sdk.EntryPoint
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightEntryPoint
 import com.thelightphone.sdk.LightFileShare
+import com.thelightphone.sdk.LightJob
+import com.thelightphone.sdk.LightJobHandler
+import com.thelightphone.sdk.LightJobResult
 import com.thelightphone.sdk.LightRemoteJob
 import com.thelightphone.sdk.LightRemoteJobHandler
 import com.thelightphone.sdk.SealedLightActivity
@@ -46,12 +49,15 @@ import com.thelightphone.toolmanager.ClientToolManifest
 import com.thelightphone.toolmanager.FileBrowserSpec
 import com.thelightphone.toolmanager.JobSpec
 import io.ktor.util.encodeBase64
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.io.encoding.Base64
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @InitialScreen
 class ToolManagerDemoHomeScreen(sealedActivity: SealedLightActivity) :
@@ -131,29 +137,17 @@ private fun InnerContent(
     }
 }
 
-@LightRemoteJob("remote-job")
-object RemoteJob : LightRemoteJobHandler {
-
-    fun redirectPage(url: String) = Base64.encode("""<button onclick="location.href='$url'">Go</button>""".toByteArray())
-        .let { "https://itty.bitty.site/#light_auth_sim.html/data:text/html;base64,$it" }
-
-    override fun getRedirectUrl(
-        context: SealedLightContext,
-        callbackUrl: String?,
-        inputParams: Map<String, String>
-    ): String? {
-        println("calback $callbackUrl")
-        return callbackUrl.takeUnless { it.isNullOrBlank() }?.let { redirectPage(it) }.also { println("redirect  url: $it") }
+private const val EXPORT_JOB_TITLE = "export-job"
+private const val EXPORT_JOB_FILE = "output_file.txt"
+@LightJob(EXPORT_JOB_TITLE)
+val exportJob : LightJobHandler = { ctx, _ ->
+    // simulate exporting a file
+    delay((2..4).random().seconds)
+    // be sure to put in the directory that will be associated with the JobSpec
+    ctx.fileShare.write("$EXPORT_JOB_TITLE/$EXPORT_JOB_FILE") {
+        it.write("This is an exported file. Congratulations. Timestamp: ${Clock.System.now()}")
     }
-
-    override fun onComplete(
-        context: SealedLightContext,
-        jobId: String,
-        output: Map<String, String>
-    ): Boolean {
-        println("JOBBBYYYYY $output")
-        return true
-    }
+    LightJobResult.Success(outputFilePath = EXPORT_JOB_FILE, message = "File export success!")
 }
 
 @EntryPoint
@@ -163,7 +157,9 @@ object ToolEntryPoint : LightEntryPoint {
         FileBrowserSpec(label = "Other Directory", path = "other")
     )
     private val remoteJobSpec = ClientLeafNode(
-        JobSpec("Job", "remote-job", buttonText = "Click Me")
+        // The path is associated with the job key as well, whatever goes here should be used as the key
+        // for the associated @LightJob
+        JobSpec("Job", EXPORT_JOB_TITLE, headerText = "This is an example job that exports a file. The file will be presented for download upon completion.", buttonText = "Start Export")
     )
     internal val updateFlow = MutableStateFlow<Long>(0)
     override fun getToolManagerManifest(): ClientToolManifest {
