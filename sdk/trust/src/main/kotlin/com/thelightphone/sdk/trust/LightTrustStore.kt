@@ -7,7 +7,11 @@ class SignedTrustBundle(bytes: ByteArray, signature: ByteArray) {
     val signature: ByteArray get() = detached.copyOf()
 }
 
-/** Implementations atomically replace the whole record, or throw without changing it. */
+/**
+ * Implementations must replace the whole record in one atomic step, or fail
+ * without changing what is stored. A partial write would leave a bundle and its
+ * version floor disagreeing.
+ */
 interface TrustPersistence {
     fun read(): SignedTrustBundle?
     fun write(bundle: SignedTrustBundle)
@@ -18,10 +22,12 @@ data class TrustState(val bundle: LightTrustBundle?, val trustedStampCerts: Set<
 }
 
 /**
- * A single store instance must own its persistence backend; two instances over one backend race
- * their floors. The floor is not stored separately — it is the version field of the persisted
- * signed bundle, so it cannot drift from the bundle it guards and cannot be moved without a
- * valid signature.
+ * Create only one LightTrustStore per persistence backend. Each instance tracks
+ * the last accepted version in memory. Two instances sharing storage could
+ * overwrite a newer bundle using an outdated version check.
+ *
+ * The persisted bundle's signed version field is also the version floor,
+ * keeping the bundle and its floor together in one atomic write.
  */
 class LightTrustStore private constructor(
     private val verifier: LightTrustBundleVerifier,
@@ -67,20 +73,24 @@ class LightTrustStore private constructor(
                 return TrustResult.Failure(TrustFailure.PersistenceFailed)
             }
             var initial: LightTrustBundle? = null
+            var winner: SignedTrustBundle? = null
             for (record in listOfNotNull(imageBundle, disk)) {
                 when (val result = verifier.verify(record.bytes, record.signature)) {
                     is TrustResult.Failure -> return result
                     is TrustResult.Success -> {
                         val floor = initial?.version
-                        if (floor != null && result.value.version < floor) {
-                            return TrustResult.Failure(TrustFailure.VersionNotNewer(result.value.version, floor))
+                        if (floor == null || result.value.version > floor) {
+                            initial = result.value
+                            winner = record
                         }
-                        initial = result.value
                     }
                 }
             }
-            if (disk == null && imageBundle != null) {
-                try { persistence.write(imageBundle) } catch (_: Exception) {
+            if (winner != null && winner !== disk &&
+                (disk == null || !winner.bytes.contentEquals(disk.bytes) || !winner.signature.contentEquals(disk.signature))) {
+                try {
+                    persistence.write(winner)
+                } catch (_: Exception) {
                     return TrustResult.Failure(TrustFailure.PersistenceFailed)
                 }
             }

@@ -12,7 +12,6 @@ sealed interface TrustFailure {
     data class UnsupportedSchema(val version: String) : TrustFailure
     data object InvalidKey : TrustFailure
     data object InvalidSignature : TrustFailure
-    data object CryptoUnavailable : TrustFailure
     data class VersionNotNewer(val incoming: Long, val floor: Long) : TrustFailure
     data object PersistenceFailed : TrustFailure
 }

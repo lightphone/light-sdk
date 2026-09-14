@@ -24,6 +24,9 @@ sourceSets.test {
 val checkTrustIsolation by tasks.registering {
     doLast {
         fileTree("src/main").matching { include("**/*.kt", "**/*.java") }.forEach {
+            check(!Regex("\\b(?:Security\\s*\\.\\s*(?:addProvider|insertProviderAt)|BouncyCastleProvider)\\b").containsMatchIn(it.readText())) {
+                "Use BouncyCastle lightweight APIs without provider registration: $it"
+            }
             check(!Regex("(?m)^\\s*import\\s+(?:static\\s+)?android\\.").containsMatchIn(it.readText())) {
                 "Android import in trust main sources: $it"
             }
@@ -45,6 +48,7 @@ val checkTrustIsolation by tasks.registering {
 tasks.named("check") { dependsOn(checkTrustIsolation) }
 
 dependencies {
+    implementation(libs.bouncycastle.provider)
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.apksig)

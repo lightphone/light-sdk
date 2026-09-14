@@ -1,59 +1,62 @@
 package com.thelightphone.sdk.trust
 
-import java.security.GeneralSecurityException
-import java.security.KeyFactory
-import java.security.Signature
-import java.security.spec.X509EncodedKeySpec
+import org.bouncycastle.asn1.ASN1Encoding
+import org.bouncycastle.asn1.ASN1ObjectIdentifier
+import org.bouncycastle.asn1.ASN1Primitive
+import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
+import org.bouncycastle.crypto.signers.Ed25519Signer
+import java.io.IOException
 
-// pinnedKeys are the raw binary forms of public keys (DER SubjectPublicKeyInfo), not PEM text.
-// They are the trust root: they must come from an image-owned resource, never from the network
-// and never from the bundle being verified.
+// Pinned public keys are encoded as DER SubjectPublicKeyInfo
 class LightTrustBundleVerifier(pinnedKeys: List<ByteArray>) {
     private val pins = pinnedKeys.map { it.copyOf() }
 
     fun verify(bytes: ByteArray, signature: ByteArray): TrustResult<LightTrustBundle> {
         val payload = bytes.copyOf()
         val detached = signature.copyOf()
-        val factory = try
-            { KeyFactory.getInstance("Ed25519")
-        } catch (_: GeneralSecurityException) {
-            return TrustResult.Failure(TrustFailure.CryptoUnavailable)
-        }
         if (pins.isEmpty()) {
             return TrustResult.Failure(TrustFailure.InvalidKey)
         }
+
         val keys = try {
             pins.map {
-                if (it.size != 44 || !it.copyOfRange(0, 12).contentEquals(SPKI_PREFIX)) {
-                    return TrustResult.Failure(TrustFailure.InvalidKey)
-                }
-                factory.generatePublic(X509EncodedKeySpec(it))
+                parsePin(it) ?: return TrustResult.Failure(TrustFailure.InvalidKey)
             }
-        } catch (_: GeneralSecurityException) {
+        } catch (_: IOException) {
+            return TrustResult.Failure(TrustFailure.InvalidKey)
+        } catch (_: IllegalArgumentException) {
             return TrustResult.Failure(TrustFailure.InvalidKey)
         }
-        val verifier = try {
-            Signature.getInstance("Ed25519")
-        } catch (_: GeneralSecurityException) {
-            return TrustResult.Failure(TrustFailure.CryptoUnavailable)
-        }
+
+        if (detached.size != 64) return TrustResult.Failure(TrustFailure.InvalidSignature)
+        val prefix = LightTrustBundleFormat.signedPayloadPrefix
         val verified = keys.any { key ->
-            try {
-                verifier.initVerify(key)
-                verifier.update(LightTrustBundleFormat.signedPayloadPrefix.copyOf())
-                verifier.update(payload)
-                verifier.verify(detached)
-            } catch (_: GeneralSecurityException) {
-                false
-            }
+            val verifier = Ed25519Signer()
+            verifier.init(false, key)
+            verifier.update(prefix, 0, prefix.size)
+            verifier.update(payload, 0, payload.size)
+            verifier.verifySignature(detached)
         }
-        if (!verified) {
-            return TrustResult.Failure(TrustFailure.InvalidSignature)
-        }
+        if (!verified) return TrustResult.Failure(TrustFailure.InvalidSignature)
         return LightTrustBundleParser.parse(payload)
     }
 
+    private fun parsePin(bytes: ByteArray): Ed25519PublicKeyParameters? {
+        val info = SubjectPublicKeyInfo.getInstance(ASN1Primitive.fromByteArray(bytes)) ?: return null
+        if (info.algorithm.algorithm != ED25519_OID || info.algorithm.parameters != null ||
+            !info.getEncoded(ASN1Encoding.DER).contentEquals(bytes) ||
+            info.publicKeyData.padBits != 0
+        ) {
+            return null
+        }
+
+        val raw = info.publicKeyData.octets
+        if (raw.size != Ed25519PublicKeyParameters.KEY_SIZE) return null
+        return Ed25519PublicKeyParameters(raw)
+    }
+
     companion object {
-        private val SPKI_PREFIX = byteArrayOf(0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00)
+        private val ED25519_OID = ASN1ObjectIdentifier("1.3.101.112")
     }
 }

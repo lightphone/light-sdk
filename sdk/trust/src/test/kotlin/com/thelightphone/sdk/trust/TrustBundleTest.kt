@@ -9,10 +9,115 @@ import kotlin.random.Random
 import kotlin.test.*
 
 class TrustBundleTest {
-    private fun resource(name: String) = checkNotNull(javaClass.getResourceAsStream("/bundle/$name")).use { it.readBytes() }
-    private fun pem(name: String) = Base64.getDecoder().decode(resource(name).decodeToString().lines().filterNot { it.startsWith("---") }.joinToString(""))
-    private fun verifier() = LightTrustBundleVerifier(listOf(pem("INSECURE-bundle-public.pem")))
-    private fun fixture(name: String) = SignedTrustBundle(resource("$name/bundle.json"), resource("$name/bundle.sig"))
+    @Test fun `pin encoding matrix rejects invalid pins in either order`() {
+        // start with a valid fixture key
+        val good = pem("INSECURE-bundle-public.pem")
+        // the 32 key bytes after the 12-byte SPKI header
+        val raw = good.copyOfRange(12, good.size)
+        val oid = org.bouncycastle.asn1.ASN1ObjectIdentifier("1.3.101.112")
+        val algorithm = org.bouncycastle.asn1.x509.AlgorithmIdentifier(oid)
+        fun spki(key: ByteArray) = org.bouncycastle.asn1.x509.SubjectPublicKeyInfo(algorithm, key).getEncoded("DER")
+        val rsa = java.security.KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair().public.encoded
+        // build a bunch of invalid keys
+        val invalid = listOf(
+            // valid key with extra data at the end
+            good + byteArrayOf(0),
+            // BER entry with long form length, DER requires the short form
+            byteArrayOf(0x30, 0x81.toByte(), 0x2a) + good.copyOfRange(2, good.size),
+            // X25519 algorithm identifier (instead of Ed25519)
+            good.copyOf().apply { this[8] = 0x6e },
+            // drop final key byte without updating the encoded length
+            good.copyOf(good.size - 1),
+            // valid public key for an unsupported algorithm
+            rsa,
+            // Ed25519 parameters must be absent, not explicitly NULL
+            org.bouncycastle.asn1.x509.SubjectPublicKeyInfo(
+                org.bouncycastle.asn1.x509.AlgorithmIdentifier(oid, org.bouncycastle.asn1.DERNull.INSTANCE), raw
+            ).getEncoded("DER"),
+            // public key bits must fill whole bytes, without unused padding bits
+            org.bouncycastle.asn1.DERSequence(arrayOf<org.bouncycastle.asn1.ASN1Encodable>(
+                algorithm, org.bouncycastle.asn1.DERBitString(raw.copyOf().apply { this[lastIndex] = 0 }, 1)
+            )).getEncoded("DER"),
+            // structurally valid wrappers containing too few or too many key bytes
+            spki(raw.copyOf(31)), spki(raw.copyOf(33)),
+            // missing or NULL ASN.1 object instead of a public key
+            byteArrayOf(), byteArrayOf(5, 0),
+        )
+
+        // every configured key must be valid
+        val pair = fixture("valid")
+        invalid.forEachIndexed { index, bad ->
+            for (pins in listOf(listOf(good, bad), listOf(bad, good))) {
+                assertEquals(TrustFailure.InvalidKey, failure(LightTrustBundleVerifier(pins).verify(pair.bytes, pair.signature)), "case $index")
+            }
+        }
+
+        // signature must have exactly 64 bytes
+        for (length in listOf(0, 63, 65)) {
+            assertEquals(TrustFailure.InvalidSignature, failure(verifier().verify(pair.bytes, ByteArray(length))))
+        }
+    }
+
+    @Test fun `image upgrade persists atomically and does not discard corrupt disk`() {
+        // image ships bundle v42; the device last fetched v41
+        val image = fixture("valid")
+        val old = signed(validText().replace("\"version\": 42", "\"version\": 41"))
+        val memory = Memory().apply { record = old; fail = true }
+
+        // the image is newer, so open() must persist it first;
+        // when that write fails the store refuses to open rather than serving v42 from memory
+        // and silently reverting to v41 on the next boot
+        assertEquals(TrustFailure.PersistenceFailed, failure(LightTrustStore.open(verifier(), memory, emptySet(), image)))
+
+        // the failed write left the old record intact
+        assertSame(old, memory.record)
+
+        // retry succeeds, and reopening without an image proves v42 was persisted
+        memory.fail = false
+        success(LightTrustStore.open(verifier(), memory, emptySet(), image))
+        assertEquals(42, success(LightTrustStore.open(verifier(), memory, emptySet())).state().version)
+
+        // a new bundle v43 is fetched and open() keeps it
+        val newer = signed(validText().replace("\"version\": 42", "\"version\": 43"))
+        memory.record = newer
+        val writes = memory.writes
+        assertEquals(43, success(LightTrustStore.open(verifier(), memory, emptySet(), image)).state().version)
+
+        // open() selected the record already on disk, so it writes nothing
+        assertEquals(writes, memory.writes)
+
+        // keep bundle v42 and drops minVersionCode to 1,
+        // re-allowing an old tool without ever looking like a rollback.
+        // open() replaces only on a higher edition, so the old bundle (minVersionCode = 7) will remain
+        memory.record = signed(validText().replace("\"minVersionCode\": 7", "\"minVersionCode\": 1"))
+        assertEquals(7, success(LightTrustStore.open(verifier(), memory, emptySet(), image)).state().bundle!!.allow.single().minVersionCode)
+        // bad file on disk was replaced
+        assertContentEquals(image.bytes, memory.record!!.bytes)
+
+        // a non-Light signature in device storage means someone swapped the file
+        // open() reports it instead of quietly falling back to the image,
+        // which would boot a tampered device looking perfectly healthy
+        memory.record = fixture("foreign-key")
+        assertEquals(TrustFailure.InvalidSignature, failure(LightTrustStore.open(verifier(), memory, emptySet(), image)))
+    }
+
+    private fun resource(name: String) =
+        checkNotNull(javaClass.getResourceAsStream("/bundle/$name"))
+            .use { it.readBytes() }
+
+    private fun pem(name: String) =
+        Base64.getDecoder().decode(resource(name)
+            .decodeToString()
+            .lines()
+            .filterNot { it.startsWith("---") }
+            .joinToString(""))
+
+    private fun verifier() =
+        LightTrustBundleVerifier(listOf(pem("INSECURE-bundle-public.pem")))
+
+    private fun fixture(name: String) =
+        SignedTrustBundle(resource("$name/bundle.json"), resource("$name/bundle.sig"))
+
     private fun signed(text: String): SignedTrustBundle {
         val bytes = text.encodeToByteArray()
         val key = KeyFactory.getInstance("Ed25519").generatePrivate(PKCS8EncodedKeySpec(pem("INSECURE-bundle-private.pem")))
@@ -22,9 +127,16 @@ class TrustBundleTest {
         signer.update(bytes)
         return SignedTrustBundle(bytes, signer.sign())
     }
-    private fun validText() = resource("valid/bundle.json").decodeToString()
-    private fun <T> success(result: TrustResult<T>): T = assertIs<TrustResult.Success<T>>(result).value
-    private fun failure(result: TrustResult<*>) = assertIs<TrustResult.Failure>(result).reason
+
+    private fun validText() =
+        resource("valid/bundle.json").decodeToString()
+
+    private fun <T> success(result: TrustResult<T>): T =
+        assertIs<TrustResult.Success<T>>(result).value
+
+    private fun failure(result: TrustResult<*>) =
+        assertIs<TrustResult.Failure>(result).reason
+
     private class Memory : TrustPersistence {
         var record: SignedTrustBundle? = null
         var fail = false
@@ -113,12 +225,14 @@ class TrustBundleTest {
         }
     }
 
-    @Test fun `restart verifies disk and refuses disk below image floor`() {
+    @Test fun `restart verifies disk and upgrades disk below image floor`() {
         val memory = Memory()
         memory.record = fixture("foreign-key")
         assertEquals(TrustFailure.InvalidSignature, failure(LightTrustStore.open(verifier(), memory, emptySet())))
         memory.record = signed(validText().replace("\"version\": 42", "\"version\": 41"))
-        assertIs<TrustFailure.VersionNotNewer>(failure(LightTrustStore.open(verifier(), memory, emptySet(), fixture("valid"))))
+        val upgraded = success(LightTrustStore.open(verifier(), memory, emptySet(), fixture("valid")))
+        assertEquals(42, upgraded.state().version)
+        assertContentEquals(fixture("valid").bytes, memory.record!!.bytes)
         val broken = object : TrustPersistence {
             override fun read(): SignedTrustBundle? = error("read failed")
             override fun write(bundle: SignedTrustBundle) = Unit
