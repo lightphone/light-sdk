@@ -38,11 +38,6 @@ class LightSdkProcessor(
             .filterIsInstance<KSPropertyDeclaration>()
             .toList()
 
-        val remoteJobs = resolver
-            .getSymbolsWithAnnotation("com.thelightphone.sdk.LightRemoteJob")
-            .filterIsInstance<KSClassDeclaration>()
-            .toList()
-
         // Validate @InitialScreen
         if (initialScreens.size > 1) {
             logger.error(
@@ -70,14 +65,12 @@ class LightSdkProcessor(
 
         val jobEntries = collectJobEntries(jobs, "LightJob", "com.thelightphone.sdk.LightJob")
             ?: return emptyList()
-        val remoteJobEntries = collectRemoteJobEntries(remoteJobs, "LightRemoteJob", "com.thelightphone.sdk.LightRemoteJob")
-            ?: return emptyList()
 
         val initialScreenFqcn = initialScreens.firstOrNull()?.qualifiedName?.asString()
         val entryPointFqcn = entryPoints.firstOrNull()?.qualifiedName?.asString()
 
         // Collect all source files that contributed
-        val allFiles = (initialScreens + entryPoints + jobs + remoteJobs).mapNotNull { it.containingFile }
+        val allFiles = (initialScreens + entryPoints + jobs).mapNotNull { it.containingFile }
 
         val file = codeGenerator.createNewFile(
             dependencies = Dependencies(aggregating = true, *allFiles.toTypedArray()),
@@ -102,7 +95,6 @@ class LightSdkProcessor(
                     appendLine("    val entryPoint: com.thelightphone.sdk.LightEntryPoint? = null")
                 }
                 appendJobMap("jobs", "com.thelightphone.sdk.LightJobHandler", jobEntries)
-                appendJobMap("remoteJobs", "com.thelightphone.sdk.LightRemoteJobHandler", remoteJobEntries)
                 appendLine("}")
             })
         }
@@ -110,7 +102,7 @@ class LightSdkProcessor(
         return emptyList()
     }
 
-    /** The `key` argument of a `@LightJob`/`@LightRemoteJob` annotation on [declaration], or null if missing. */
+    /** The `key` argument of a `@LightJob` annotation on [declaration], or null if missing. */
     private fun extractAnnotationKey(
         declaration: KSAnnotated,
         annotationShortName: String,
@@ -143,48 +135,6 @@ class LightSdkProcessor(
             val typeFqn = job.type.resolve().declaration.qualifiedName?.asString()
             if (typeFqn != "com.thelightphone.sdk.LightJobHandler") {
                 logger.error("@$annotationShortName property $fqn must be of type LightJobHandler (got $typeFqn)")
-                return null
-            }
-
-            val key = extractAnnotationKey(job, annotationShortName, annotationFqn)
-            if (key.isNullOrEmpty()) {
-                logger.error("@$annotationShortName $fqn is missing a key")
-                return null
-            }
-            if (!seenKeys.add(key)) {
-                logger.error("Duplicate @$annotationShortName key '$key' on $fqn")
-                return null
-            }
-
-            entries += key to fqn
-        }
-        return entries
-    }
-
-    /**
-     * Validates a `@LightRemoteJob`-annotated class list into (key, object fqn) pairs.
-     * Each class must be an `object` implementing `LightRemoteJobHandler`, so it's callable
-     * without instantiation — referencing its fqn is enough to get the singleton instance.
-     */
-    private fun collectRemoteJobEntries(
-        classes: List<KSClassDeclaration>,
-        annotationShortName: String,
-        annotationFqn: String,
-    ): List<Pair<String, String>>? {
-        val entries = mutableListOf<Pair<String, String>>()
-        val seenKeys = mutableSetOf<String>()
-        for (job in classes) {
-            val fqn = job.qualifiedName?.asString() ?: "unknown"
-            if (job.classKind != ClassKind.OBJECT) {
-                logger.error("@$annotationShortName must be applied to an object: $fqn")
-                return null
-            }
-
-            val implementsHandler = job.superTypes.any {
-                it.resolve().declaration.qualifiedName?.asString() == "com.thelightphone.sdk.LightRemoteJobHandler"
-            }
-            if (!implementsHandler) {
-                logger.error("@$annotationShortName object $fqn must implement LightRemoteJobHandler")
                 return null
             }
 
