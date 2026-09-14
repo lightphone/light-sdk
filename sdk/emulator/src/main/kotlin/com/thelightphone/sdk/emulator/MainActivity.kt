@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.thelightphone.backup.BackupPreferences
 import com.thelightphone.sdk.emulator.Nav.*
 import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.sdk.server.LightSdkServer.queryEnabledClients
@@ -59,6 +60,7 @@ import java.time.format.DateTimeFormatter
 class MainActivity : ComponentActivity() {
 
     val lightAudioManager get() = (application as EmulatorApplication).lightAudioManager
+    val backupPreferences get() = (application as EmulatorApplication).backupPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -78,7 +80,7 @@ class MainActivity : ComponentActivity() {
             val themeColors by LightThemeController.colors.collectAsState()
             LightTheme(colors = themeColors) {
                 Box(Modifier.fillMaxSize()) {
-                    PrimaryUI(serverSettings, lightAudioManager)
+                    PrimaryUI(serverSettings, backupPreferences, lightAudioManager)
                     val modal by LightModalManager.activeModal.collectAsState()
                     modal?.Content()
                 }
@@ -89,6 +91,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun PrimaryUI(
         serverSettings: LightSdkServerSettings,
+        backupPreferences: BackupPreferences,
         lightAudioManager: LightAudioManager
     ) {
         val currentNav by EmulatorNavController.currentNav.collectAsState()
@@ -134,7 +137,7 @@ class MainActivity : ComponentActivity() {
 
                     override val ringerVolume: StateFlow<Float> = lightAudioManager.ringerVolume
                 }
-                EmulatorSettings(serverSettings, emulatorSettingsAudio, navSnapshot) {
+                EmulatorSettings(serverSettings, emulatorSettingsAudio, backupPreferences, navSnapshot) {
                     EmulatorNavController.navigateTo(Nav.Toolbox)
                 }
             }

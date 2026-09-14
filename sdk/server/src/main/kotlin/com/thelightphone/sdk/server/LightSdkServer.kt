@@ -245,6 +245,14 @@ object LightSdkServer {
         }
 
     /**
+     * Returns whether or not ToolManager nodes for a given package should be backed up to remote storage
+     */
+    var canBackUpFromPackage: (clientFilterLevel: ClientFilterLevel, context: Context, callingPackage: String) -> Boolean =
+        { filterLevel, context, callingPackage ->
+            isPackageAllowed(filterLevel, context, callingPackage)
+        }
+
+    /**
      * Called when the SDK server successfully installs a tool
      * May be called with a null path if unknown apk was installed
      * (or we want to notify the server that it should refresh it's apk list)
@@ -268,9 +276,10 @@ object LightSdkServer {
         false
     }
 
-    var reportError: (tag: String, exception: Throwable?, message: String) -> Unit = { tag, e, msg ->
-        Log.e(tag, msg, e)
-    }
+    var reportError: (tag: String, exception: Throwable?, message: String) -> Unit =
+        { tag, e, msg ->
+            Log.e(tag, msg, e)
+        }
 
     var verboseLoggingEnabled = true
 
