@@ -44,7 +44,7 @@ class HomeScreenViewModel(
 
     override fun onScreenShow(screen: SimpleLightScreen<Unit>) {
         super.onScreenShow(screen)
-        ringtones.value = fileShare.list("ringtones")
+        ringtones.value = fileShare.list("ringtones").map { it.name }
     }
 
     fun selectRingtone(filename: String) {

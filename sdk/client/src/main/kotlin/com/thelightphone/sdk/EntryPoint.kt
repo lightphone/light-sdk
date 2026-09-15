@@ -2,6 +2,7 @@ package com.thelightphone.sdk
 
 import androidx.annotation.Keep
 import com.thelightphone.sdk.shared.LightServerData
+import com.thelightphone.toolmanager.ClientToolManifest
 import kotlinx.coroutines.flow.StateFlow
 
 @Keep
@@ -13,6 +14,10 @@ interface LightEntryPoint {
     suspend fun onToolCreate(serverData: StateFlow<LightServerData?>): Unit = Unit
 
     suspend fun onPushNotification(data: ByteArray): Unit = Unit
+
+    fun getToolManagerManifest(): ClientToolManifest? = null
+
+    suspend fun onToolManagerDataUpdate(): Unit = Unit
 
     val enablePushNotifications: Boolean
         get() = false

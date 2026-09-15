@@ -17,6 +17,8 @@ import com.thelightphone.sdk.server.toolmanager.readSigningKeyHash
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.ui.LightModalManager
+import com.thelightphone.toolmanager.DiscoveredToolsBranchProvider
+import com.thelightphone.toolmanager.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -35,14 +37,14 @@ class EmulatorApplication : Application() {
     val lightAudioManager by lazy { LightAudioManager(this) }
     val deviceKeyHandler by lazy { EmulatorDeviceKeyHandler(lightAudioManager) }
 
+    val settings by lazy { DefaultLightSdkServerSettings(this) }
+
     @Volatile
     private var validSignatures: List<String> = emptyList()
 
     override fun onCreate() {
         super.onCreate()
         val mollySocketUriString = BuildConfig.MOLLYSOCKET_URI
-        val settings = DefaultLightSdkServerSettings(this)
-
         with(LightSdkServer) {
             registerLockReceiver(MainActivity::class.java, settings)
             customServiceMethodResolver = { _, methodId, _ ->
@@ -94,12 +96,30 @@ class EmulatorApplication : Application() {
         validSignatures = signatures + userAdded
     }
 
+    private val toolManagerLogger = object : Logger {
+        override fun log(tag: String, message: String) {
+            Log.d(tag, message)
+        }
+
+        override fun reportError(
+            tag: String,
+            exception: Throwable?,
+            message: String
+        ) {
+            Log.e(tag, message, exception)
+        }
+    }
+
     private fun buildToolManagerRoot(): RootDataTree {
         return RootDataTree {
-            val developerMode = developerModeDataView(this, LightSdkServer.getToolManagerKeyCipher())
+            val developerMode =
+                developerModeDataView(this, LightSdkServer.getToolManagerKeyCipher())
+            val toolBranch = DiscoveredToolsBranchProvider(this, toolManagerLogger) {
+                LightSdkServer.isPackageAllowed(settings.clientFilterLevel, this, it)
+            }
             BranchView(
                 RootViewSpec("root", ""),
-                StaticBranchProvider(listOf(developerMode))
+                StaticBranchProvider(listOf(developerMode) + toolBranch.getChildren())
             )
         }
     }

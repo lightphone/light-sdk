@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.room.Room
 import com.thelightphone.sdk.shared.LightConstants
 import com.thelightphone.sdk.shared.LightServerData
+import com.thelightphone.toolmanager.LightFileProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,6 +47,8 @@ open class LightSdkApplication : Application() {
     // Tool may have registered an initialization function, call it
     private fun invokeEntryPoint() {
         val entryPoint = LightSdkRegistry.entryPoint ?: return
+        LightFileProvider.manifest = entryPoint::getToolManagerManifest
+        LightFileProvider.onToolManagerDataUpdate = { enqueueLightManagerNotifyJob() }
         applicationScope.launch {
             entryPoint.onToolCreate(lightOsData)
         }
