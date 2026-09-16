@@ -11,17 +11,13 @@ import kotlin.time.Instant
 // hashForFile only receive a bare Path with no other context, so every Path this hands out is
 // "<source index>/<path as that source itself produced it>" - decode() strips the index back off
 // to find which source to delegate to, and to recover the path in that source's own terms.
-//
-// The separator has to be '/', not some other character: BackupRunner takes the remote upload
-// filename straight from Path.name, which kotlinx.io.files.Path computes by splitting on '/'. An
-// index is always plain digits, so splitting on the *first* '/' is unambiguous even when the
-// wrapped source's own path has further '/'-separated segments - and since '/' is what Path.name
-// already treats as a boundary, the index prefix ends up living entirely in its own leading
-// segment and never leaks into the filename.
+
 class CompositeDataSource(
-    private val sources: List<BackupDataSource>,
+    sources: List<BackupDataSource>,
     private val logger: Logger
 ) : BackupDataSource {
+    // Copy since we're mapping by index
+    private val sources: List<BackupDataSource> = sources.toList()
 
     override suspend fun getPathsToBackUp(): Result<List<BackupPath>> = runCatching {
         sources.flatMapIndexed { index, source ->
@@ -34,12 +30,18 @@ class CompositeDataSource(
 
     override suspend fun getFilesToBackUpForPath(
         parent: Path,
-        timeOfLastBackup: Instant
+        lowerBound: Instant,
+        upperBound: Instant
     ): Result<List<Path>> = runCatching {
         val (index, innerPath) = decode(parent)
-        sources[index].getFilesToBackUpForPath(innerPath, timeOfLastBackup)
+        sources[index].getFilesToBackUpForPath(innerPath, lowerBound, upperBound)
             .getOrThrow()
             .map { encode(index, it) }
+    }
+
+    override suspend fun getEarliestPossibleBackupDate(parent: Path): Result<Instant> = runCatching {
+        val (index, innerPath) = decode(parent)
+        sources[index].getEarliestPossibleBackupDate(innerPath).getOrThrow()
     }
 
     override suspend fun readFile(path: Path): Result<InputStream> = runCatching {
