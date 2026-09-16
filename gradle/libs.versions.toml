@@ -14,7 +14,7 @@ kotlinxDatetime = "0.8.0"
 bouncycastle = "1.85"
 sol4k = "0.7.0"
 zxing = "3.5.4"
-toolmanager = "0.0.13"
+toolmanager = "0.0.14"
 
 [libraries]
 unifiedpush-connector = { module = "org.unifiedpush.android:connector", version.ref = "connector" }
@@ -49,7 +49,7 @@ ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "kto
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 light-keyboard = { module = "com.github.lightphone:light-keyboard", version = "v0.0.18"}
-light-backup = { module = "com.thelightphone.backup:library-android", version = "0.0.4" }
+light-backup = { module = "com.thelightphone.backup:library-android", version = "0.0.5" }
 # for local dev
 # light-keyboard = { module = "com.thelightphone.lp3keyboard:ui", version = "0.0.17-dirty"}
 light-toolmanager-server = { module = "com.thelightphone.toolmanager:server-android", version.ref = "toolmanager"}

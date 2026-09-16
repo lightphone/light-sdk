@@ -9,9 +9,10 @@ import com.thelightphone.toolmanager.ClientLeafNode
 import com.thelightphone.toolmanager.ClientTreeNode
 import com.thelightphone.toolmanager.ContentResolverDataTree
 import com.thelightphone.toolmanager.Entry
-import com.thelightphone.toolmanager.EntryType
 import com.thelightphone.toolmanager.Logger
 import com.thelightphone.toolmanager.PageRequest
+import com.thelightphone.toolmanager.SortBy
+import com.thelightphone.toolmanager.SortOrder
 import com.thelightphone.toolmanager.ToolManagerTool
 import com.thelightphone.toolmanager.discoverToolManagerEnabledTools
 import com.thelightphone.toolmanager.effectiveBasePath
@@ -22,6 +23,7 @@ import java.nio.file.Paths
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.collections.set
+import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
@@ -53,12 +55,28 @@ class LightSdkToolsBackupDataSource(
 
     override suspend fun getFilesToBackUpForPath(
         parent: Path,
-        timeOfLastBackup: Instant
+        lowerBound: Instant,
+        upperBound: Instant
     ): Result<List<Path>> = runCatching {
         val leafKey = parent.toString()
         val tree = leafTrees[leafKey] ?: throw NoSuchElementException("Unknown backup path: $parent")
-        collectFiles(tree, leafKey, Paths.get("."), timeOfLastBackup.toEpochMilliseconds())
-            .also { println("get files to back up for $parent: $it" ) }
+        val lowerMs = lowerBound.toEpochMilliseconds()
+        val upperMs = upperBound.toEpochMilliseconds()
+        collectFileEntriesInRange(tree, Paths.get("."), lowerMs, upperMs)
+            .map { Path("$leafKey/${it.path}") }
+            .also { println("get files to back up for $parent: $it") }
+    }
+
+    override suspend fun getEarliestPossibleBackupDate(parent: Path): Result<Instant> = runCatching {
+        val leafKey = parent.toString()
+        val tree = leafTrees[leafKey] ?: throw NoSuchElementException("Unknown backup path: $parent")
+        val response = tree.getDirectoryForPath(
+            Paths.get("."),
+            PageRequest(page = 1, size = 1, sortBy = SortBy.DATE, sortOrder = SortOrder.ASC, flatten = true)
+        ).getOrThrow()
+        response.data.firstOrNull()
+            ?.let { Instant.fromEpochMilliseconds(it.lastModified) }
+            ?: Clock.System.now()
     }
 
     override suspend fun readFile(path: Path): Result<InputStream> {
@@ -112,26 +130,26 @@ class LightSdkToolsBackupDataSource(
         return leafKey to relative
     }
 
-    private suspend fun collectFiles(
+    private suspend fun collectFileEntriesInRange(
         tree: ContentResolverDataTree,
-        leafKey: String,
         path: JavaPath,
-        cutoffMs: Long
-    ): List<Path> {
+        lowerMs: Long,
+        upperMs: Long,
+    ): List<Entry> {
         val entries = mutableListOf<Entry>()
         var page = 1
         while (true) {
-            val response = tree.getDirectoryForPath(path, PageRequest(page = page, size = 500)).getOrThrow()
-            entries += response.data
+            val response = tree.getDirectoryForPath(
+                path,
+                PageRequest(page = page, size = 500, sortBy = SortBy.DATE, sortOrder = SortOrder.DESC, flatten = true)
+            ).getOrThrow()
+            for (entry in response.data) {
+                if (entry.lastModified <= lowerMs) return entries
+                if (entry.lastModified <= upperMs) entries += entry
+            }
             if (!response.pagination.hasNext) break
             page++
         }
-        return entries.flatMap { entry ->
-            when {
-                entry.type == EntryType.Directory -> collectFiles(tree, leafKey, Paths.get(entry.path), cutoffMs)
-                entry.lastModified > cutoffMs -> listOf(Path("$leafKey/${entry.path}"))
-                else -> emptyList()
-            }
-        }
+        return entries
     }
 }
