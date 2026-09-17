@@ -1,7 +1,7 @@
 package com.thelightphone.sdk.emulator.backup
 
-import com.thelightphone.backup.BaseOAuthTunnelClient
-import com.thelightphone.backup.TunnelMode
+import com.thelightphone.sdk.server.toolmanager.BaseOAuthTunnelClient
+import com.thelightphone.sdk.server.toolmanager.TunnelMode
 import com.thelightphone.sdk.emulator.http.EmulatorHttpServer
 
 class EmulatorRelayOAuthTunnelClient(
