@@ -18,6 +18,7 @@ import com.thelightphone.backup.refreshAccessToken
 import com.thelightphone.sdk.emulator.BuildConfig
 import com.thelightphone.sdk.server.backup.CompositeDataSource
 import com.thelightphone.sdk.server.backup.LightSdkToolsBackupDataSource
+import com.thelightphone.sdk.server.backup.SmsMmsBackupDataSource
 import com.thelightphone.toolmanager.Logger
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -55,7 +56,14 @@ class EmulatorBackupDependencyProvider(
     }
 
     override fun createDataSource(): BackupDataSource {
-        return CompositeDataSource(listOf(LightSdkToolsBackupDataSource(appContext, logger)), logger)
+        // TODO add user switches per tool
+        return CompositeDataSource(
+            listOf(
+                LightSdkToolsBackupDataSource(appContext, logger),
+                SmsMmsBackupDataSource(appContext, logger),
+            ),
+            logger,
+        )
     }
 
     override fun createOAuthTunnelClient(provider: RemoteBackupProvider): OAuthTunnelClient? {
