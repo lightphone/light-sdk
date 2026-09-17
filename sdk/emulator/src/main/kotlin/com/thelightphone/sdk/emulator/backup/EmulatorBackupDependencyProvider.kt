@@ -7,18 +7,18 @@ import com.thelightphone.backup.BackupDataSource
 import com.thelightphone.backup.BackupDependencyProvider
 import com.thelightphone.backup.BackupPreferences
 import com.thelightphone.backup.BackupStatus
-import com.thelightphone.backup.OAuthTunnelClient
+import com.thelightphone.sdk.server.toolmanager.OAuthTunnelClient
 import com.thelightphone.backup.RemoteAccessTokenProvider
 import com.thelightphone.backup.RemoteBackup
 import com.thelightphone.backup.RemoteBackupProvider
-import com.thelightphone.backup.StoredOAuthTokenProvider
-import com.thelightphone.backup.StoredOAuthTokens
-import com.thelightphone.backup.TokenStorage
-import com.thelightphone.backup.refreshAccessToken
 import com.thelightphone.sdk.emulator.BuildConfig
 import com.thelightphone.sdk.server.backup.CompositeDataSource
 import com.thelightphone.sdk.server.backup.LightSdkToolsBackupDataSource
 import com.thelightphone.sdk.server.backup.SmsMmsBackupDataSource
+import com.thelightphone.sdk.server.toolmanager.StoredOAuthTokenProvider
+import com.thelightphone.sdk.server.toolmanager.StoredOAuthTokens
+import com.thelightphone.sdk.server.toolmanager.TokenStorage
+import com.thelightphone.sdk.server.toolmanager.refreshAccessToken
 import com.thelightphone.toolmanager.Logger
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -66,7 +66,7 @@ class EmulatorBackupDependencyProvider(
         )
     }
 
-    override fun createOAuthTunnelClient(provider: RemoteBackupProvider): OAuthTunnelClient? {
+    private fun createOAuthTunnelClient(provider: RemoteBackupProvider): OAuthTunnelClient? {
         val workerHost = BuildConfig.BACKUP_WORKER_HOST
         return when (provider) {
             RemoteBackupProvider.Custom -> EmulatorRelayOAuthTunnelClient(workerHost)
