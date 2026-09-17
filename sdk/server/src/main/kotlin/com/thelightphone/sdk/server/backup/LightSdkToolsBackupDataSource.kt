@@ -26,6 +26,8 @@ import kotlin.collections.set
 import kotlin.time.Clock
 import kotlin.time.Instant
 
+private const val TAG = "LightSdkToolsBackupDataSource"
+
 /**
  * Bridges the gap between Tool Manager I/O and cloud backups
  * Wraps ContentResolverDataTree (reads/writes files from tools)
@@ -50,8 +52,8 @@ class LightSdkToolsBackupDataSource(
             LightSdkServer.canBackUpFromPackage(clientFilterLevel, appContext, it)
         }
         tools.flatMap { tool -> backupPathsForTool(tool) }
-            .also { println("tools to be backed up: $it") }
-    }
+            .also { logger.log(TAG, "${it.size} tools to be backed up.") }
+    }.onFailure { logger.reportError(TAG, it, "Failed to list backup paths") }
 
     override suspend fun getFilesToBackUpForPath(
         parent: Path,
@@ -59,36 +61,52 @@ class LightSdkToolsBackupDataSource(
         upperBound: Instant
     ): Result<List<Path>> = runCatching {
         val leafKey = parent.toString()
-        val tree = leafTrees[leafKey] ?: throw NoSuchElementException("Unknown backup path: $parent")
+        val tree =
+            leafTrees[leafKey] ?: throw NoSuchElementException("Unknown backup path: $parent")
         val lowerMs = lowerBound.toEpochMilliseconds()
         val upperMs = upperBound.toEpochMilliseconds()
         collectFileEntriesInRange(tree, Paths.get("."), lowerMs, upperMs)
             .map { Path("$leafKey/${it.path}") }
-            .also { println("get files to back up for $parent: $it") }
-    }
+            .also { logger.log(TAG, "${it.size} files to be backed up.") }
+    }.onFailure { logger.reportError(TAG, it, "Failed to list files to back up for $parent") }
 
-    override suspend fun getEarliestPossibleBackupDate(parent: Path): Result<Instant> = runCatching {
-        val leafKey = parent.toString()
-        val tree = leafTrees[leafKey] ?: throw NoSuchElementException("Unknown backup path: $parent")
-        val response = tree.getDirectoryForPath(
-            Paths.get("."),
-            PageRequest(page = 1, size = 1, sortBy = SortBy.DATE, sortOrder = SortOrder.ASC, flatten = true)
-        ).getOrThrow()
-        response.data.firstOrNull()
-            ?.let { Instant.fromEpochMilliseconds(it.lastModified) }
-            ?: Clock.System.now()
-    }
+    override suspend fun getEarliestPossibleBackupDate(parent: Path): Result<Instant> =
+        runCatching {
+            val leafKey = parent.toString()
+            val tree =
+                leafTrees[leafKey] ?: throw NoSuchElementException("Unknown backup path: $parent")
+            val response = tree.getDirectoryForPath(
+                Paths.get("."),
+                PageRequest(
+                    page = 1,
+                    size = 1,
+                    sortBy = SortBy.DATE,
+                    sortOrder = SortOrder.ASC,
+                    flatten = true
+                )
+            ).getOrThrow()
+            val instant = response.data.firstOrNull()
+                ?.let { Instant.fromEpochMilliseconds(it.lastModified) }
+                ?: Clock.System.now()
+            logger.log(TAG, "earliest possible backup date: $instant")
+            instant
+        }.onFailure { logger.reportError(TAG, it, "Failed to determine earliest possible backup date for $parent") }
 
     override suspend fun readFile(path: Path): Result<InputStream> {
+        // Only log leafKey!
         val (leafKey, relativePath) = splitLeafPath(path)
-        val tree = leafTrees[leafKey]
-            ?: return Result.failure(NoSuchElementException("Unknown backup path: $path"))
+        val tree = leafTrees[leafKey] ?: run {
+            val error = NoSuchElementException("Unknown backup path: $leafKey")
+            logger.reportError(TAG, error, "Failed to read file under $leafKey")
+            return Result.failure(error)
+        }
         return tree.getBytes(Paths.get(relativePath))
+            .onFailure { logger.reportError(TAG, it, "Failed to read file under $leafKey") }
     }
 
     override suspend fun hashForFile(path: Path): Result<String> = runCatching {
         val (leafKey, relativePath) = splitLeafPath(path)
-        val tree = leafTrees[leafKey] ?: throw NoSuchElementException("Unknown backup path: $path")
+        val tree = leafTrees[leafKey] ?: throw NoSuchElementException("Unknown backup path: $leafKey")
         val digest = MessageDigest.getInstance("SHA-256")
         tree.getBytes(Paths.get(relativePath)).getOrThrow().use { input ->
             val buffer = ByteArray(8192)
@@ -99,7 +117,7 @@ class LightSdkToolsBackupDataSource(
             }
         }
         digest.digest().joinToString("") { "%02x".format(it) }
-    }
+    }.onFailure { logger.reportError(TAG, it, "Failed to hash file under ${splitLeafPath(path).first}") }
 
     private fun backupPathsForTool(tool: ToolManagerTool): List<BackupPath> {
         return backupLeaves(tool.manifest.roots).map { leaf ->
@@ -115,17 +133,19 @@ class LightSdkToolsBackupDataSource(
         }
     }
 
-    private fun backupLeaves(nodes: List<ClientTreeNode>): List<ClientLeafNode> = nodes.flatMap { node ->
-        when (node) {
-            is ClientLeafNode -> if (node.canBeBackedUp) listOf(node) else emptyList()
-            is ClientBranchNode -> backupLeaves(node.children)
+    private fun backupLeaves(nodes: List<ClientTreeNode>): List<ClientLeafNode> =
+        nodes.flatMap { node ->
+            when (node) {
+                is ClientLeafNode -> if (node.canBeBackedUp) listOf(node) else emptyList()
+                is ClientBranchNode -> backupLeaves(node.children)
+            }
         }
-    }
 
     // Files nested under a leaf's root are encoded as "<leafKey>/<path relative to that leaf's root>"
     private fun splitLeafPath(path: Path): Pair<String, String> {
         val raw = path.toString()
-        val leafKey = leafTrees.keys.firstOrNull { raw == it || raw.startsWith("$it/") } ?: return raw to "."
+        val leafKey =
+            leafTrees.keys.firstOrNull { raw == it || raw.startsWith("$it/") } ?: return raw to "."
         val relative = raw.removePrefix(leafKey).removePrefix("/").ifEmpty { "." }
         return leafKey to relative
     }
@@ -141,7 +161,13 @@ class LightSdkToolsBackupDataSource(
         while (true) {
             val response = tree.getDirectoryForPath(
                 path,
-                PageRequest(page = page, size = 500, sortBy = SortBy.DATE, sortOrder = SortOrder.DESC, flatten = true)
+                PageRequest(
+                    page = page,
+                    size = 500,
+                    sortBy = SortBy.DATE,
+                    sortOrder = SortOrder.DESC,
+                    flatten = true
+                )
             ).getOrThrow()
             for (entry in response.data) {
                 if (entry.lastModified <= lowerMs) return entries
