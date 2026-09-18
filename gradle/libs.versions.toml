@@ -14,7 +14,7 @@ kotlinxDatetime = "0.8.0"
 bouncycastle = "1.85"
 sol4k = "0.7.0"
 zxing = "3.5.4"
-toolmanager = "0.0.10"
+toolmanager = "0.0.13"
 
 [libraries]
 unifiedpush-connector = { module = "org.unifiedpush.android:connector", version.ref = "connector" }

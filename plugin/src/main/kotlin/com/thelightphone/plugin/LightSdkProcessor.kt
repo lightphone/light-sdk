@@ -63,41 +63,8 @@ class LightSdkProcessor(
             }
         }
 
-        val jobEntries = mutableListOf<Pair<String, String>>()
-        val seenKeys = mutableSetOf<String>()
-        for (job in jobs) {
-            val fqn = job.qualifiedName?.asString() ?: "unknown"
-            if (job.parentDeclaration != null) {
-                logger.error("@LightJob must be applied to a top-level property: $fqn")
-                return emptyList()
-            }
-
-            val typeFqn = job.type.resolve().declaration.qualifiedName?.asString()
-            if (typeFqn != "com.thelightphone.sdk.LightJobHandler") {
-                logger.error("@LightJob property $fqn must be of type LightJobHandler (got $typeFqn)")
-                return emptyList()
-            }
-
-            val annotation = job.annotations.first {
-                it.shortName.asString() == "LightJob" &&
-                    it.annotationType.resolve().declaration.qualifiedName?.asString() ==
-                    "com.thelightphone.sdk.LightJob"
-            }
-            val key = annotation.arguments
-                .firstOrNull { it.name?.asString() == "key" }?.value as? String
-                ?: (annotation.arguments.firstOrNull()?.value as? String)
-
-            if (key.isNullOrEmpty()) {
-                logger.error("@LightJob $fqn is missing a key")
-                return emptyList()
-            }
-            if (!seenKeys.add(key)) {
-                logger.error("Duplicate @LightJob key '$key' on $fqn")
-                return emptyList()
-            }
-
-            jobEntries += key to fqn
-        }
+        val jobEntries = collectJobEntries(jobs, "LightJob", "com.thelightphone.sdk.LightJob")
+            ?: return emptyList()
 
         val initialScreenFqcn = initialScreens.firstOrNull()?.qualifiedName?.asString()
         val entryPointFqcn = entryPoints.firstOrNull()?.qualifiedName?.asString()
@@ -127,16 +94,72 @@ class LightSdkProcessor(
                 } else {
                     appendLine("    val entryPoint: com.thelightphone.sdk.LightEntryPoint? = null")
                 }
-                appendLine("    val jobs: Map<String, com.thelightphone.sdk.LightJobHandler> = mapOf(")
-                for ((key, fqn) in jobEntries) {
-                    appendLine("        \"${key.replace("\"", "\\\"")}\" to $fqn,")
-                }
-                appendLine("    )")
+                appendJobMap("jobs", "com.thelightphone.sdk.LightJobHandler", jobEntries)
                 appendLine("}")
             })
         }
 
         return emptyList()
+    }
+
+    /** The `key` argument of a `@LightJob` annotation on [declaration], or null if missing. */
+    private fun extractAnnotationKey(
+        declaration: KSAnnotated,
+        annotationShortName: String,
+        annotationFqn: String,
+    ): String? {
+        val annotation = declaration.annotations.first {
+            it.shortName.asString() == annotationShortName &&
+                it.annotationType.resolve().declaration.qualifiedName?.asString() == annotationFqn
+        }
+        return annotation.arguments
+            .firstOrNull { it.name?.asString() == "key" }?.value as? String
+            ?: (annotation.arguments.firstOrNull()?.value as? String)
+    }
+
+    /** Validates a `@LightJob`-annotated property list into (key, handler fqn) pairs. */
+    private fun collectJobEntries(
+        properties: List<KSPropertyDeclaration>,
+        annotationShortName: String,
+        annotationFqn: String,
+    ): List<Pair<String, String>>? {
+        val entries = mutableListOf<Pair<String, String>>()
+        val seenKeys = mutableSetOf<String>()
+        for (job in properties) {
+            val fqn = job.qualifiedName?.asString() ?: "unknown"
+            if (job.parentDeclaration != null) {
+                logger.error("@$annotationShortName must be applied to a top-level property: $fqn")
+                return null
+            }
+
+            val typeFqn = job.type.resolve().declaration.qualifiedName?.asString()
+            if (typeFqn != "com.thelightphone.sdk.LightJobHandler") {
+                logger.error("@$annotationShortName property $fqn must be of type LightJobHandler (got $typeFqn)")
+                return null
+            }
+
+            val key = extractAnnotationKey(job, annotationShortName, annotationFqn)
+            if (key.isNullOrEmpty()) {
+                logger.error("@$annotationShortName $fqn is missing a key")
+                return null
+            }
+            if (!seenKeys.add(key)) {
+                logger.error("Duplicate @$annotationShortName key '$key' on $fqn")
+                return null
+            }
+
+            entries += key to fqn
+        }
+        return entries
+    }
+
+    /** Emits `val <name>: Map<String, <valueType>> = mapOf(...)` into a [StringBuilder]. */
+    private fun StringBuilder.appendJobMap(name: String, valueType: String, entries: List<Pair<String, String>>) {
+        appendLine("    val $name: Map<String, $valueType> = mapOf(")
+        for ((key, fqn) in entries) {
+            appendLine("        \"${key.replace("\"", "\\\"")}\" to $fqn,")
+        }
+        appendLine("    )")
     }
 }
 
