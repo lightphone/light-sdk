@@ -279,7 +279,7 @@ private fun PreviewLightTextInputEditorDark() {
 fun defaultKeyboardOptions() = KeyboardOptions(
     defaultEmojis,
     displayReturn = true,
-    displayVoice = true,
+    displayVoice = false, // dictation not available in LP3 keyboard as of 0.0.19
     enableKeyAnimation = true,
     swipeEnabled = false
 )

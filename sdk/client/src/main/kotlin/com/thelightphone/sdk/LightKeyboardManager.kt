@@ -49,7 +49,10 @@ private var cachedOptions = defaultKeyboardOptions()
 
 @Composable
 fun rememberKeyboardOptions(
-    initialOptions: KeyboardOptions = cachedOptions
+    initialOptions: KeyboardOptions = cachedOptions,
+    // temporarily force opt-in for dictation key.
+    // We don't support it in LP3 keyboard as of 0.0.19
+    allowDictationKey: Boolean = false
 ): StateFlow<KeyboardOptions> {
     val flow = remember { MutableStateFlow(initialOptions) }
     val scope = rememberCoroutineScope()
@@ -58,10 +61,12 @@ fun rememberKeyboardOptions(
     SideEffect {
         refreshJob.value?.cancel()
         refreshJob.value = scope.launch {
-            refreshKeyboardOptions()?.let {
-                cachedOptions = it
-                flow.value = it
-            }
+            refreshKeyboardOptions()
+                ?.let { it.copy(displayVoice = it.displayVoice && allowDictationKey) }
+                ?.let {
+                    cachedOptions = it
+                    flow.value = it
+                }
         }
     }
     return flow
