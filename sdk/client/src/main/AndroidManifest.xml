@@ -2,16 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Lets tools talk to USB security keys / hardware tokens. required=false
          so it never filters out devices without USB host support. -->
-    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
     <application>
-        <provider
-            android:name="com.thelightphone.sdk.LightFileProvider"
-            android:authorities="${applicationId}.lightfiles"
-            android:exported="true" />
-        <service android:name="com.thelightphone.sdk.LightPushService"
+        <service
+            android:name="com.thelightphone.sdk.LightPushService"
             android:exported="false">
             <intent-filter>
-                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT"/>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
             </intent-filter>
         </service>
         <!-- LightAudioService is not declared here. The Gradle plugin emits it
