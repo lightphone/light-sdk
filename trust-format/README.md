@@ -8,6 +8,11 @@ UTC, exactly `YYYY-MM-DDTHH:MM:SSZ`; it does not control expiry. JSON nesting is
 limited to 64 levels. The schema version is checked before other root fields so
 newer formats are refused with a schema-specific reason.
 
+Signed bundle JSON must be UTF-8 without a byte-order mark (BOM). Both verifiers
+authenticate the original bytes before decoding; UTF-16, UTF-32 and UTF-8 with
+a BOM are rejected even with a valid signature. Shared signed fixtures cover
+these encoding failures and ensure an invalid signature is rejected first.
+
 The portal input has exactly the signed document's fields except
 `schemaVersion`. Every field, including `issuedAt`, is required; unknown fields
 are errors. The builder supplies schema version 1.

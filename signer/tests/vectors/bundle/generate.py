@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import codecs
 import json
 import subprocess
 import sys
@@ -64,6 +65,15 @@ bundle: dict[str, object] = {
 valid = encode(bundle)
 valid_signature = sign(SIGNED_PAYLOAD_PREFIX + valid, PRIVATE_KEY)
 write_pair("valid", valid, valid_signature)
+
+for name, payload in {
+    "utf16-le": codecs.BOM_UTF16_LE + valid.decode("utf-8").encode("utf-16-le"),
+    "utf16-be": codecs.BOM_UTF16_BE + valid.decode("utf-8").encode("utf-16-be"),
+    "utf32-le": codecs.BOM_UTF32_LE + valid.decode("utf-8").encode("utf-32-le"),
+    "utf32-be": codecs.BOM_UTF32_BE + valid.decode("utf-8").encode("utf-32-be"),
+    "utf8-bom": codecs.BOM_UTF8 + valid,
+}.items():
+    write_pair(name, payload, sign(SIGNED_PAYLOAD_PREFIX + payload, PRIVATE_KEY))
 
 edited = valid.replace(b"build_01H", b"build_02H")
 write_pair("edited-payload", edited, valid_signature)

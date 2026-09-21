@@ -328,6 +328,32 @@ def test_checked_in_vectors() -> None:
     )
 
 
+@pytest.mark.parametrize("name", ["utf16-le", "utf16-be", "utf32-le", "utf32-be", "utf8-bom"])
+@pytest.mark.parametrize("valid_signature", [True, False])
+def test_bundle_encoding_contract(name: str, valid_signature: bool, tmp_path: Path, capsys: Any) -> None:
+    root = Path(__file__).parent / "vectors" / "bundle"
+    bundle = root / name / "bundle.json"
+    signature = root / name / "bundle.sig"
+    public = root / "INSECURE-bundle-public.pem"
+    expected = "invalid_json"
+    if not valid_signature:
+        signature = tmp_path / "invalid.sig"
+        signature.write_bytes(bytes(64))
+        expected = "invalid_bundle_signature"
+
+    assert_code(expected, lambda: verify_bundle(
+        bundle=bundle, signature=signature, public_keys=[public], openssl=OPENSSL,
+    ))
+    assert main([
+        "bundle", "verify",
+        "--bundle-json", str(bundle),
+        "--bundle-sig", str(signature),
+        "--public-key", str(public),
+        "--openssl", str(OPENSSL),
+    ]) == 1
+    assert f"{expected}:" in capsys.readouterr().err
+
+
 def test_cli_verify_returns_reason_for_structural_failure(tmp_path: Path, keypair: tuple[Path, Path], capsys: Any) -> None:
     private, public = keypair
     bundle, signature = build(tmp_path, private)

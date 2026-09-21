@@ -78,7 +78,8 @@ def verify_bundle(*, bundle: Path, signature: Path, public_keys: list[Path], ope
     if not any(_verify(openssl, key, payload, signature_bytes) for key in public_keys):
         raise SignerError("invalid_bundle_signature", "bundle signature did not match a pinned key")
     try:
-        document = _check_depth(json.loads(bundle_bytes, object_pairs_hook=_reject_duplicate_keys))
+        text = bundle_bytes.decode("utf-8")
+        document = _check_depth(json.loads(text, object_pairs_hook=_reject_duplicate_keys))
     except SignerError:
         raise
     except (UnicodeError, ValueError, RecursionError) as error:

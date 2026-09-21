@@ -161,6 +161,15 @@ class TrustBundleTest {
         assertIs<TrustFailure.UnsupportedSchema>(failure(verify.verify(newer.bytes, newer.signature)))
     }
 
+    @Test fun `signed bundles require UTF-8 without a BOM`() {
+        val verify = verifier()
+        for (name in listOf("utf16-le", "utf16-be", "utf32-le", "utf32-be", "utf8-bom")) {
+            val pair = fixture(name)
+            assertIs<TrustFailure.InvalidJson>(failure(verify.verify(pair.bytes, pair.signature)), name)
+            assertEquals(TrustFailure.InvalidSignature, failure(verify.verify(pair.bytes, ByteArray(64))), name)
+        }
+    }
+
     @Test fun `signature verification precedes parsing`() {
         val malformed = "not JSON".encodeToByteArray()
         assertEquals(TrustFailure.InvalidSignature, failure(verifier().verify(malformed, ByteArray(64))))
