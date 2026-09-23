@@ -30,6 +30,10 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # the action defaults to `tools platform-tools`, and Google has removed
+          # the obsolete `tools` package, so sdkmanager exits 1 trying to find it
+          packages: 'platform-tools'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
