@@ -2,8 +2,8 @@
 
 Offline PoC tooling that registers tool ownership, writes a trust
 statement into an unsigned APK, signs the APK, and verifies the result. Requires
-Python 3.11+, a JDK `keytool`, and Android SDK `apksigner` and
-`apkanalyzer`.
+Python 3.11+, a JDK `keytool`, Android SDK `apksigner` and `apkanalyzer`, and
+OpenSSL 3.
 
 Run commands from this directory with `python -m lightsigner`. Use `--help` on
 the command or a subcommand for all arguments.
@@ -30,6 +30,17 @@ python -m lightsigner sign --apk tool-with-statement.apk --build-recipe recipe.j
 # Perform offline verification of the APK.
 python -m lightsigner verify --apk tool.apk \
   --stamp-cert-sha256 "$LIGHT_STAMP_CERT_SHA256"
+
+# Create the ignored PoC bundle keypair once.
+mkdir -p keys/bundle
+openssl genpkey -algorithm Ed25519 -out keys/bundle/private.pem
+openssl pkey -in keys/bundle/private.pem -pubout -out keys/bundle/public.pem
+
+# Build and verify a detached trust bundle.
+python -m lightsigner bundle build --portal portal.json --output-dir bundle \
+  --private-key keys/bundle/private.pem
+python -m lightsigner bundle verify --bundle-json bundle/bundle.json \
+  --bundle-sig bundle/bundle.sig --public-key keys/bundle/public.pem
 ```
 
 `registry.json` maps a tool ID to its developer and permanent APK signing key:
@@ -48,5 +59,14 @@ the PoC. Production signing keys must be held by a KMS or HSM. The password is
 read only from `LIGHT_SIGNER_KEY_PASSWORD`; the source-stamp password is read
 from `LIGHT_SIGNER_STAMP_KEY_PASSWORD`. Commands fail if their password is absent.
 
-Android tools resolve from an explicit override, `PATH`, then the latest tool
+External tools resolve from an explicit override, `PATH`, then Android tools from the latest tool
 under `ANDROID_SDK_ROOT` or `ANDROID_HOME`.
+
+The checked-in bundle vectors use keys prefixed `INSECURE-`. They are test-only
+and must never be configured as device trust anchors.
+
+`portal.json` requires `version`, `issuedAt`, `allow`, `block`,
+`trustedStampCerts`, and `revokedStampCerts`, with no extra fields.
+Do not include `schemaVersion`; the builder supplies it. Timestamps must use
+UTC `YYYY-MM-DDTHH:MM:SSZ`. See [the format contract](../trust-format/README.md)
+for numeric limits, image-pin ownership, and publication/retry behavior.

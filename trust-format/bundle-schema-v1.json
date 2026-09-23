@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lightphone.com/schemas/trust-bundle-v1.json",
+  "title": "LightOS trust bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "version",
+    "issuedAt",
+    "allow",
+    "block",
+    "trustedStampCerts",
+    "revokedStampCerts"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "version": { "type": "integer", "minimum": 0, "maximum": 9223372036854775807 },
+    "issuedAt": { "type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "allow": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/allowEntry" }
+    },
+    "block": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/blockEntry" }
+    },
+    "trustedStampCerts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sha256" },
+      "uniqueItems": true
+    },
+    "revokedStampCerts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sha256" },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "allowEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["toolId", "signerSha256", "minVersionCode", "approvedArtifacts"],
+      "properties": {
+        "toolId": { "type": "string", "minLength": 1 },
+        "signerSha256": { "$ref": "#/$defs/sha256" },
+        "minVersionCode": { "type": "integer", "minimum": 0, "maximum": 9223372036854775807 },
+        "approvedArtifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["buildId"],
+                "properties": { "buildId": { "type": "string", "minLength": 1 } }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["apkSha256"],
+                "properties": { "apkSha256": { "$ref": "#/$defs/sha256" } }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "blockEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["match", "action", "reason"],
+      "properties": {
+        "match": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["signerSha256"],
+              "properties": { "signerSha256": { "$ref": "#/$defs/sha256" } }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["toolId"],
+              "properties": { "toolId": { "type": "string", "minLength": 1 } }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["toolId", "versionCode"],
+              "properties": {
+                "toolId": { "type": "string", "minLength": 1 },
+                "versionCode": { "type": "integer", "minimum": 0, "maximum": 9223372036854775807 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["apkSha256"],
+              "properties": { "apkSha256": { "$ref": "#/$defs/sha256" } }
+            }
+          ]
+        },
+        "action": { "enum": ["block", "purge"] },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
