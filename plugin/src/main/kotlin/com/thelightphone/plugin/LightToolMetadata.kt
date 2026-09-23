@@ -189,8 +189,10 @@ object LightToolPolicy {
 
     const val DETACHED_AUDIO: String = "detached-audio"
     const val TOOL_MANAGER_PROVIDER: String = "tool-manager-provider"
+    const val CLEARTEXT_HTTP: String = "cleartext-http"
 
-    val ALLOWED_CAPABILITIES: Set<String> = setOf(DETACHED_AUDIO, TOOL_MANAGER_PROVIDER)
+    val ALLOWED_CAPABILITIES: Set<String> =
+        setOf(DETACHED_AUDIO, TOOL_MANAGER_PROVIDER, CLEARTEXT_HTTP)
 
     /**
      * Permissions a capability contributes to the generated manifest. These are

@@ -51,6 +51,19 @@ capabilities = ["detached-audio"]
 
 `detached-audio` generates the `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permissions, the detached audio service, and the SDK marker checked by `LightAudio.newPlayer`. None of those permissions can be listed under `permissions`. The capability owns them, and the build fails with an error naming the capability to declare instead.
 
+A tool that syncs with a server on the user's own network uses:
+
+```toml
+[tool]
+capabilities = ["cleartext-http"]
+```
+
+`cleartext-http` sets `android:usesCleartextTraffic="true"` on the generated
+`<application>`. Android otherwise refuses plain-HTTP connections, which are
+the norm for self-hosted servers on a home network (a NAS, a printer, a
+personal sync server at a `192.168.x` address). Declaring it here keeps the
+opt-out reviewable in `lighttool.toml` rather than hidden in a manifest.
+
 ### `orientation` — optional screen orientation lock
 Set to `"portrait"` to keep the tool in portrait orientation. Omit this field to
 let the system choose the orientation.

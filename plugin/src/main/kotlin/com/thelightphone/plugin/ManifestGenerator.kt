@@ -81,12 +81,23 @@ object ManifestGenerator {
             )
         )
 
+        // Tools that sync with self-hosted servers on the user's own network
+        // (e.g. a NAS, printer, or personal sync server at a 192.168.x address)
+        // need plain-HTTP connections, which Android blocks by default. The
+        // capability makes that opt-in visible in lighttool.toml where it can
+        // be vetted, instead of hidden in a manifest overlay.
+        val cleartext =
+            if (LightToolPolicy.CLEARTEXT_HTTP in metadata.capabilities) {
+                "\n            |        android:usesCleartextTraffic=\"true\""
+            } else {
+                ""
+            }
         appendLine(
             """
             |    <application
             |        android:name="com.thelightphone.sdk.LightSdkApplication"
             |        android:label="${xmlAttr(metadata.label)}"
-            |        android:supportsRtl="true"
+            |        android:supportsRtl="true"$cleartext
             |        android:theme="@style/LightSdk.Theme.Splash">
             |        <meta-data
             |            android:name="com.thelightphone.sdk.LIGHT_SERVER_PACKAGE"
