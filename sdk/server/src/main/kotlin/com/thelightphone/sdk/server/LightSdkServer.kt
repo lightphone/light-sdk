@@ -249,7 +249,10 @@ object LightSdkServer {
     var onRequestLocationUpdates: (callingUid: Int) -> LightResult<Unit> =
         { _ ->
             Log.e(TAG, "RequestLocationUpdates not configured by server")
-            LightResult.Error(LightResult.ErrorCode.Unknown, "RequestLocationUpdates not configured")
+            LightResult.Error(
+                LightResult.ErrorCode.Unknown,
+                "RequestLocationUpdates not configured"
+            )
         }
 
     /**
@@ -260,7 +263,10 @@ object LightSdkServer {
     var onReleaseLocationUpdates: (callingUid: Int) -> LightResult<Unit> =
         { _ ->
             Log.e(TAG, "ReleaseLocationUpdates not configured by server")
-            LightResult.Error(LightResult.ErrorCode.Unknown, "ReleaseLocationUpdates not configured")
+            LightResult.Error(
+                LightResult.ErrorCode.Unknown,
+                "ReleaseLocationUpdates not configured"
+            )
         }
 
     var foregroundSelfWithCallback: (componentToReturnTo: ComponentName) -> Unit = {
@@ -291,12 +297,19 @@ object LightSdkServer {
         }
 
     /**
-     * Returns whether or not ToolManager nodes for a given package should be backed up to remote storage
+     * Returns the user-visible label for a tool. Overrideable in case we want users to be able to
+     * create custom labels for tools
      */
-    var canBackUpFromPackage: (clientFilterLevel: ClientFilterLevel, context: Context, callingPackage: String) -> Boolean =
-        { filterLevel, context, callingPackage ->
-            isPackageAllowed(filterLevel, context, callingPackage)
-        }
+    var getToolLabel: (packageManager: PackageManager, packageInfo: ApplicationInfo) -> CharSequence =
+        { pm, pi -> pm.getApplicationLabel(pi) }
+
+    /**
+     * Returns whether or not ToolManager nodes for a given package should be backed up to remote storage
+     * Note that packages passed here have likely already been passed through the `isPackageAllowed` filter
+     */
+    var canBackUpFromPackage: (context: Context, callingPackage: String) -> Boolean =
+        { _, _ -> true }
+
 
     /**
      * Called when the SDK server successfully installs a tool

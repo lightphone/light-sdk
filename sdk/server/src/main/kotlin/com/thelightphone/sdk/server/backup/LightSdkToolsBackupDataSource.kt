@@ -46,12 +46,17 @@ class LightSdkToolsBackupDataSource(
     // how they find their way back to the right tool leaf's ContentResolverDataTree.
     private val leafTrees = ConcurrentHashMap<String, ContentResolverDataTree>()
 
-    override suspend fun getPathsToBackUp(): Result<List<BackupPath>> = runCatching {
+    suspend fun getBackupCapableTools(): List<ToolManagerTool> {
         val clientFilterLevel = LightSdkServer.provideSdkSettings(appContext).clientFilterLevel
-        val tools = appContext.discoverToolManagerEnabledTools(logger) {
-            LightSdkServer.canBackUpFromPackage(clientFilterLevel, appContext, it)
+        return appContext.discoverToolManagerEnabledTools(logger) {
+            LightSdkServer.isPackageAllowed(clientFilterLevel, appContext, it)
         }
-        tools.flatMap { tool -> backupPathsForTool(tool) }
+    }
+
+    override suspend fun getPathsToBackUp(): Result<List<BackupPath>> = runCatching {
+        getBackupCapableTools()
+            .filter { LightSdkServer.canBackUpFromPackage(appContext, it.packageName) }
+            .flatMap { tool -> backupPathsForTool(tool) }
             .also { logger.log(TAG, "${it.size} tools to be backed up.") }
     }.onFailure { logger.reportError(TAG, it, "Failed to list backup paths") }
 
@@ -90,7 +95,13 @@ class LightSdkToolsBackupDataSource(
                 ?: Clock.System.now()
             logger.log(TAG, "earliest possible backup date: $instant")
             instant
-        }.onFailure { logger.reportError(TAG, it, "Failed to determine earliest possible backup date for $parent") }
+        }.onFailure {
+            logger.reportError(
+                TAG,
+                it,
+                "Failed to determine earliest possible backup date for $parent"
+            )
+        }
 
     override suspend fun readFile(path: Path): Result<InputStream> {
         // Only log leafKey!
@@ -106,7 +117,8 @@ class LightSdkToolsBackupDataSource(
 
     override suspend fun hashForFile(path: Path): Result<String> = runCatching {
         val (leafKey, relativePath) = splitLeafPath(path)
-        val tree = leafTrees[leafKey] ?: throw NoSuchElementException("Unknown backup path: $leafKey")
+        val tree =
+            leafTrees[leafKey] ?: throw NoSuchElementException("Unknown backup path: $leafKey")
         val digest = MessageDigest.getInstance("SHA-256")
         tree.getBytes(Paths.get(relativePath)).getOrThrow().use { input ->
             val buffer = ByteArray(8192)
@@ -117,7 +129,13 @@ class LightSdkToolsBackupDataSource(
             }
         }
         digest.digest().joinToString("") { "%02x".format(it) }
-    }.onFailure { logger.reportError(TAG, it, "Failed to hash file under ${splitLeafPath(path).first}") }
+    }.onFailure {
+        logger.reportError(
+            TAG,
+            it,
+            "Failed to hash file under ${splitLeafPath(path).first}"
+        )
+    }
 
     private fun backupPathsForTool(tool: ToolManagerTool): List<BackupPath> {
         return backupLeaves(tool.manifest.roots).map { leaf ->

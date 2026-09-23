@@ -8,6 +8,7 @@ import android.provider.Telephony
 import android.webkit.MimeTypeMap
 import com.thelightphone.backup.BackupDataSource
 import com.thelightphone.backup.BackupPath
+import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.toolmanager.Logger
 import kotlinx.io.files.Path
 import org.json.JSONArray
@@ -39,7 +40,15 @@ class SmsMmsBackupDataSource(
     private val hashCache = ConcurrentHashMap<String, String>()
 
     override suspend fun getPathsToBackUp(): Result<List<BackupPath>> = runCatching {
-        listOf(BackupPath(authority = AUTHORITY, localPath = Path(ROOT_LABEL), label = ROOT_LABEL))
+        if (LightSdkServer.canBackUpFromPackage(appContext, AUTHORITY)) {
+            listOf(
+                BackupPath(
+                    authority = AUTHORITY,
+                    localPath = Path(ROOT_LABEL),
+                    label = ROOT_LABEL
+                )
+            )
+        } else emptyList()
     }.onFailure { logger.reportError(TAG, it, "Failed to list backup paths") }
 
     override suspend fun getEarliestPossibleBackupDate(parent: Path): Result<Instant> = runCatching {
@@ -269,7 +278,7 @@ class SmsMmsBackupDataSource(
 
     companion object {
         private const val TAG = "SmsMmsBackupDataSource"
-        private const val AUTHORITY = "sms-mms"
+        const val AUTHORITY = "sms-mms"
         private const val ROOT_LABEL = "sms-mms"
 
         private val SMS_PROJECTION = arrayOf(

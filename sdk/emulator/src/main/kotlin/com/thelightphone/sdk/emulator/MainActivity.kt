@@ -107,8 +107,9 @@ class MainActivity : ComponentActivity() {
                     fetchExternalTools = {
                         queryEnabledClients(serverSettings).map {
                             val appInfo = it.packageInfo.applicationInfo!!
-                            val label =
-                                packageManager.getApplicationLabel(appInfo).toString()
+                            val label = LightSdkServer
+                                .getToolLabel(packageManager, appInfo)
+                                .toString()
                             ExternalTool(label, it.packageInfo.packageName)
                         }
                     }, launchPackage = {
