@@ -30,7 +30,7 @@ data class LightToolMetadata(
 
         /** Throws [LightToolMetadataException] if [file] is missing, malformed,
          * or violates the policy. The exception message is dev-facing. */
-        fun parse(file: File): LightToolMetadata {
+        fun parse(file: File, allowAltServerPackage: Boolean = false): LightToolMetadata {
             if (!file.isFile) {
                 throw LightToolMetadataException(
                     "missing $FILE_NAME at ${file.path} — declare your tool's metadata there"
@@ -60,7 +60,7 @@ data class LightToolMetadata(
                 versionName = validateVersionName(tool.tomlString("versionName")),
                 permissions = validatePermissions(tool.tomlStringList("permissions")),
                 capabilities = validateCapabilities(tool.tomlStringList("capabilities")),
-                serverPackage = validateServerPackage(tool.tomlString("serverPackage")),
+                serverPackage = validateServerPackage(tool.tomlString("serverPackage"), allowAltServerPackage),
                 orientation = validateOrientation(tool.tomlString("orientation")),
             )
         }
@@ -99,11 +99,20 @@ data class LightToolMetadata(
             return v
         }
 
-        private fun validateServerPackage(value: String?): String {
+        private fun validateServerPackage(value: String?, allowAlt: Boolean): String {
             val v = value ?: throw LightToolMetadataException("tool.serverPackage is required")
             require(LightToolPolicy.TOOL_ID_PATTERN.matches(v)) {
                 "tool.serverPackage must be a lowercase dotted Java package identifier " +
                         "(e.g. com.lightos); got '$v'"
+            }
+            require(allowAlt || v == LightToolPolicy.LIGHTOS_SERVER_PACKAGE) {
+                "tool.serverPackage is '$v', but LightOS on a Light Phone is " +
+                        "${LightToolPolicy.LIGHTOS_SERVER_PACKAGE}. Light's release builds use this " +
+                        "value as-is, so the tool would not connect to LightOS on a phone. " +
+                        "Set serverPackage = \"${LightToolPolicy.LIGHTOS_SERVER_PACKAGE}\", or if you " +
+                        "are building for the LightOS emulator, opt in with " +
+                        "-DlightSdk.allowAltServerPackage=true " +
+                        "(e.g. ./gradlew :tool:installDebug -DlightSdk.allowAltServerPackage=true)"
             }
             return v
         }
@@ -171,6 +180,7 @@ object LightToolPolicy {
         Regex("""^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$""")
     val TOOL_LABEL_PATTERN: Regex = Regex("^[^\\x00-\\x1f<>]{1,50}$")
     const val MAX_VERSION_CODE: Int = 2_100_000_000
+    const val LIGHTOS_SERVER_PACKAGE: String = "com.lightos"
     val ALLOWED_ORIENTATIONS: Set<String> = setOf("portrait")
 
     val ALLOWED_PERMISSIONS: Set<String> = setOf(

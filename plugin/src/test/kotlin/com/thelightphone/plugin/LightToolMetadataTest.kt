@@ -318,4 +318,45 @@ class LightToolMetadataTest {
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
         assert(ex.message!!.contains("serverPackage"))
     }
+
+    private fun serverPackageToml(dir: Path, serverPackage: String): File = writeToml(dir, """
+        [tool]
+        id = "com.example.mytool"
+        label = "X"
+        versionCode = 1
+        versionName = "1.0.0"
+        serverPackage = "$serverPackage"
+    """.trimIndent())
+
+    @Test
+    fun `lightos serverPackage passes without the flag`(@TempDir dir: Path) {
+        val file = serverPackageToml(dir, "com.lightos")
+        assertEquals("com.lightos", LightToolMetadata.parse(file).serverPackage)
+    }
+
+    @Test
+    fun `emulator serverPackage fails without the flag`(@TempDir dir: Path) {
+        val file = serverPackageToml(dir, "com.thelightphone.sdk.emulator")
+        val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+        assert(ex.message!!.contains("com.thelightphone.sdk.emulator")) { ex.message ?: "" }
+        assert(ex.message!!.contains("-DlightSdk.allowAltServerPackage=true")) { ex.message ?: "" }
+    }
+
+    @Test
+    fun `emulator serverPackage passes with the flag`(@TempDir dir: Path) {
+        val file = serverPackageToml(dir, "com.thelightphone.sdk.emulator")
+        val meta = LightToolMetadata.parse(file, allowAltServerPackage = true)
+        assertEquals("com.thelightphone.sdk.emulator", meta.serverPackage)
+    }
+
+    @Test
+    fun `malformed serverPackage fails with or without the flag`(@TempDir dir: Path) {
+        val file = serverPackageToml(dir, "Com.LightOS")
+        for (allow in listOf(false, true)) {
+            val ex = assertThrows<LightToolMetadataException> {
+                LightToolMetadata.parse(file, allowAltServerPackage = allow)
+            }
+            assert(ex.message!!.contains("lowercase dotted")) { ex.message ?: "" }
+        }
+    }
 }

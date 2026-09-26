@@ -5,6 +5,6 @@ versionCode = 1
 versionName = "1.0.0"
 permissions = ["android.permission.INTERNET"]
 capabilities = []
-# change if you run this on an LP3!
-# serverPackage = "com.lightos"
-serverPackage = "com.thelightphone.sdk.emulator"
+# for the LightOS emulator, use the line below and build with -DlightSdk.allowAltServerPackage=true
+# serverPackage = "com.thelightphone.sdk.emulator"
+serverPackage = "com.lightos"
