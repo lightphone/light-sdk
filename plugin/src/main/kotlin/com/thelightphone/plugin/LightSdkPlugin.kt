@@ -252,11 +252,16 @@ class LightSdkPlugin : Plugin<Project> {
      * scheme so the artifact comes out unsigned and ready for the signing
      * service to apply the per-tool key. Locally devs run without the flag
      * and the dev keystore signs as normal.
+     *
+     * `-DlightSdk.allowAltServerPackage=true` lets `tool.serverPackage` be
+     * something other than com.lightos, e.g. the emulator package. The
+     * builder never passes it.
      */
     private fun applyToolMetadata(project: Project) {
         val tomlFile = File(project.projectDir, LightToolMetadata.FILE_NAME)
+        val allowAltServerPackage = System.getProperty("lightSdk.allowAltServerPackage") == "true"
         val metadata = try {
-            LightToolMetadata.parse(tomlFile)
+            LightToolMetadata.parse(tomlFile, allowAltServerPackage)
         } catch (e: LightToolMetadataException) {
             throw GradleException("Light SDK: ${e.message}")
         }

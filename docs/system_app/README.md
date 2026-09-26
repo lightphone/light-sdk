@@ -141,3 +141,19 @@ run:
 `adb shell settings put global window_animation_scale 0`                                                                                                                                                                                                                                                            
 `adb shell settings put global transition_animation_scale 0`                                                                                                                                                                                                                                                       
 `adb shell settings put global animator_duration_scale 0`
+
+#### 9. Building your tool for the emulator
+
+Your tool finds LightOS through `serverPackage` in `lighttool.toml`. On a Light Phone that's `com.lightos`, which is what the template and examples ship with. To talk to the emulator app instead, set:
+
+```toml
+serverPackage = "com.thelightphone.sdk.emulator"
+```
+
+The build refuses any `serverPackage` other than `com.lightos` unless you opt in, so pass `-DlightSdk.allowAltServerPackage=true` when building for the emulator:
+
+```bash
+./gradlew :tool:installDebug -DlightSdk.allowAltServerPackage=true
+```
+
+> Light's release builds don't pass this flag, so switch back to `com.lightos` before you submit your tool.

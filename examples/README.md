@@ -23,3 +23,5 @@ adb shell am start -n com.thelightphone.authenticator/com.thelightphone.sdk.Ligh
 adb shell am start -n com.thelightphone.audiodemo/com.thelightphone.sdk.LightActivity
 ```
 
+The examples use `serverPackage = "com.lightos"`. To run one on the [LightOS emulator](../docs/system_app), switch its `lighttool.toml` to the commented emulator package and add `-DlightSdk.allowAltServerPackage=true`, e.g. `./gradlew :examples:ui-demo:installDebug -DlightSdk.allowAltServerPackage=true`.
+
