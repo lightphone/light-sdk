@@ -38,6 +38,8 @@ class OAuthJobDataTree(
     private val accountType: String,
     private val oAuthTunnelClient: OAuthTunnelClient,
     private val tokenStorage: TokenStorage,
+    // called after tokens have been saved for accountType
+    private val onLinked: suspend (accountType: String) -> Unit = {},
     jobScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) : CoroutineJobDataTree<OAuthResult>(jobScope) {
     private val pendingSpecs = ConcurrentHashMap<String, OAuthTunnelSpec>()
@@ -76,6 +78,8 @@ class OAuthJobDataTree(
             expiresAt = Clock.System.now() + expiresInSeconds.seconds,
             scope = scope,
         )
+
+        onLinked(accountType)
 
         return Result.success(JobResult(message = "Linked $accountType account."))
     }

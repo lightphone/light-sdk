@@ -44,10 +44,9 @@ android {
         versionName = "1.0"
         buildConfigField("String", "PUSH_DOMAIN", "\"${localProps.getProperty("pushDomain", "")}\"")
         buildConfigField("String", "MOLLYSOCKET_URI", "\"${localProps.getProperty("mollysocketUri", "")}\"")
-        buildConfigField("String", "BACKUP_WORKER_HOST", "\"${localProps.getProperty("backupWorkerHost", "")}\"")
-        buildConfigField("String", "BACKUP_GOOGLE_CLIENT_ID", "\"${localProps.getProperty("backupGoogleClientId", "")}\"")
-        buildConfigField("String", "BACKUP_DROPBOX_CLIENT_ID", "\"${localProps.getProperty("backupDropboxClientId", "")}\"")
-        buildConfigField("String", "BACKUP_ONEDRIVE_CLIENT_ID", "\"${localProps.getProperty("backupOneDriveClientId", "")}\"")
+        // fallback is the shared dev instance, see https://github.com/lightphone/light-oauth-relay
+        // please don't use it for your own projects <3, set backupWorkerHost in local.properties
+        buildConfigField("String", "BACKUP_WORKER_HOST", "\"${localProps.getProperty("backupWorkerHost", "light-oauth-relay.dupontgu.workers.dev")}\"")
     }
 
     buildFeatures {

@@ -23,7 +23,6 @@ import io.ktor.server.request.receiveChannel
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.request.receiveText
 import io.ktor.server.request.uri
-import io.ktor.server.response.respond
 import io.ktor.server.response.respondFile
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
@@ -57,9 +56,8 @@ class EmulatorHttpServer(private val context: Context) {
         private const val TAG = "EmulatorHttpServer"
         const val PORT = 8090
 
-        // Dev-only shared secret gating the OAuth password screen below. This server only
-        // binds to the emulator's local network, so a static password is an acceptable
-        // trade-off for the minimal auth flow.
+        // Dev-only shared secret gating the OAuth password screen below.
+        // this is just for emulator testing, there is no real auth since the server is local
         private const val OAUTH_PASSWORD = "emulator-dev-password"
         private const val AUTH_CODE_TTL_MS = 60_000L
         private const val ACCESS_TOKEN_TTL_MS = 3_600_000L

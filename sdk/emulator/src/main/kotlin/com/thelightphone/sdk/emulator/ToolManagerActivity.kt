@@ -29,6 +29,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.sdk.server.toolmanager.ToolManagerLifecycleWrapperService
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightIcons
@@ -60,6 +61,7 @@ class ToolManagerActivity : ComponentActivity() {
 
     private var statusText by mutableStateOf(DEFAULT_STATUS)
     private var toolManagerUrl by mutableStateOf<String?>(null)
+    private var deepLinkPath: String? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
@@ -77,6 +79,7 @@ class ToolManagerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        deepLinkPath = intent.getStringExtra(LightSdkServer.TOOL_MANAGER_PATH_EXTRA)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.hide(WindowInsetsCompat.Type.systemBars())
@@ -128,7 +131,7 @@ class ToolManagerActivity : ComponentActivity() {
         // don't forget to forward the ports after each emulator restart:
         // adb forward tcp:54448 tcp:54448
         // adb forward tcp:54449 tcp:54449
-        val url = service.getHttpsUrl(InetAddress.getByName("localhost"))
+        val url = service.getHttpsUrl(InetAddress.getByName("localhost"), deepLinkPath)
         if (url.isNullOrEmpty()) {
             statusText = "Failed to start tool manager"
             return

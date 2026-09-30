@@ -1,13 +1,17 @@
 package com.thelightphone.sdk.emulator
 
+import android.app.Activity
 import android.app.Application
 import android.content.ComponentName
 import android.content.Intent
+import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.util.Log
 import androidx.work.Configuration
+import com.thelightphone.backup.BackupScheduler
 import com.thelightphone.backup.BackupWorkerFactory
-import com.thelightphone.sdk.emulator.backup.EmulatorBackupDependencyProvider
-import com.thelightphone.sdk.emulator.backup.EmulatorBackupPreferences
+import com.thelightphone.backup.RemoteBackupProvider
+import com.thelightphone.sdk.emulator.backup.DefaultBackupDependencyProvider
 import com.thelightphone.sdk.emulator.backup.dummyCloudBackupDataTree
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.RootViewSpec
@@ -16,6 +20,11 @@ import com.thelightphone.toolmanager.datatree.StaticBranchProvider
 import com.thelightphone.sdk.emulator.http.EmulatorHttpServer
 import com.thelightphone.sdk.server.DefaultLightSdkServerSettings
 import com.thelightphone.sdk.server.LightSdkServer
+import com.thelightphone.sdk.server.backup.BackupPackageAllowList
+import com.thelightphone.sdk.server.backup.BackupScheduleSyncer
+import com.thelightphone.sdk.server.backup.DefaultBackupSettingsViewModel
+import com.thelightphone.sdk.server.backup.DefaultObservableBackupPreferences
+import com.thelightphone.sdk.server.backup.InternalToolBackupSpec
 import com.thelightphone.sdk.server.toolmanager.developerModeDataView
 import com.thelightphone.sdk.server.toolmanager.getApkInboxSignaturesDirectory
 import com.thelightphone.sdk.server.toolmanager.readSigningKeyHash
@@ -24,12 +33,17 @@ import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.ui.LightModalManager
 import com.thelightphone.toolmanager.DiscoveredToolsBranchProvider
 import com.thelightphone.toolmanager.Logger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 // SHA-256 fingerprint of sdk/keys/lightsdk-dev.jks (alias: lightsdk-dev).
 private const val LIGHTSDK_DEV_CERT_SHA256 =
     "B9C33E29B0CCAD2BFF11ACAB55F65A3C517EF4BC92CD9C77785366FA353D5F28"
+
+private const val BACKUP_ROOT_PATH = "backup"
 
 class EmulatorApplication : Application(), Configuration.Provider {
     companion object {
@@ -42,22 +56,63 @@ class EmulatorApplication : Application(), Configuration.Provider {
     val lightAudioManager by lazy { LightAudioManager(this) }
     val deviceKeyHandler by lazy { EmulatorDeviceKeyHandler(lightAudioManager) }
 
-    val backupPreferences by lazy {
-        EmulatorBackupPreferences(
-            getSharedPreferences(
-                "emulator-backup",
-                MODE_PRIVATE
-            )
+    val backupSharedPrefs: SharedPreferences by lazy {
+        getSharedPreferences(
+            "emulator-backup",
+            MODE_PRIVATE
         )
     }
 
+    val backupObservablePreferences by lazy { DefaultObservableBackupPreferences(backupSharedPrefs) }
+
     val settings by lazy { DefaultLightSdkServerSettings(this) }
+
+    private val backupDependencyProvider by lazy {
+        val cipher = LightSdkServer.getToolManagerKeyCipher()
+        DefaultBackupDependencyProvider(this, toolManagerLogger, cipher, BACKUP_ROOT_PATH)
+    }
+
+    private val backupPackageAllowList by lazy {
+        BackupPackageAllowList(backupSharedPrefs)
+    }
+
+    val backupSettingsViewModel by lazy {
+        object :
+            DefaultBackupSettingsViewModel(backupObservablePreferences, backupPackageAllowList) {
+            override suspend fun getBackupCapablePackages() =
+                backupDependencyProvider.getBackupCapableTools()
+
+            override fun labelForPackage(packageName: String) =
+                LightSdkServer.getToolLabel(packageName).toString()
+
+            override fun kickoffBackupWorker() =
+                BackupScheduler.enqueueImmediateBackup(this@EmulatorApplication)
+
+            override suspend fun removeStoredCredentials(provider: RemoteBackupProvider) {
+                backupDependencyProvider.tokenStorage.removeOAuthDetails(provider.name)
+            }
+
+            override suspend fun cancelBackupWork() {
+                BackupScheduler.cancelPeriodic(this@EmulatorApplication)
+                BackupScheduler.cancelImmediate(this@EmulatorApplication)
+            }
+            override fun launchToolManagerForLogin(activity: Activity) {
+                LightSdkServer.foregroundToolManagerUi(activity, BACKUP_ROOT_PATH)
+            }
+        }
+    }
 
     @Volatile
     private var validSignatures: List<String> = emptyList()
 
     override fun onCreate() {
         super.onCreate()
+        BackupScheduleSyncer(
+            preferences = backupObservablePreferences,
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            schedule = { BackupScheduler.syncSchedule(this, backupObservablePreferences) },
+            unschedule = { BackupScheduler.cancelPeriodic(this) },
+        ).start()
         val mollySocketUriString = BuildConfig.MOLLYSOCKET_URI
         with(LightSdkServer) {
             registerLockReceiver(MainActivity::class.java, settings)
@@ -82,10 +137,11 @@ class EmulatorApplication : Application(), Configuration.Provider {
             onDeviceKeyEvent = { _, request -> handleDeviceKeyEvent(request) }
             // emulator is running on local device, automatically approve network
             isNetworkApprovedForToolManager = { true }
-            foregroundToolManagerUi = { activity ->
+            foregroundToolManagerUi = { activity, path ->
                 if (activity !is ToolManagerActivity) {
                     val intent = Intent(activity, ToolManagerActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .putExtra(LightSdkServer.TOOL_MANAGER_PATH_EXTRA, path)
                     activity.startActivity(intent)
                 }
             }
@@ -94,19 +150,32 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 updateValidSignatures()
                 _installedToolsRefreshCount.value++
             }
+            getToolLabel = { packageName ->
+                // internal tools don't use typical android package names, check matches here first
+                InternalToolBackupSpec.fromPackageName(packageName)?.defaultLabel
+                    ?: try {
+                        packageManager.getApplicationInfo(packageName, 0).loadLabel(packageManager)
+                    } catch (_: PackageManager.NameNotFoundException) {
+                        packageName
+                    }
+            }
+
+            canBackUpFromPackage = { tool -> backupPackageAllowList.userAllowedTool(tool) }
+
             with(EmulatorLocationHelper) { initLocationHelper(this@EmulatorApplication) }
         }
         updateValidSignatures()
         EmulatorHttpServer(this).start()
     }
 
-    private val dependencyProvider by lazy {
-        EmulatorBackupDependencyProvider(this, toolManagerLogger, "EmulatorBackup")
-    }
-
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
-            .setWorkerFactory(BackupWorkerFactory(backupPreferences, dependencyProvider))
+            .setWorkerFactory(
+                BackupWorkerFactory(
+                    backupObservablePreferences,
+                    backupDependencyProvider
+                )
+            )
             .build()
 
     // For the emulator, any apk built with LIGHTSDK_DEV_CERT_SHA256 is considered signed by Light
@@ -138,7 +207,13 @@ class EmulatorApplication : Application(), Configuration.Provider {
         return RootDataTree {
             val developerMode =
                 developerModeDataView(this, LightSdkServer.getToolManagerKeyCipher())
-            val backupBranch = dummyCloudBackupDataTree(this, dependencyProvider.tokenStorage, "light-oauth-relay.dupontgu.workers.dev")
+            val backupBranch = dummyCloudBackupDataTree(
+                backupDependencyProvider.tokenStorage,
+                BuildConfig.BACKUP_WORKER_HOST,
+                BACKUP_ROOT_PATH
+            ) {
+                backupObservablePreferences.setActiveProvider(it)
+            }
             val toolBranch = DiscoveredToolsBranchProvider(this, toolManagerLogger) {
                 LightSdkServer.isPackageAllowed(settings.clientFilterLevel, this, it)
             }

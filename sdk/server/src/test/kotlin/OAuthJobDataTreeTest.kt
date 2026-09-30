@@ -90,11 +90,16 @@ class OAuthJobDataTreeTest {
     // FakeOAuthTunnelClient only ever suspends on `result`, completing `result` from the test
     // thread runs the rest of the job (processResult -> completeJob) to completion before the
     // test's next line, with no dispatcher juggling needed.
-    private fun newTree(tunnel: FakeOAuthTunnelClient, tokenStorage: FakeTokenStorage) =
+    private fun newTree(
+        tunnel: FakeOAuthTunnelClient,
+        tokenStorage: FakeTokenStorage,
+        onLinked: suspend (String) -> Unit = {},
+    ) =
         OAuthJobDataTree(
             accountType = "google",
             oAuthTunnelClient = tunnel,
             tokenStorage = tokenStorage,
+            onLinked = onLinked,
             jobScope = CoroutineScope(Dispatchers.Unconfined),
         )
 
@@ -173,5 +178,31 @@ class OAuthJobDataTreeTest {
 
         assertIs<JobStatus.Failed>(tree.getJobStatus(path, first.jobId))
         assertEquals(JobStatus.Running, tree.getJobStatus(path, second.jobId))
+    }
+
+    @Test
+    fun successfulTunnel_callsOnLinkedWithAccountTypeAfterSavingTokens() = runBlocking {
+        val tunnel = FakeOAuthTunnelClient()
+        val tokenStorage = FakeTokenStorage()
+        val linked = mutableListOf<Pair<String, Boolean>>()
+        val tree = newTree(tunnel, tokenStorage) { linked += it to tokenStorage.saved.isNotEmpty() }
+
+        tree.startJob(path, emptyMap(), "https://self") { it }.getOrThrow()
+        tunnel.result.complete(OAuthResult.Success(tokensJson()))
+
+        // tokens were already stored by the time the callback ran
+        assertEquals(listOf("google" to true), linked)
+    }
+
+    @Test
+    fun failedTunnel_doesNotCallOnLinked() = runBlocking {
+        val tunnel = FakeOAuthTunnelClient()
+        val linked = mutableListOf<String>()
+        val tree = newTree(tunnel, FakeTokenStorage()) { linked += it }
+
+        tree.startJob(path, emptyMap(), "https://self") { it }.getOrThrow()
+        tunnel.result.complete(OAuthResult.Failure("access_denied"))
+
+        assertTrue(linked.isEmpty())
     }
 }

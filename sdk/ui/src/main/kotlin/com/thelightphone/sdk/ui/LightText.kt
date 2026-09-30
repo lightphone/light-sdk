@@ -84,6 +84,7 @@ fun LightText(
     monospace: Boolean = false,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    lineHeight: TextUnit = TextUnit.Unspecified,
     color: Color? = null,
 ) {
     val colors = LightThemeTokens.colors
@@ -117,6 +118,7 @@ fun LightText(
         color = baseColor.takeUnless { it == Color.Unspecified } ?: LocalContentColor.current,
         style = style,
         maxLines = maxLines,
+        lineHeight = lineHeight,
         overflow = overflow,
     )
 }

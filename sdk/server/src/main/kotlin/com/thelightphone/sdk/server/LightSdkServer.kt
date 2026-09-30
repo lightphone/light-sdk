@@ -14,6 +14,7 @@ import android.content.pm.Signature
 import android.os.Process
 import android.os.UserHandle
 import android.util.Log
+import com.thelightphone.sdk.server.backup.BackupCapableTool
 import com.thelightphone.sdk.server.toolmanager.getApkInboxAuthDirectory
 import com.thelightphone.toolmanager.AndroidKeystoreKeyCipher
 import com.thelightphone.toolmanager.BranchView
@@ -50,6 +51,7 @@ enum class ClientCertType {
 object LightSdkServer {
     private const val TAG = "LightSdkServer"
     const val SCREEN_OFF_FLAG = "SCREEN_OFF"
+    const val TOOL_MANAGER_PATH_EXTRA = "TOOL_MANAGER_PATH"
 
     val Context.runningAsSystemApp: Boolean
         get() {
@@ -249,7 +251,10 @@ object LightSdkServer {
     var onRequestLocationUpdates: (callingUid: Int) -> LightResult<Unit> =
         { _ ->
             Log.e(TAG, "RequestLocationUpdates not configured by server")
-            LightResult.Error(LightResult.ErrorCode.Unknown, "RequestLocationUpdates not configured")
+            LightResult.Error(
+                LightResult.ErrorCode.Unknown,
+                "RequestLocationUpdates not configured"
+            )
         }
 
     /**
@@ -260,7 +265,10 @@ object LightSdkServer {
     var onReleaseLocationUpdates: (callingUid: Int) -> LightResult<Unit> =
         { _ ->
             Log.e(TAG, "ReleaseLocationUpdates not configured by server")
-            LightResult.Error(LightResult.ErrorCode.Unknown, "ReleaseLocationUpdates not configured")
+            LightResult.Error(
+                LightResult.ErrorCode.Unknown,
+                "ReleaseLocationUpdates not configured"
+            )
         }
 
     var foregroundSelfWithCallback: (componentToReturnTo: ComponentName) -> Unit = {
@@ -291,12 +299,20 @@ object LightSdkServer {
         }
 
     /**
-     * Returns whether or not ToolManager nodes for a given package should be backed up to remote storage
+     * Returns the user-visible label for a tool. Overrideable in case we want users to be able to
+     * create custom labels for tools
      */
-    var canBackUpFromPackage: (clientFilterLevel: ClientFilterLevel, context: Context, callingPackage: String) -> Boolean =
-        { filterLevel, context, callingPackage ->
-            isPackageAllowed(filterLevel, context, callingPackage)
-        }
+    var getToolLabel: (packageName: String) -> CharSequence = {
+        Log.w(TAG, "getToolLabel is unset in LightSdkServer, falling back to package name")
+        it
+    }
+
+    /**
+     * Returns whether or not ToolManager nodes for a given package should be backed up to remote storage
+     * Note that packages passed here have likely already been passed through the `isPackageAllowed` filter
+     */
+    var canBackUpFromPackage: (backupCapableTool: BackupCapableTool) -> Boolean = { true }
+
 
     /**
      * Called when the SDK server successfully installs a tool
@@ -312,8 +328,9 @@ object LightSdkServer {
     /**
      * SDK server should have a singleTask Activity to represent the ToolManager's UI
      * If the ToolManager is running and the server app is active, the ToolManager UI should always show
+     * [path] is an optional deep link into the ToolManager UI (e.g. a specific tool's page).
      */
-    var foregroundToolManagerUi: (activityToReplace: Activity) -> Unit = {
+    var foregroundToolManagerUi: (activityToReplace: Activity, path: String?) -> Unit = { _, _ ->
         // if activityToReplace is not the ToolManager UI already, relaunch the ToolManager UI
     }
 
