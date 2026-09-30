@@ -1,32 +1,38 @@
 package com.thelightphone.sdk.emulator
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.thelightphone.backup.BackupPreferences
-import com.thelightphone.backup.BackupScheduler
-import com.thelightphone.backup.BackupStatus
-import com.thelightphone.backup.BackupWorker
-import com.thelightphone.backup.BackupWorkerFactory
-import com.thelightphone.backup.RemoteBackupProvider
+import com.thelightphone.sdk.emulator.backup.BackupSettings
 import com.thelightphone.sdk.server.ClientFilterLevel
 import com.thelightphone.sdk.server.ForceFocusLevel
 import com.thelightphone.sdk.server.LightSdkServerSettings
+import com.thelightphone.sdk.server.backup.BackupSettingsViewModel
 import com.thelightphone.sdk.shared.LightServiceMethod
-import com.thelightphone.sdk.ui.*
+import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBarButton.LightIcon
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.thelightphone.sdk.ui.LightIcons
+import com.thelightphone.sdk.ui.LightText
+import com.thelightphone.sdk.ui.LightTextVariant
+import com.thelightphone.sdk.ui.LightTheme
+import com.thelightphone.sdk.ui.LightThemeController
+import com.thelightphone.sdk.ui.LightTopBar
+import com.thelightphone.sdk.ui.LightTopBarCenter
+import com.thelightphone.sdk.ui.LightTouchableProgressBar
+import com.thelightphone.sdk.ui.gridUnitsAsDp
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.days
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.minutes
 
 enum class EmulatorSettingsNav {
     Root, FilterLevel, Keyboard, ForceFocus, Notifications, Backups
@@ -51,8 +57,8 @@ val ForceFocusLevel.label: String
 fun EmulatorSettings(
     settings: LightSdkServerSettings,
     emulatorSettingsAudio: EmulatorSettingsAudio,
-    backupPreferences: BackupPreferences,
     startingNav: Nav.Settings,
+    backupSettingsViewModel: BackupSettingsViewModel,
     onRootBackPressed: () -> Unit,
 ) {
     var nav by remember { mutableStateOf(startingNav.startingScreen) }
@@ -146,7 +152,13 @@ fun EmulatorSettings(
                 subscreenBackPressed
             )
 
-            EmulatorSettingsNav.Backups -> BackupSettings(backupPreferences, subscreenBackPressed)
+            EmulatorSettingsNav.Backups -> {
+                BackupSettings(
+                    viewModel = backupSettingsViewModel,
+                    onBackClick = subscreenBackPressed,
+                    providerName = { name },
+                )
+            }
 
             EmulatorSettingsNav.Keyboard -> KeyboardSettings(settings, subscreenBackPressed)
 
@@ -252,92 +264,6 @@ fun NotificationSettings(
     }
 }
 
-// Fixed set of presets to cycle through on tap - BackupPreferences.getBackupInterval's docs note
-// WorkManager enforces a 15-minute floor on periodic work anyway, so free-text entry wouldn't buy
-// anything a short preset list doesn't already cover.
-private val backupIntervalPresets = listOf(15.minutes, 30.minutes, 1.hours, 6.hours, 1.days)
-
-private fun nextBackupInterval(current: Duration): Duration {
-    val index = backupIntervalPresets.indexOf(current)
-    return backupIntervalPresets[(index + 1).mod(backupIntervalPresets.size)]
-}
-
-private val backupProviderOptions: List<RemoteBackupProvider?> = listOf(null) + RemoteBackupProvider.entries
-
-private fun nextBackupProvider(current: RemoteBackupProvider?): RemoteBackupProvider? {
-    val index = backupProviderOptions.indexOf(current)
-    return backupProviderOptions[(index + 1).mod(backupProviderOptions.size)]
-}
-
-@Composable
-fun BackupSettings(backupPreferences: BackupPreferences, onBackPressed: () -> Unit) {
-    val state = rememberBackupPreferencesState(backupPreferences)
-    Surface(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
-            LightTopBar(
-                leftButton = LightIcon(
-                    icon = LightIcons.BACK,
-                    onClick = onBackPressed
-                ),
-                center = LightTopBarCenter.Text("Backup Settings"),
-                modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
-            )
-            Column(Modifier.padding(horizontal = 16.dp)) {
-                LightText(
-                    text = if (state.enabled == true) "BACKUP ENABLED: ON" else "BACKUP ENABLED: OFF",
-                    variant = LightTextVariant.Copy,
-                    modifier = Modifier
-                        .clickable { state.updateEnabled(state.enabled != true) }
-                        .padding(vertical = 0.75f.gridUnitsAsDp()),
-                )
-
-                LightText(
-                    text = "PROVIDER: ${state.activeProvider?.name ?: "None"}",
-                    variant = LightTextVariant.Copy,
-                    modifier = Modifier
-                        .clickable { state.updateActiveProvider(nextBackupProvider(state.activeProvider)) }
-                        .padding(vertical = 0.75f.gridUnitsAsDp()),
-                )
-
-                LightText(
-                    text = "BACKUP INTERVAL: ${state.backupInterval}",
-                    variant = LightTextVariant.Copy,
-                    modifier = Modifier
-                        .clickable { state.updateBackupInterval(nextBackupInterval(state.backupInterval)) }
-                        .padding(vertical = 0.75f.gridUnitsAsDp()),
-                )
-
-                LightText(
-                    text = if (state.requiresCharging) "REQUIRES CHARGING: ON" else "REQUIRES CHARGING: OFF",
-                    variant = LightTextVariant.Copy,
-                    modifier = Modifier
-                        .clickable { state.updateRequiresCharging(!state.requiresCharging) }
-                        .padding(vertical = 0.75f.gridUnitsAsDp()),
-                )
-
-                LightText(
-                    text = if (state.requiresUnmeteredNetwork) "REQUIRES WIFI: ON" else "REQUIRES WIFI: OFF",
-                    variant = LightTextVariant.Copy,
-                    modifier = Modifier
-                        .clickable { state.updateRequiresUnmeteredNetwork(!state.requiresUnmeteredNetwork) }
-                        .padding(vertical = 0.75f.gridUnitsAsDp()),
-                )
-
-                val context = LocalContext.current
-                LightText(
-                    text = "Run now",
-                    variant = LightTextVariant.Copy,
-                    modifier = Modifier
-                        .clickable {
-                            BackupScheduler.enqueueImmediateBackup(context)
-                        }
-                        .padding(vertical = 0.75f.gridUnitsAsDp()),
-                )
-            }
-        }
-    }
-}
-
 @Composable
 fun KeyboardSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit) {
     var keyboardOptions by remember { mutableStateOf(settings.keyboardOptions) }
@@ -389,48 +315,4 @@ fun KeyboardSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit
 interface EmulatorSettingsAudio {
     fun setRingerVolume(normalized: Float)
     val ringerVolume: StateFlow<Float>
-}
-
-@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
-@Composable
-fun EmulatorSettingsPreview() {
-    val settings = object : LightSdkServerSettings {
-        override var clientFilterLevel: ClientFilterLevel = ClientFilterLevel.AllowAllApks
-        override var keyboardOptions: LightServiceMethod.GetKeyboardOptions.Response =
-            LightServiceMethod.GetKeyboardOptions.Response(
-                null,
-                displayVoice = true,
-                enableKeyAnimation = true,
-                swipeEnabled = true
-            )
-        override var userPreferences: LightServiceMethod.GetUserPreferences.Response =
-            LightServiceMethod.GetUserPreferences.Response(hapticsEnabled = true)
-        override var forceFocusLevel: ForceFocusLevel = ForceFocusLevel.Always
-    }
-    val emulatorAudioWrapper = object : EmulatorSettingsAudio {
-        private val currentVolume = MutableStateFlow(0.5f)
-        override fun setRingerVolume(normalized: Float) {
-            currentVolume.value = normalized
-        }
-
-        override val ringerVolume: StateFlow<Float> = currentVolume.asStateFlow()
-    }
-
-    val backupPreferences = object : BackupPreferences {
-        override suspend fun getEnabled(): Boolean = false
-        override suspend fun setEnabled(enabled: Boolean) {}
-        override suspend fun getActiveProvider(): RemoteBackupProvider? = null
-        override suspend fun setActiveProvider(provider: RemoteBackupProvider?) {}
-        override suspend fun getBackupInterval(): Duration = 1.days
-        override suspend fun setBackupInterval(interval: Duration) {}
-        override suspend fun getRequiresCharging(): Boolean = true
-        override suspend fun setRequiresCharging(requiresCharging: Boolean) {}
-        override suspend fun getRequiresUnmeteredNetwork(): Boolean = true
-        override suspend fun setRequiresUnmeteredNetwork(requiresUnmeteredNetwork: Boolean) {}
-        override suspend fun getLastBackupStatus(): BackupStatus? = null
-        override suspend fun setLastBackupStatus(status: BackupStatus) {}
-    }
-    LightTheme {
-        EmulatorSettings(settings, emulatorAudioWrapper, backupPreferences, Nav.Settings()) { }
-    }
 }

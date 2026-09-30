@@ -60,7 +60,7 @@ import java.time.format.DateTimeFormatter
 class MainActivity : ComponentActivity() {
 
     val lightAudioManager get() = (application as EmulatorApplication).lightAudioManager
-    val backupPreferences get() = (application as EmulatorApplication).backupPreferences
+    val backupSettingsViewModel get() = (application as EmulatorApplication).backupSettingsViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -80,7 +80,7 @@ class MainActivity : ComponentActivity() {
             val themeColors by LightThemeController.colors.collectAsState()
             LightTheme(colors = themeColors) {
                 Box(Modifier.fillMaxSize()) {
-                    PrimaryUI(serverSettings, backupPreferences, lightAudioManager)
+                    PrimaryUI(serverSettings, lightAudioManager)
                     val modal by LightModalManager.activeModal.collectAsState()
                     modal?.Content()
                 }
@@ -91,7 +91,6 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun PrimaryUI(
         serverSettings: LightSdkServerSettings,
-        backupPreferences: BackupPreferences,
         lightAudioManager: LightAudioManager
     ) {
         val currentNav by EmulatorNavController.currentNav.collectAsState()
@@ -107,8 +106,9 @@ class MainActivity : ComponentActivity() {
                     fetchExternalTools = {
                         queryEnabledClients(serverSettings).map {
                             val appInfo = it.packageInfo.applicationInfo!!
-                            val label =
-                                packageManager.getApplicationLabel(appInfo).toString()
+                            val label = LightSdkServer
+                                .getToolLabel(appInfo.packageName)
+                                .toString()
                             ExternalTool(label, it.packageInfo.packageName)
                         }
                     }, launchPackage = {
@@ -137,7 +137,12 @@ class MainActivity : ComponentActivity() {
 
                     override val ringerVolume: StateFlow<Float> = lightAudioManager.ringerVolume
                 }
-                EmulatorSettings(serverSettings, emulatorSettingsAudio, backupPreferences, navSnapshot) {
+                EmulatorSettings(
+                    serverSettings,
+                    emulatorSettingsAudio,
+                    navSnapshot,
+                    backupSettingsViewModel,
+                ) {
                     EmulatorNavController.navigateTo(Nav.Toolbox)
                 }
             }

@@ -3,11 +3,12 @@ package com.thelightphone.sdk.emulator
 import android.app.Application
 import android.content.ComponentName
 import android.content.Intent
+import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.util.Log
 import androidx.work.Configuration
 import com.thelightphone.backup.BackupWorkerFactory
-import com.thelightphone.sdk.emulator.backup.EmulatorBackupDependencyProvider
-import com.thelightphone.sdk.emulator.backup.EmulatorBackupPreferences
+import com.thelightphone.sdk.emulator.backup.DefaultBackupDependencyProvider
 import com.thelightphone.sdk.emulator.backup.dummyCloudBackupDataTree
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.RootViewSpec
@@ -16,6 +17,11 @@ import com.thelightphone.toolmanager.datatree.StaticBranchProvider
 import com.thelightphone.sdk.emulator.http.EmulatorHttpServer
 import com.thelightphone.sdk.server.DefaultLightSdkServerSettings
 import com.thelightphone.sdk.server.LightSdkServer
+import com.thelightphone.sdk.server.backup.BackupCapableTool
+import com.thelightphone.sdk.server.backup.BackupPackageAllowList
+import com.thelightphone.sdk.server.backup.DefaultBackupSettingsViewModel
+import com.thelightphone.sdk.server.backup.DefaultObservableBackupPreferences
+import com.thelightphone.sdk.server.backup.InternalToolBackupSpec
 import com.thelightphone.sdk.server.toolmanager.developerModeDataView
 import com.thelightphone.sdk.server.toolmanager.getApkInboxSignaturesDirectory
 import com.thelightphone.sdk.server.toolmanager.readSigningKeyHash
@@ -42,16 +48,34 @@ class EmulatorApplication : Application(), Configuration.Provider {
     val lightAudioManager by lazy { LightAudioManager(this) }
     val deviceKeyHandler by lazy { EmulatorDeviceKeyHandler(lightAudioManager) }
 
-    val backupPreferences by lazy {
-        EmulatorBackupPreferences(
-            getSharedPreferences(
-                "emulator-backup",
-                MODE_PRIVATE
-            )
+    val backupSharedPrefs: SharedPreferences by lazy {
+        getSharedPreferences(
+            "emulator-backup",
+            MODE_PRIVATE
         )
     }
 
+    val backupObservablePreferences by lazy { DefaultObservableBackupPreferences(backupSharedPrefs) }
+
     val settings by lazy { DefaultLightSdkServerSettings(this) }
+
+    private val dependencyProvider by lazy {
+        val cipher = LightSdkServer.getToolManagerKeyCipher()
+        DefaultBackupDependencyProvider(this, toolManagerLogger, cipher, "EmulatorBackup")
+    }
+
+    private val backupPackageAllowList by lazy {
+        BackupPackageAllowList(backupSharedPrefs)
+    }
+
+    val backupSettingsViewModel by lazy {
+        DefaultBackupSettingsViewModel(
+            backupObservablePreferences,
+            backupPackageAllowList,
+            getBackupCapablePackages = { dependencyProvider.getBackupCapableTools() },
+            labelForPackage = { LightSdkServer.getToolLabel(it).toString() },
+        )
+    }
 
     @Volatile
     private var validSignatures: List<String> = emptyList()
@@ -94,19 +118,27 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 updateValidSignatures()
                 _installedToolsRefreshCount.value++
             }
+            getToolLabel = { packageName ->
+                // internal tools don't use typical android package names, check matches here first
+                InternalToolBackupSpec.fromPackageName(packageName)?.defaultLabel
+                    ?: try {
+                        packageManager.getApplicationInfo(packageName, 0).loadLabel(packageManager)
+                    } catch (_: PackageManager.NameNotFoundException) {
+                        packageName
+                    }
+            }
+
+            canBackUpFromPackage = { tool -> backupPackageAllowList.userAllowedTool(tool) }
+
             with(EmulatorLocationHelper) { initLocationHelper(this@EmulatorApplication) }
         }
         updateValidSignatures()
         EmulatorHttpServer(this).start()
     }
 
-    private val dependencyProvider by lazy {
-        EmulatorBackupDependencyProvider(this, toolManagerLogger, "EmulatorBackup")
-    }
-
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
-            .setWorkerFactory(BackupWorkerFactory(backupPreferences, dependencyProvider))
+            .setWorkerFactory(BackupWorkerFactory(backupObservablePreferences, dependencyProvider))
             .build()
 
     // For the emulator, any apk built with LIGHTSDK_DEV_CERT_SHA256 is considered signed by Light
