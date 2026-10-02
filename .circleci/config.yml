@@ -1,5 +1,10 @@
 version: 2.1
 
+parameters:
+  push-dev-image:
+    type: boolean
+    default: false
+
 jobs:
   build-and-push-light-builder:
     machine:
@@ -171,12 +176,11 @@ jobs:
           destination: dev-image.txt
 
 workflows:
+  # Manual: trigger a pipeline on the wanted branch with push-dev-image=true.
   verify-light-builder:
+    when: << pipeline.parameters.push-dev-image >>
     jobs:
-      - verify-light-builder:
-          filters:
-            branches:
-              only: feat/build-maven-proxy
+      - verify-light-builder
 
   build-light-builder:
     jobs:
