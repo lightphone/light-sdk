@@ -141,3 +141,19 @@ run:
 `adb shell settings put global window_animation_scale 0`                                                                                                                                                                                                                                                            
 `adb shell settings put global transition_animation_scale 0`                                                                                                                                                                                                                                                       
 `adb shell settings put global animator_duration_scale 0`
+
+#### 9. Building your tool for the emulator
+
+To connect your tool to the emulator, set `serverPackage` in `tool/lighttool.toml`:
+
+```toml
+serverPackage = "com.thelightphone.sdk.emulator"
+```
+
+Then build with `-DlightSdk.allowAltServerPackage=true`:
+
+```bash
+./gradlew :tool:installDebug -DlightSdk.allowAltServerPackage=true
+```
+
+Before you submit your tool, set `serverPackage` back to `com.lightos`.

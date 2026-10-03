@@ -77,6 +77,9 @@ runs strictly `--offline` against the warmed cache.
 `signingConfig` the dev wired up locally. Locally devs build without that
 flag and AGP signs with the shared dev keystore as usual.
 
+The builder never passes `-DlightSdk.allowAltServerPackage=true`, so any
+`tool.serverPackage` other than `com.lightos` fails the build.
+
 ## Building the image
 
 ```sh

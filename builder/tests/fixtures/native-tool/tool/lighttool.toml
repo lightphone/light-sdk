@@ -5,4 +5,4 @@ versionCode = 1
 versionName = "1.0.0"
 permissions = ["android.permission.INTERNET"]
 capabilities = []
-serverPackage = "com.thelightphone.sdk.emulator"
+serverPackage = "com.lightos"
