@@ -345,6 +345,34 @@ val tap = nfc.newReader().awaitTap()
 - Failures arrive from collection as a `LightNfcException`: `LightNfcUnavailableException` when NFC is off, absent, not granted to the tool, or couldn't start; `LightNfcReadException` when the tag left the field or its contents couldn't be decoded. The exception message is product copy naming the actual cause.
 - `LightNfcReaderConfig` narrows the technologies polled, skips the platform's NDEF check, silences the platform tap sound, and sets the presence-check delay.
 
+#### Talking to smart cards (ISO-DEP)
+
+`withIsoDep` waits for a tap from an ISO-DEP card — a payment card, passport, or hardware security key — and hands your block a connected `LightIsoDep` for exchanging raw ISO 7816-4 APDUs. Reader mode stays held until the block returns, then the card is released.
+
+```kotlin
+val reader = nfc.newReader(
+    LightNfcReaderConfig(
+        technologies = setOf(LightNfcTechnology.NfcA, LightNfcTechnology.NfcB),
+        skipNdefCheck = true,
+    ),
+)
+
+val selectAid = byteArrayOf(0x00, 0xA4.toByte(), 0x04, 0x00, aid.size.toByte()) + aid
+
+val selected = reader.withIsoDep { card ->
+    val response = card.transceive(selectAid)
+    response.size >= 2 &&
+        response[response.size - 2] == 0x90.toByte() &&
+        response[response.size - 1] == 0x00.toByte()
+}
+```
+
+- Cards answer over NFC-A or NFC-B; skipping the NDEF check keeps the platform from probing the card before your block runs.
+- `transceive` runs off the main thread and returns the full response, status word included. Checking it is up to you.
+- A tag that isn't ISO-DEP, a card pulled away mid-exchange, or a failed exchange arrives as a `LightNfcReadException` with product copy naming the cause; `LightNfcUnavailableException` covers NFC being off or absent, as with taps.
+- `maxTransceiveLength` is the largest command the card accepts; `timeoutMs` raises the per-command timeout for slow operations such as key generation.
+- Keep the block short and avoid waiting on the user inside it: the card has to stay on the phone the whole time.
+
 #### Tap prompt
 
 `LightNfcTapReader` is the ready-made counterpart to `LightQrCodeScanner`. It runs the reader while the screen is showing and renders the prompt, so a tool that just needs an address off a tap does not handle availability itself.
