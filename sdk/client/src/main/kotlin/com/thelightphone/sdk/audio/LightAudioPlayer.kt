@@ -3,12 +3,16 @@ package com.thelightphone.sdk.audio
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.Bundle
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Metadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -53,6 +57,7 @@ class LightAudioPlayer internal constructor(
     private val _isPlaying = MutableStateFlow(false)
     private val _currentMediaItemIndex = MutableStateFlow(NO_MEDIA_ITEM)
     private val _error = MutableStateFlow<LightAudioError?>(null)
+    private val _streamMetadata = MutableStateFlow<LightStreamMetadata?>(null)
     private val commands = PendingPlayerCommands()
     private var positionJob: Job? = null
     private var player: Player? = null
@@ -69,6 +74,11 @@ class LightAudioPlayer internal constructor(
     val currentMediaItemIndex: StateFlow<Int> = _currentMediaItemIndex.asStateFlow()
     /** Current playback failure, or `null` after successful re-preparation. */
     val error: StateFlow<LightAudioError?> = _error.asStateFlow()
+    /**
+     * Live metadata reported by the current stream, such as an ICY `StreamTitle`,
+     * or `null` when the current item has reported none.
+     */
+    val streamMetadata: StateFlow<LightStreamMetadata?> = _streamMetadata.asStateFlow()
     /** Connection and command-acceptance lifecycle of this player. */
     val availability: StateFlow<LightAudioPlayerAvailability> = commands.availability
 
@@ -96,6 +106,17 @@ class LightAudioPlayer internal constructor(
                 } else {
                     connectedPlayer.currentMediaItemIndex
                 }
+                // Detached playback gets this from session extras instead.
+                if (playback == LightAudioPlayback.Attached) {
+                    _streamMetadata.value = null
+                }
+            }
+
+            // Only fires for the attached ExoPlayer; a MediaController does not
+            // forward it.
+            @OptIn(UnstableApi::class)
+            override fun onMetadata(metadata: Metadata) {
+                metadata.toLightStreamMetadata()?.let { _streamMetadata.value = it }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -127,6 +148,9 @@ class LightAudioPlayer internal constructor(
         _isPlaying.value = state.isPlaying
         _error.value = connectedPlayer.playerError
             ?.toLightAudioError(connectedPlayer.currentMediaItemIndex)
+        if (connectedPlayer is MediaController) {
+            _streamMetadata.value = connectedPlayer.sessionExtras.toLightStreamMetadata()
+        }
         if (state.isPlaying) {
             startPositionUpdates()
         } else {
@@ -139,6 +163,11 @@ class LightAudioPlayer internal constructor(
         val token = SessionToken(context, ComponentName(context, LightAudioService::class.java))
         val future = MediaController.Builder(context, token)
             .setConnectionHints(detachedConnectionHints(usage))
+            .setListener(object : MediaController.Listener {
+                override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
+                    _streamMetadata.value = extras.toLightStreamMetadata()
+                }
+            })
             .buildAsync()
         cancelPendingConnection = { future.cancel(false) }
         future.addListener(

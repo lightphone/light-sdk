@@ -201,6 +201,18 @@ data class LightMediaMetadata(
     val durationMs: Long? = null
 )
 
+/**
+ * Live metadata reported by the stream itself, such as an Icecast or SHOUTcast
+ * `StreamTitle`.
+ *
+ * @property title raw stream title, often formatted as "Artist - Title"
+ * @property url stream URL announced alongside the title, if any
+ */
+data class LightStreamMetadata(
+    val title: String?,
+    val url: String?,
+)
+
 /** Location of audio that can be added to a [LightAudioPlayer] queue. */
 sealed interface LightAudioSource {
     /** A [file] accessible to the application. */
