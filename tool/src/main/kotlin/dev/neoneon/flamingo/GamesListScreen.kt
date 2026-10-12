@@ -24,6 +24,7 @@ import com.thelightphone.sdk.SimpleLightScreen
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
 import com.thelightphone.sdk.ui.LightIcons
+import com.thelightphone.sdk.ui.LightScrollBarPosition
 import com.thelightphone.sdk.ui.LightScrollView
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
@@ -206,43 +207,45 @@ class GamesListScreen(sealedActivity: SealedLightActivity) :
                     }
 
                     is GamesListViewModel.State.Unavailable -> {
-                        Box(
+                        LightScrollView(
                             modifier = Modifier
                                 .weight(1f)
-                                .fillMaxWidth(),
-                            contentAlignment = Alignment.Center,
+                                .fillMaxWidth()
+                                .padding(horizontal = 1f.gridUnitsAsDp()),
+                            // Outside reserves a gutter whether or not the bar is actually
+                            // shown, which would skew this screen's centered text off-center
+                            // in the common case where the message fits with no scrolling.
+                            scrollBarPosition = LightScrollBarPosition.Inside,
                         ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
-                            ) {
+                            LightText(
+                                text = current.message.title,
+                                variant = LightTextVariant.Heading,
+                                align = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 1f.gridUnitsAsDp()),
+                            )
+                            LightText(
+                                text = current.message.body,
+                                variant = LightTextVariant.Copy,
+                                align = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 0.5f.gridUnitsAsDp()),
+                            )
+                            // A planned pause ends on its own, so offer the way back in. An
+                            // emergency has no such promise, and offers nothing.
+                            if (current.reason == ServiceStatus.Reason.MAINTENANCE) {
                                 LightText(
-                                    text = current.message.title,
-                                    variant = LightTextVariant.Title,
-                                    align = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                LightText(
-                                    text = current.message.body,
+                                    text = "CHECK AGAIN",
                                     variant = LightTextVariant.Copy,
                                     align = TextAlign.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(top = 0.5f.gridUnitsAsDp()),
+                                        .padding(top = 1f.gridUnitsAsDp())
+                                        .clickable { viewModel.checkAgain() }
+                                        .padding(vertical = 0.5f.gridUnitsAsDp()),
                                 )
-                                // A planned pause ends on its own, so offer the way back in. An
-                                // emergency has no such promise, and offers nothing.
-                                if (current.reason == ServiceStatus.Reason.MAINTENANCE) {
-                                    LightText(
-                                        text = "CHECK AGAIN",
-                                        variant = LightTextVariant.Copy,
-                                        align = TextAlign.Center,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 1f.gridUnitsAsDp())
-                                            .clickable { viewModel.checkAgain() }
-                                            .padding(vertical = 0.5f.gridUnitsAsDp()),
-                                    )
-                                }
                             }
                         }
                     }
