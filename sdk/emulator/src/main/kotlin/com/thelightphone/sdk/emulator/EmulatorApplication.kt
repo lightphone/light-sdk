@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.os.Environment
 import android.util.Log
 import androidx.work.Configuration
 import com.thelightphone.backup.BackupScheduler
@@ -38,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 // SHA-256 fingerprint of sdk/keys/lightsdk-dev.jks (alias: lightsdk-dev).
 private const val LIGHTSDK_DEV_CERT_SHA256 =
@@ -96,6 +98,7 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 BackupScheduler.cancelPeriodic(this@EmulatorApplication)
                 BackupScheduler.cancelImmediate(this@EmulatorApplication)
             }
+
             override fun launchToolManagerForLogin(activity: Activity) {
                 LightSdkServer.foregroundToolManagerUi(activity, BACKUP_ROOT_PATH)
             }
@@ -107,12 +110,6 @@ class EmulatorApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        BackupScheduleSyncer(
-            preferences = backupObservablePreferences,
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-            schedule = { BackupScheduler.syncSchedule(this, backupObservablePreferences) },
-            unschedule = { BackupScheduler.cancelPeriodic(this) },
-        ).start()
         val mollySocketUriString = BuildConfig.MOLLYSOCKET_URI
         with(LightSdkServer) {
             registerLockReceiver(MainActivity::class.java, settings)
@@ -161,11 +158,20 @@ class EmulatorApplication : Application(), Configuration.Provider {
             }
 
             canBackUpFromPackage = { tool -> backupPackageAllowList.userAllowedTool(tool) }
+            getAlbumPhotoBackupDirs = {
+                listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES))
+            }
+            getAlbumVideoBackupDirs = {
+                listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES))
+            }
 
             with(EmulatorLocationHelper) { initLocationHelper(this@EmulatorApplication) }
         }
         updateValidSignatures()
         EmulatorHttpServer(this).start()
+
+        val backupScheduleSyncer = BackupScheduleSyncer(this, backupObservablePreferences)
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch { backupScheduleSyncer.run() }
     }
 
     override val workManagerConfiguration: Configuration

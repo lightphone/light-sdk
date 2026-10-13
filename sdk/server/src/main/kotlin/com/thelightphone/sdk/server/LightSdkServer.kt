@@ -313,6 +313,18 @@ object LightSdkServer {
      */
     var canBackUpFromPackage: (backupCapableTool: BackupCapableTool) -> Boolean = { true }
 
+    /**
+     * Directories whose photos should be included in album backups. Files are backed up from
+     * the top level of each directory (no recursion). Empty means photos aren't backed up.
+     */
+    var getAlbumPhotoBackupDirs: () -> List<File> = { emptyList() }
+
+    /**
+     * Directories whose videos should be included in album backups. Files are backed up from
+     * the top level of each directory (no recursion). Empty means videos aren't backed up.
+     */
+    var getAlbumVideoBackupDirs: () -> List<File> = { emptyList() }
+
 
     /**
      * Called when the SDK server successfully installs a tool

@@ -1,22 +1,25 @@
 package com.thelightphone.sdk.server.backup
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
+import android.content.Context
+import com.thelightphone.backup.BackupScheduler
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 import kotlin.time.Duration
 
-// Keeps the periodic backup job in step with the user's backup preferences. Any change to the
-// provider, enabled flag, interval or constraints re-runs [schedule] (which should be idempotent,
-// e.g. BackupScheduler.syncSchedule) or, when backups shouldn't run automatically, [unschedule].
+// Keeps the periodic backup job in step with the user's backup preferences.
 class BackupScheduleSyncer(
     private val preferences: ObservableBackupPreferences,
-    private val scope: CoroutineScope,
     private val schedule: suspend () -> Unit,
     private val unschedule: suspend () -> Unit,
 ) {
+
+    constructor(appContext: Context, preferences: DefaultObservableBackupPreferences) : this(
+        preferences = preferences,
+        schedule = { BackupScheduler.syncSchedule(appContext, preferences) },
+        unschedule = { BackupScheduler.cancelPeriodic(appContext) },
+    )
+
     private data class Inputs(
         val hasProvider: Boolean,
         val enabled: Boolean,
@@ -28,7 +31,8 @@ class BackupScheduleSyncer(
         val shouldSchedule get() = hasProvider && enabled && interval.isFinite()
     }
 
-    fun start(): Job = scope.launch {
+    // Suspends until cancelled, so launch it in the scope that should own the syncing.
+    suspend fun run() {
         combine(
             preferences.activeProviderFlow,
             preferences.enabledFlow,

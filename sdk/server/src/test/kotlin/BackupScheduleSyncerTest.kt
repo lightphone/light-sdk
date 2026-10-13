@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -30,12 +31,13 @@ class BackupScheduleSyncerTest {
     private val calls = Channel<String>(Channel.UNLIMITED)
     private val scope = CoroutineScope(Dispatchers.Default)
 
-    private fun startSyncer() = BackupScheduleSyncer(
-        preferences = prefs,
-        scope = scope,
-        schedule = { calls.send("schedule") },
-        unschedule = { calls.send("unschedule") },
-    ).start()
+    private fun startSyncer() = scope.launch {
+        BackupScheduleSyncer(
+            preferences = prefs,
+            schedule = { calls.send("schedule") },
+            unschedule = { calls.send("unschedule") },
+        ).run()
+    }
 
     private suspend fun next() = withTimeout(5.seconds) { calls.receive() }
 

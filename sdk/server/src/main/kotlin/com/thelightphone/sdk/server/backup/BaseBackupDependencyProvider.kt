@@ -35,7 +35,7 @@ abstract class BaseBackupDependencyProvider(
     private val rootPath: String,
     // map of "package name" (any unique id for internal tools since they're not APKs)
     // to BackupDataSource for that tool
-    private val internalToolsBackupSpecs: List<InternalToolBackupSpec> = listOf(InternalToolBackupSpec.Messages)
+    private val internalToolsBackupSpecs: List<InternalToolBackupSpec> = InternalToolBackupSpec.entries
 ) : BackupDependencyProvider {
 
     // provides backups for all external (third-party) tools

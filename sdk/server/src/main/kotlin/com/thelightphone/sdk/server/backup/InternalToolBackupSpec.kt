@@ -13,8 +13,13 @@ enum class InternalToolBackupSpec(
     Messages(
         SmsMmsBackupDataSource.AUTHORITY,
         "Messages",
-        { appContext, logger -> SmsMmsBackupDataSource(appContext, logger)
-    });
+        { appContext, logger -> SmsMmsBackupDataSource(appContext, logger) }
+    ),
+    Album(
+        AlbumBackupDataSource.AUTHORITY,
+        "Album",
+        { _, logger -> AlbumBackupDataSource(logger) }
+    );
 
     companion object {
         fun fromPackageName(packageName: String) = entries.firstOrNull { it.packageName == packageName }
