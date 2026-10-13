@@ -33,3 +33,7 @@ com.google.zxing:core
 org.sol4k:sol4k
 org.sol4k:tweetnacl
 org.sol4k:utilities
+de.connect2x.trixnity:trixnity-client
+de.connect2x.trixnity:trixnity-client-repository-room
+de.connect2x.trixnity:trixnity-client-media-okio
+de.connect2x.trixnity:trixnity-client-cryptodriver-libolm
