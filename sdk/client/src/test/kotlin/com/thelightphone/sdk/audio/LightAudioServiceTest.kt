@@ -19,9 +19,9 @@ class LightAudioServiceTest {
 class DetachedSessionStateTest {
     @Test
     fun usageCompatibilityAcceptsFreshAndSameUsageOnly() {
-        assertTrue(isDetachedUsageCompatible(activeUsage = null, LightAudioUsage.Alarm))
-        assertTrue(isDetachedUsageCompatible(LightAudioUsage.Music, LightAudioUsage.Music))
-        assertFalse(isDetachedUsageCompatible(LightAudioUsage.Music, LightAudioUsage.Alarm))
+        assertTrue(isDetachedSpecCompatible(null, LightPlayerSpec(usage = LightAudioUsage.Alarm)))
+        assertTrue(isDetachedSpecCompatible(LightPlayerSpec(), LightPlayerSpec()))
+        assertFalse(isDetachedSpecCompatible(LightPlayerSpec(), LightPlayerSpec(usage = LightAudioUsage.Alarm)))
     }
 
     @Test
@@ -66,20 +66,20 @@ class DetachedSessionStateTest {
         val state = DetachedSessionState()
 
         state.openHandle()
-        state.adoptUsage(LightAudioUsage.Alarm)
+        state.adoptSpec(LightPlayerSpec(usage = LightAudioUsage.Alarm))
         state.closeHandle()
 
         assertFalse(state.isHandleOpen())
-        assertEquals(LightAudioUsage.Alarm, state.activeUsage())
+        assertEquals(LightAudioUsage.Alarm, state.activeSpec()?.usage)
     }
 
     @Test
     fun clearingTheSessionLetsTheNextHandleStartFresh() {
         val state = DetachedSessionState()
 
-        state.adoptUsage(LightAudioUsage.Alarm)
+        state.adoptSpec(LightPlayerSpec(usage = LightAudioUsage.Alarm))
         state.clearSession()
 
-        assertNull(state.activeUsage())
+        assertNull(state.activeSpec())
     }
 }

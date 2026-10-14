@@ -52,6 +52,15 @@ capabilities = ["detached-audio"]
 
 `detached-audio` generates the `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permissions, the detached audio service, and the SDK marker checked by `LightAudio.newPlayer`. None of those permissions can be listed under `permissions`. The capability owns them, and the build fails with an error naming the capability to declare instead.
 
+DASH playback uses:
+
+```toml
+[tool]
+capabilities = ["audio-dash"]
+```
+
+`audio-dash` adds the media3 DASH source to your tool's dependencies, at the media3 version the SDK is built against. It is a capability rather than a dependency you declare because every tool would otherwise carry a format almost none of them play.
+
 A tool that syncs with a server on the user's own network uses:
 
 ```toml

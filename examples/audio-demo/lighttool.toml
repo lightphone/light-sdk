@@ -1,10 +1,10 @@
 [tool]
 id = "com.thelightphone.audiodemo"
-label = "Light Audio Demo"
+label = "Audio Demo"
 versionCode = 1
 versionName = "0.0.1"
 permissions = ["android.permission.INTERNET", "android.permission.RECORD_AUDIO"]
-capabilities = ["detached-audio"]
+capabilities = ["detached-audio", "audio-dash"]
 # for the LightOS emulator, use the line below and build with -DlightSdk.allowAltServerPackage=true
 # serverPackage = "com.thelightphone.sdk.emulator"
 serverPackage = "com.lightos"

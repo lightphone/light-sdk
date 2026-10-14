@@ -198,6 +198,7 @@ object LightToolPolicy {
     )
 
     const val DETACHED_AUDIO: String = "detached-audio"
+    const val AUDIO_DASH: String = "audio-dash"
     const val TOOL_MANAGER_PROVIDER: String = "tool-manager-provider"
     /**
      * Allows a tool to access resources over plain HTTP, which Android blocks by
@@ -207,7 +208,15 @@ object LightToolPolicy {
     const val CLEARTEXT_HTTP: String = "cleartext-http"
 
     val ALLOWED_CAPABILITIES: Set<String> =
-        setOf(DETACHED_AUDIO, TOOL_MANAGER_PROVIDER, CLEARTEXT_HTTP)
+        setOf(DETACHED_AUDIO, AUDIO_DASH, TOOL_MANAGER_PROVIDER, CLEARTEXT_HTTP)
+
+    /** media3 version the SDK is built against, generated from its catalog. */
+    val MEDIA3_VERSION: String = LightSdkPlugin.readResourceLines("media3-version.txt").single()
+
+    /** Dependencies a capability puts on the tool's classpath. */
+    val CAPABILITY_IMPLIED_DEPENDENCIES: Map<String, List<String>> = mapOf(
+        AUDIO_DASH to listOf("androidx.media3:media3-exoplayer-dash:$MEDIA3_VERSION"),
+    )
 
     /**
      * Permissions a capability contributes to the generated manifest. These are
