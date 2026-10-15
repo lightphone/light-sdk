@@ -146,6 +146,45 @@ internal fun LightAudioUsage.toMedia3AudioAttributes(): Media3AudioAttributes {
 }
 
 /**
+ * Session extras key LightOS reads from the platform session to pick its
+ * now-playing layout. Part of the LightOS contract: do not rename.
+ */
+internal const val SESSION_USAGE_EXTRA = "com.thelightphone.audio.USAGE"
+
+/** Value published under [SESSION_USAGE_EXTRA], or null when LightOS has no layout for it. */
+internal fun LightAudioUsage.sessionUsageValue(): String? = when (this) {
+    LightAudioUsage.Music -> "music"
+    LightAudioUsage.Speech -> "speech"
+    LightAudioUsage.Alarm, LightAudioUsage.VoiceCall -> null
+}
+
+/** Seek-back and seek-forward step, or null to keep media3's defaults. */
+internal fun LightAudioUsage.seekIncrementMs(): Long? = when (this) {
+    LightAudioUsage.Speech -> SPEECH_SEEK_INCREMENT_MS
+    LightAudioUsage.Music, LightAudioUsage.Alarm, LightAudioUsage.VoiceCall -> null
+}
+
+/**
+ * Player commands withheld from controllers other than the tool's own, so the
+ * platform session advertises ±15s for speech and previous/next for music.
+ */
+internal fun LightAudioUsage.hiddenExternalPlayerCommands(): IntArray = when (this) {
+    LightAudioUsage.Music -> intArrayOf(
+        Player.COMMAND_SEEK_BACK,
+        Player.COMMAND_SEEK_FORWARD,
+    )
+    LightAudioUsage.Speech -> intArrayOf(
+        Player.COMMAND_SEEK_TO_PREVIOUS,
+        Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+        Player.COMMAND_SEEK_TO_NEXT,
+        Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+    )
+    LightAudioUsage.Alarm, LightAudioUsage.VoiceCall -> intArrayOf()
+}
+
+internal const val SPEECH_SEEK_INCREMENT_MS = 15_000L
+
+/**
  * Recorder input and encoded-output configuration.
  *
  * @property source microphone processing mode

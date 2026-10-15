@@ -2,6 +2,7 @@ package com.thelightphone.sdk.audio
 
 import android.app.Application
 import android.content.Intent
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.OptIn
@@ -28,6 +29,7 @@ internal class LightAudioService : MediaSessionService() {
 
     private lateinit var player: ExoPlayer
     private lateinit var session: MediaSession
+    private lateinit var usage: LightAudioUsage
     private val idleHandler = Handler(Looper.getMainLooper())
     private val idleStop = Runnable { stopSelf() }
 
@@ -50,6 +52,11 @@ internal class LightAudioService : MediaSessionService() {
             .setId(packageName)
             .setCallback(SessionCallback())
             .build()
+        usage = spec.usage
+        // Set after build(): builder extras never reach the platform session LightOS reads.
+        usage.sessionUsageValue()?.let { value ->
+            session.setSessionExtras(Bundle().apply { putString(SESSION_USAGE_EXTRA, value) })
+        }
         detachedSessionState.setHandleChangedListener {
             idleHandler.post(::refreshIdleStop)
         }
@@ -92,8 +99,17 @@ internal class LightAudioService : MediaSessionService() {
                 if (!isDetachedSpecCompatible(detachedSessionState.activeSpec(), requestedSpec)) {
                     return MediaSession.ConnectionResult.reject()
                 }
+                return super.onConnect(session, controller)
             }
-            return super.onConnect(session, controller)
+            // The media notification controller's commands become the platform
+            // session's actions, which is what LightOS's lock screen renders.
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailablePlayerCommands(
+                    MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
+                        .removeAll(*usage.hiddenExternalPlayerCommands())
+                        .build()
+                )
+                .build()
         }
 
         // Connections are only a prompt to re-evaluate; the answer comes from

@@ -38,6 +38,9 @@ internal fun buildSdkExoPlayer(
             DefaultMediaSourceFactory(DefaultDataSource.Factory(context, network))
         )
     }
+    usage.seekIncrementMs()?.let { increment ->
+        builder.setSeekBackIncrementMs(increment).setSeekForwardIncrementMs(increment)
+    }
     return builder.build().apply {
         setAudioAttributes(usage.toMedia3AudioAttributes(), true)
     }
