@@ -38,6 +38,13 @@ changes were made beyond trimming, transcoding, and removing embedded metadata.
 - Playlist: https://somafm.com/groovesalad.pls
 - Use: live internet radio example; not redistributed in the APK
 
+## Dig the Uke (Shaka DASH test)
+
+- Artist: Stefan Kartenberg
+- Source: https://storage.googleapis.com/shaka-demo-assets/dig-the-uke-clear/dash.mpd
+- License: Creative Commons Attribution-NonCommercial 3.0
+- Use: remote audio-only DASH test stream; not redistributed in the APK
+
 ## One-shot samples
 
 Short one-shots triggered from the tone screen.

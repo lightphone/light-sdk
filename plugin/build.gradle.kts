@@ -12,11 +12,6 @@ val rootProps = Properties().apply {
 group = rootProps.getProperty("sdkGroup")
 version = rootProps.getProperty("sdkVersion")
 
-repositories {
-    google()
-    mavenCentral()
-}
-
 dependencies {
     implementation(gradleApi())
     implementation("com.google.devtools.ksp:symbol-processing-api:2.3.6")
@@ -32,8 +27,27 @@ kotlin {
     jvmToolchain(17)
 }
 
+// The SDK's catalog sits outside this included build, so read media3's version
+// from it directly; capabilities add media3 artifacts that must match the SDK's.
+val media3Version = Regex("""^media3\s*=\s*"([^"]+)"""", RegexOption.MULTILINE)
+    .find(rootDir.resolve("../gradle/libs.versions.toml").readText())
+    ?.groupValues?.get(1)
+    ?: error("media3 version not found in ../gradle/libs.versions.toml")
+
 tasks.test {
     useJUnitPlatform()
+}
+
+tasks.processResources {
+    val sdkVersion = version.toString()
+    inputs.property("sdkVersion", sdkVersion)
+    inputs.property("media3Version", media3Version)
+    filesMatching("**/sdk-version.txt") {
+        expand("sdkVersion" to sdkVersion)
+    }
+    filesMatching("**/media3-version.txt") {
+        expand("media3Version" to media3Version)
+    }
 }
 
 gradlePlugin {

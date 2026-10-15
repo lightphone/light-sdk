@@ -81,12 +81,17 @@ object ManifestGenerator {
             )
         )
 
+        val cleartext = marginBlock(
+            if (LightToolPolicy.CLEARTEXT_HTTP !in metadata.capabilities) emptyList() else listOf(
+                """        android:usesCleartextTraffic="true"""",
+            )
+        )
         appendLine(
             """
             |    <application
             |        android:name="com.thelightphone.sdk.LightSdkApplication"
             |        android:label="${xmlAttr(metadata.label)}"
-            |        android:supportsRtl="true"
+            |        android:supportsRtl="true"$cleartext
             |        android:theme="@style/LightSdk.Theme.Splash">
             |        <meta-data
             |            android:name="com.thelightphone.sdk.LIGHT_SERVER_PACKAGE"

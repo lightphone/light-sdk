@@ -35,6 +35,8 @@ ALLOWED_TOOL_ROOT_FILES: frozenset[str] = frozenset({
     "lighttool.toml",
 })
 
+FORBIDDEN_TOOL_ROOT_FILES: frozenset[str] = frozenset({"stamp-cert-sha256"})
+
 # Path components that, if seen anywhere under the extraction tree, abort the
 # build. META-INF is the classic Java SPI smuggling vector; .git/.svn would
 # let a malicious repo embed history into the artifact.

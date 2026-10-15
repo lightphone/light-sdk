@@ -26,6 +26,18 @@ class ManifestGeneratorTest {
     )
 
     @Test
+    fun `cleartext-http capability sets usesCleartextTraffic on the application`() {
+        val xml = render(capabilities = listOf(LightToolPolicy.CLEARTEXT_HTTP))
+        assertTrue(xml.contains("""android:usesCleartextTraffic="true""""))
+    }
+
+    @Test
+    fun `without cleartext-http the manifest never mentions cleartext`() {
+        val xml = render(capabilities = emptyList())
+        assertFalse(xml.contains("usesCleartextTraffic"))
+    }
+
+    @Test
     fun `empty permissions produces no uses-permission elements`() {
         val xml = render(permissions = emptyList())
         assertFalse(xml.contains("uses-permission"))

@@ -9,12 +9,13 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 data class AudioClip(
-    val source: AudioClipSource,
-    val displayName: String,
-    val usage: LightAudioUsage,
-    val kind: AudioContentKind,
-    val durationMs: Long,
-    val formatLabel: String,
+        val source: AudioClipSource,
+        val displayName: String,
+        val usage: LightAudioUsage,
+        val kind: AudioContentKind,
+        val durationMs: Long,
+        val formatLabel: String,
+        val id: String? = null,
 )
 
 sealed interface AudioClipSource {
@@ -29,87 +30,111 @@ enum class AudioContentKind {
 }
 
 object SampleAudioCatalog {
-    val clips: List<AudioClip> = listOf(
-        AudioClip(
-            source = AudioClipSource.AssetSource("audio/seletores-de-frequencia.mp3"),
-            displayName = "Seletores de frequencia",
-            usage = LightAudioUsage.Music,
-            kind = AudioContentKind.Music,
-            durationMs = 20_036L,
-            formatLabel = "MP3",
-        ),
-        AudioClip(
-            source = AudioClipSource.AssetSource("audio/small-talk-build-iv.ogg"),
-            displayName = "Small Talk Build IV",
-            usage = LightAudioUsage.Music,
-            kind = AudioContentKind.Music,
-            durationMs = 20_000L,
-            formatLabel = "OGG",
-        ),
-        AudioClip(
-            source = AudioClipSource.AssetSource("audio/audrey-tang-interview.mp3"),
-            displayName = "Audrey Tang interview",
-            usage = LightAudioUsage.Music,
-            kind = AudioContentKind.Speech,
-            durationMs = 20_036L,
-            formatLabel = "MP3",
-        ),
-        AudioClip(
-            source = AudioClipSource.UrlSource(
-                "https://commons.wikimedia.org/wiki/Special:Redirect/file/" +
-                    "Wikipedia_-_The_Dawn_of_Everything.mp3",
-            ),
-            displayName = "The Dawn of Everything",
-            usage = LightAudioUsage.Music,
-            kind = AudioContentKind.Speech,
-            durationMs = 1_148_000L,
-            formatLabel = "MP3 stream",
-        ),
-        AudioClip(
-            source = AudioClipSource.UrlSource(
-                "https://ice6.somafm.com/groovesalad-128-mp3",
-            ),
-            displayName = "SomaFM Groove Salad",
-            usage = LightAudioUsage.Music,
-            kind = AudioContentKind.Music,
-            durationMs = 0L,
-            formatLabel = "STREAM",
-        ),
-        AudioClip(
-            source = AudioClipSource.UrlSource("http://127.0.0.1:1/missing.mp3"),
-            displayName = "Broken source (error demo)",
-            usage = LightAudioUsage.Music,
-            kind = AudioContentKind.Music,
-            durationMs = 0L,
-            formatLabel = "BROKEN URL",
-        ),
-    )
+    const val SHAKA_DASH_URL =
+            "https://storage.googleapis.com/shaka-demo-assets/dig-the-uke-clear/dash.mpd"
+    const val EXPIRED_DAWN_ID = "demo-expired-dawn"
+    const val LEGACY_DAWN_ID = "dawn-of-everything"
+    const val DAWN_URL =
+            "https://commons.wikimedia.org/wiki/Special:Redirect/file/Wikipedia_-_The_Dawn_of_Everything.mp3"
+
+    val clips: List<AudioClip> =
+            listOf(
+                    AudioClip(
+                            source =
+                                    AudioClipSource.AssetSource(
+                                            "audio/seletores-de-frequencia.mp3"
+                                    ),
+                            displayName = "Seletores de frequencia",
+                            usage = LightAudioUsage.Music,
+                            kind = AudioContentKind.Music,
+                            durationMs = 20_036L,
+                            formatLabel = "MP3",
+                            id = "seletores-de-frequencia",
+                    ),
+                    AudioClip(
+                            source = AudioClipSource.AssetSource("audio/small-talk-build-iv.ogg"),
+                            displayName = "Small Talk Build IV",
+                            usage = LightAudioUsage.Music,
+                            kind = AudioContentKind.Music,
+                            durationMs = 20_000L,
+                            formatLabel = "OGG",
+                            id = "small-talk-build-iv",
+                    ),
+                    AudioClip(
+                            source = AudioClipSource.AssetSource("audio/audrey-tang-interview.mp3"),
+                            displayName = "Audrey Tang interview",
+                            usage = LightAudioUsage.Music,
+                            kind = AudioContentKind.Speech,
+                            durationMs = 20_036L,
+                            formatLabel = "MP3",
+                            id = "audrey-tang-interview",
+                    ),
+                    AudioClip(
+                            source =
+                                    AudioClipSource.UrlSource(
+                                            "https://ice6.somafm.com/groovesalad-128-mp3",
+                                    ),
+                            displayName = "SomaFM Groove Salad",
+                            usage = LightAudioUsage.Music,
+                            kind = AudioContentKind.Music,
+                            durationMs = 0L,
+                            formatLabel = "STREAM",
+                            id = "somafm-groove-salad",
+                    ),
+                    AudioClip(
+                            source = AudioClipSource.UrlSource(SHAKA_DASH_URL),
+                            displayName = "Dig the Uke (Shaka test)",
+                            usage = LightAudioUsage.Music,
+                            kind = AudioContentKind.Music,
+                            durationMs = 177_622L,
+                            formatLabel = "DASH",
+                            id = "shaka-dig-the-uke",
+                    ),
+                    AudioClip(
+                            source = AudioClipSource.UrlSource("http://127.0.0.1:1/missing.mp3"),
+                            displayName = "(broken) The Dawn of Everything",
+                            usage = LightAudioUsage.Music,
+                            kind = AudioContentKind.Speech,
+                            durationMs = 0L,
+                            formatLabel = "BROKEN URL",
+                            id = EXPIRED_DAWN_ID,
+                    ),
+            )
 }
 
-class AudioLibraryRepository internal constructor(
-    filesDir: File,
-    private val bundledClips: List<AudioClip> = SampleAudioCatalog.clips,
-    private val durationResolver: (File) -> Long = ::readDurationMs,
-    private val now: () -> Instant = Instant::now,
+class AudioLibraryRepository
+internal constructor(
+        filesDir: File,
+        private val bundledClips: List<AudioClip> = SampleAudioCatalog.clips,
+        private val durationResolver: (File) -> Long = ::readDurationMs,
+        private val now: () -> Instant = Instant::now,
 ) {
     private val recordingsDir = File(filesDir, "recordings")
-    private val fileNameFormatter = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss", Locale.US)
-        .withZone(ZoneId.systemDefault())
+    private val fileNameFormatter =
+            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss", Locale.US)
+                    .withZone(ZoneId.systemDefault())
 
-    fun list(): List<AudioClip> = bundledClips + recordingsDir
-        .listFiles { file -> file.isFile && file.extension.equals("m4a", ignoreCase = true) }
-        ?.map { file ->
-            AudioClip(
-                source = AudioClipSource.FileSource(file),
-                displayName = RecordingTimeFormat.relativeLabel(createdAt(file)),
-                usage = LightAudioUsage.Music,
-                kind = AudioContentKind.Speech,
-                durationMs = durationResolver(file),
-                formatLabel = "M4A",
-            )
-        }
-        ?.sortedByDescending { (it.source as AudioClipSource.FileSource).file.createdAt() }
-        .orEmpty()
+    fun list(): List<AudioClip> =
+            bundledClips +
+                    recordingsDir
+                            .listFiles { file ->
+                                file.isFile && file.extension.equals("m4a", ignoreCase = true)
+                            }
+                            ?.map { file ->
+                                AudioClip(
+                                        source = AudioClipSource.FileSource(file),
+                                        displayName =
+                                                RecordingTimeFormat.relativeLabel(createdAt(file)),
+                                        usage = LightAudioUsage.Music,
+                                        kind = AudioContentKind.Speech,
+                                        durationMs = durationResolver(file),
+                                        formatLabel = "M4A",
+                                )
+                            }
+                            ?.sortedByDescending {
+                                (it.source as AudioClipSource.FileSource).file.createdAt()
+                            }
+                            .orEmpty()
 
     fun newRecordingFile(): File {
         recordingsDir.mkdirs()
@@ -131,10 +156,11 @@ private fun File.createdAt(): Long {
     val timePart = nameWithoutExtension.substringAfter("-", "").take(6).takeIf { it.length == 6 }
     if (datePart != null && timePart != null) {
         runCatching {
-            val local = java.time.LocalDateTime.parse(
-                "$datePart$timePart",
-                DateTimeFormatter.ofPattern("yyyyMMddHHmmss", Locale.US),
-            )
+            val local =
+                    java.time.LocalDateTime.parse(
+                            "$datePart$timePart",
+                            DateTimeFormatter.ofPattern("yyyyMMddHHmmss", Locale.US),
+                    )
             return local.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
     }
@@ -145,7 +171,8 @@ private fun readDurationMs(file: File): Long {
     val retriever = MediaMetadataRetriever()
     return try {
         retriever.setDataSource(file.absolutePath)
-        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                ?: 0L
     } catch (_: RuntimeException) {
         0L
     } finally {

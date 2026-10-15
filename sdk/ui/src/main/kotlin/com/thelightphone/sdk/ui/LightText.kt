@@ -80,6 +80,7 @@ fun LightText(
     align: TextAlign? = null,
     lighten: Boolean = false,
     underline: Boolean = false,
+    strikethrough: Boolean = false,
     monospace: Boolean = false,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
@@ -92,9 +93,22 @@ fun LightText(
         else -> colors.content
     }
 
+    val decoration = when {
+        underline && strikethrough -> TextDecoration.combine(
+            listOf(
+                TextDecoration.Underline,
+                TextDecoration.LineThrough
+            )
+        )
+
+        underline -> TextDecoration.Underline
+        strikethrough -> TextDecoration.LineThrough
+        else -> null
+    }
+
     val style = variantStyle(variant)
         .let { if (align != null) it.copy(textAlign = align) else it }
-        .let { if (underline) it.copy(textDecoration = TextDecoration.Underline) else it }
+        .let { if (decoration != null) it.copy(textDecoration = decoration) else it }
         .let { if (monospace) it.copy(fontFamily = FontFamily.Monospace) else it }
 
     Text(

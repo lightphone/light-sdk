@@ -112,7 +112,7 @@ class PlayerScreen(private val sealedActivity: SealedLightActivity) : LightScree
 
 #### Player
 
-`LightAudioPlayer` plays files, bundled assets, and local or remote URLs. A player owns one queue and exposes its state through `StateFlow` objects: `positionMs`, `durationMs`, `isPlaying`, `currentMediaItemIndex`, `error`, and `availability`.
+`LightAudioPlayer` plays files, bundled assets, and local or remote URLs. A player owns one queue and exposes its state through `StateFlow` objects: `positionMs`, `durationMs`, `isPlaying`, `currentMediaItemIndex`, `queue`, `error`, and `availability`.
 `currentMediaItemIndex` is `NO_MEDIA_ITEM` while the queue is empty.
 
 ```kotlin
@@ -127,14 +127,60 @@ player.setMediaQueue(
 player.play()
 ```
 
-- Use `pause`, `stop`, and `seekTo` for transport controls.
-- `skipBack()` and `skipForward()` seek 15 seconds within the current item; `skipToPrevious()` and `skipToNext()` move through the queue.
+- Use `pause` and `stop` for transport; `seekTo` jumps within an item, `seekToDefaultPosition(index)` selects a queue item, and `skipToPrevious()` or `skipToNext()` selects an adjacent item.
+- Edit the queue in place with `addMediaItem`, `removeMediaItem`, `moveMediaItem`, and `replaceMediaItem`. `queue.value` exposes item IDs and metadata; `queue.value.size` reports its length.
 - Set `speed` to change playback rate; values at or below zero clamp to the minimum supported rate.
 - Use `setSource(File)` as a convenience for a one-item local-file queue.
 - Playback requests audio focus automatically.
 - If focus is unavailable, `play()` does nothing.
 - Observe `isPlaying` for the actual state.
 - Transient focus loss pauses and later resumes playback, while duckable loss lowers the volume.
+
+##### Editing the queue
+
+A negative index is a mistake and throws. An index past the end is not: a queue can change underneath a tool, so `addMediaItem` appends, `moveMediaItem` clamps its destination to the end, and everything else does nothing.
+
+`replaceMediaItem` replaces an item's source, which is how to hand the player a re-resolved URL. Replacing the current item can restart it from the beginning; save its position and seek afterward if you need to resume there. Give both items the same `LightAudioItem.id` so they name the same audio:
+
+```kotlin
+val track = LightAudioItem(
+    id = "track-1",
+    source = LightAudioSource.UrlSource(freshUrl),
+    metadata = LightMediaMetadata(title = "Example"),
+)
+player.replaceMediaItem(index, track)
+```
+
+An item without an `id` is identified and cached by its location. Rotating signed URLs need a stable explicit ID to reuse cached bytes. IDs must be globally unique for distinct audio, including across playlists.
+
+##### Caching what you stream
+
+A player can read through a cache the tool describes. The SDK opens the store under your tool's private cache storage, shares one per directory across your process, and keeps it when the player is released:
+
+```kotlin
+val player = audio.newPlayer(LightPlayerSpec(
+    cache = LightMediaCache("stream", sizeBytes = 256L * 1024 * 1024),
+))
+```
+
+The cache is consulted before the network, and newly streamed bytes are written to it. When it is full, the bytes read longest ago are discarded.
+
+Cached bytes are filed under `LightAudioItem.id`, so an item whose URL is re-resolved still finds what it already cached. Files and bundled assets bypass caching, since they are already on the device. DASH segments are filed under their own URLs, so re-resolved DASH URLs do not reuse what the old ones cached.
+
+A detached session's cache is fixed when its player is built. Reconnecting with a different cache throws `LightAudioPlayerException`, the same way a conflicting `LightAudioUsage` does.
+Reusing a cache name with a different `sizeBytes` in the same process throws
+`IllegalArgumentException` when creating a player, regardless of playback mode.
+
+##### Streaming DASH
+
+media3 plays DASH only when a source for it is on the classpath, which the SDK does not ship to every tool. Ask for it in `lighttool.toml`:
+
+```toml
+[tool]
+capabilities = ["audio-dash"]
+```
+
+Nothing else changes: pass the manifest URL as a `LightAudioSource.UrlSource` and the player selects the DASH source itself.
 
 ##### Playback failures
 
@@ -161,7 +207,7 @@ player.error.collect { error ->
 
 When an item fails, playback stops rather than skipping to the next item.
 The SDK does not advance automatically, because unplayable content would advance in a loop.
-Setting a queue again or selecting a healthy item clears `error`.
+Setting a queue again or replacing a failed item and calling `play()` clears `error` through re-preparation. Queue edits alone do not start playback.
 
 ##### Detached playback and reconnecting
 
@@ -176,7 +222,7 @@ capabilities = ["detached-audio"]
 Wait for its controller before deciding whether the session is fresh:
 
 ```kotlin
-val player = audio.newPlayer(playback = LightAudioPlayback.Detached)
+val player = audio.newPlayer(LightPlayerSpec(playback = LightAudioPlayback.Detached))
 if (player.awaitReady() && player.currentMediaItemIndex.value == NO_MEDIA_ITEM) {
     player.setMediaQueue(items)
 }
@@ -186,11 +232,12 @@ The player `availability` field exposes the connection lifecycle:
 
 - `Initializing` — the detached controller is connecting.
 - `Ready` — commands can be handled. Attached players start here.
+- `Refused` — the detached controller connection was rejected or failed.
 - `Released` — the handle is closed and cannot accept commands.
 
-`awaitReady()` suspends through initialization and returns `true` only when the player reaches `Ready`. Returns `false` if the player is released first.
+`awaitReady()` suspends through initialization and returns `true` only when the player reaches `Ready`. It returns `false` if the connection is refused or the player is released first.
 
-A non-empty queue belongs to the surviving service. Reuse it instead of setting the queue again, which would replace live playback. Position, duration, playing state, queue index, and playback error are populated when the controller connects.
+A non-empty queue belongs to the surviving service. Reuse it instead of setting the queue again, which would replace live playback. Position, duration, playing state, queue, queue index, and playback error are populated when the controller connects.
 Once the service stops, the next player is fresh and restoring its queue and position is the tool's responsibility.
 
 `release()` disconnects a detached handle but does not stop its playback.
@@ -263,6 +310,34 @@ capture.asFlow().collect { pcm ->
 - A capture startup failure throws `LightAudioCaptureException` from collection.
 - Set `CaptureConfig.source` to `Unprocessed` to request raw input when supported; `Mic` uses the standard processed microphone path.
 
+### Vibration
+
+Use `sealedActivity.vibrator` for touch feedback or vibration waveforms. It holds only the application context, so it can outlive the screen.
+
+```kotlin
+import kotlin.time.Duration.Companion.milliseconds
+
+val vibrator: LightVibrator = sealedActivity.vibrator
+
+vibrator.click() // short touch feedback
+vibrator.vibrate(100.milliseconds) // default intensity
+vibrator.vibrate(100.milliseconds, VibrationAmplitude(128)) // custom intensity
+
+vibrator.vibrate(
+    LightVibrationWaveform(
+        durations = listOf(100.milliseconds, 400.milliseconds, 500.milliseconds),
+        amplitudes = vibrationAmplitudesOf(255, 120, 40),
+    ),
+    usage = LightVibrationUsage.Alarm,
+)
+```
+
+- Segment `i` lasts `durations[i]` at `amplitudes[i]`, where `0` is off and `255` is the motor's maximum.
+- Without motor amplitude control, each segment becomes an on/off pulse whose on-time is proportional to its amplitude.
+- `LightVibrationUsage.Touch` is for direct touch feedback. `LightVibrationUsage.Alarm` is for alarms and timers the user set, and vibrates while the screen is off.
+- `cancel()` stops the current vibration. Devices without a vibrator ignore all calls.
+- The `android.permission.VIBRATE` permission is merged from the SDK; listing it in `lighttool.toml` documents the tool's intent.
+
 ### NFC
 
 `LightNfc` reads NFC tags — and other phones presenting a tag — while your tool is in the foreground.
@@ -316,6 +391,34 @@ val tap = nfc.newReader().awaitTap()
 - A tag with no NDEF message — a bare UID badge — reads successfully with an empty `records` list.
 - Failures arrive from collection as a `LightNfcException`: `LightNfcUnavailableException` when NFC is off, absent, not granted to the tool, or couldn't start; `LightNfcReadException` when the tag left the field or its contents couldn't be decoded. The exception message is product copy naming the actual cause.
 - `LightNfcReaderConfig` narrows the technologies polled, skips the platform's NDEF check, silences the platform tap sound, and sets the presence-check delay.
+
+#### Talking to smart cards (ISO-DEP)
+
+`withIsoDep` waits for a tap from an ISO-DEP card — a payment card, passport, or hardware security key — and hands your block a connected `LightIsoDep` for exchanging raw ISO 7816-4 APDUs. Reader mode stays held until the block returns, then the card is released.
+
+```kotlin
+val reader = nfc.newReader(
+    LightNfcReaderConfig(
+        technologies = setOf(LightNfcTechnology.NfcA, LightNfcTechnology.NfcB),
+        skipNdefCheck = true,
+    ),
+)
+
+val selectAid = byteArrayOf(0x00, 0xA4.toByte(), 0x04, 0x00, aid.size.toByte()) + aid
+
+val selected = reader.withIsoDep { card ->
+    val response = card.transceive(selectAid)
+    response.size >= 2 &&
+        response[response.size - 2] == 0x90.toByte() &&
+        response[response.size - 1] == 0x00.toByte()
+}
+```
+
+- Cards answer over NFC-A or NFC-B; skipping the NDEF check keeps the platform from probing the card before your block runs.
+- `transceive` runs off the main thread and returns the full response, status word included. Checking it is up to you.
+- A tag that isn't ISO-DEP, a card pulled away mid-exchange, or a failed exchange arrives as a `LightNfcReadException` with product copy naming the cause; `LightNfcUnavailableException` covers NFC being off or absent, as with taps.
+- `maxTransceiveLength` is the largest command the card accepts; `timeoutMs` raises the per-command timeout for slow operations such as key generation.
+- Keep the block short and avoid waiting on the user inside it: the card has to stay on the phone the whole time.
 
 #### Tap prompt
 

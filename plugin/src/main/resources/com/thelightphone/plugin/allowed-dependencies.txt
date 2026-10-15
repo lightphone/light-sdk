@@ -1,0 +1,39 @@
+# Dependencies a tool may declare. Shared with the server-side builder, which
+# approves native libraries only from AARs matching these entries.
+#
+# An entry without ":" matches that group and its subgroups (androidx.room
+# matches androidx.room and androidx.room.foo, not androidx.roomx). An entry
+# with ":" matches that artifact and artifacts extending it with "-"
+# (org.jetbrains.kotlinx:kotlinx-coroutines matches kotlinx-coroutines-core).
+org.jetbrains.kotlin:kotlin-stdlib
+org.jetbrains.kotlin:kotlin-test
+androidx.compose
+androidx.activity:activity-compose
+androidx.annotation
+org.jetbrains.kotlinx:kotlinx-coroutines
+androidx.lifecycle
+androidx.datastore
+com.squareup.okhttp3:okhttp
+io.ktor
+org.jetbrains.kotlinx:kotlinx-serialization
+org.jetbrains.kotlinx:kotlinx-io
+org.jetbrains.kotlinx:kotlinx-datetime
+org.unifiedpush.android:connector
+androidx.core:core-splashscreen
+com.thelightphone.lp3keyboard
+com.thelightphone.toolmanager
+com.github.lightphone:light-keyboard
+androidx.room
+androidx.work
+androidx.startup
+androidx.media3
+io.github.david-allison:anki-android-backend
+org.bouncycastle:bcprov-jdk18on
+com.google.zxing:core
+org.sol4k:sol4k
+org.sol4k:tweetnacl
+org.sol4k:utilities
+de.connect2x.trixnity:trixnity-client
+de.connect2x.trixnity:trixnity-client-repository-room
+de.connect2x.trixnity:trixnity-client-media-okio
+de.connect2x.trixnity:trixnity-client-cryptodriver-libolm

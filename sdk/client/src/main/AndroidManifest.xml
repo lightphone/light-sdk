@@ -5,6 +5,7 @@
     <uses-feature
         android:name="android.hardware.usb.host"
         android:required="false" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <application>
         <service
             android:name="com.thelightphone.sdk.LightPushService"

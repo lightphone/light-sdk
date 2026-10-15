@@ -48,7 +48,8 @@ thrown away. So:
   Light has to add it first.
 - `git diff light/main --stat -- . ':!tool' ':!docs' ':!CLAUDE.md'` should stay empty.
 - `serverPackage` is committed as `com.lightos`; flip it to `com.thelightphone.sdk.emulator`
-  locally for the emulator, and don't commit that.
+  locally for the emulator (building with `-DlightSdk.allowAltServerPackage=true`, or the
+  plugin fails the build), and don't commit that.
 - The Ktor WebSockets plugin ships in `ktor-client-core`; `ktor-client-websockets` is an empty
   stub and must not come back.
 

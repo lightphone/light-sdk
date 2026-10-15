@@ -1,0 +1,2 @@
+# Filled in from gradle.properties sdkVersion by processResources.
+${sdkVersion}
