@@ -382,4 +382,77 @@ class LightSdkPluginValidationTest {
             LightSdkPlugin.INTERNAL_CONFIG_PREFIXES.any { "kspPluginClasspath".startsWith(it) },
         )
     }
+
+    // ---------------------------------------------------------------------
+    // Dependency allowlist and versions
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `group entries match the group and its subgroups only`() {
+        assertTrue(LightSdkPlugin.isAllowedCoordinate("io.ktor", "ktor-server-core"))
+        assertTrue(LightSdkPlugin.isAllowedCoordinate("androidx.compose.ui", "ui"))
+        assertFalse(LightSdkPlugin.isAllowedCoordinate("io.ktorx", "ktor-server-core"))
+        assertFalse(LightSdkPlugin.isAllowedCoordinate("androidx.roomx", "room-runtime"))
+    }
+
+    @Test
+    fun `artifact entries match the artifact and dash-suffixed variants only`() {
+        assertTrue(LightSdkPlugin.isAllowedCoordinate("org.jetbrains.kotlinx", "kotlinx-coroutines-core"))
+        assertTrue(LightSdkPlugin.isAllowedCoordinate("com.squareup.okhttp3", "okhttp"))
+        assertFalse(LightSdkPlugin.isAllowedCoordinate("com.squareup.okhttp3", "okhttpx"))
+        assertFalse(LightSdkPlugin.isAllowedCoordinate("com.squareup.okhttp3", "logging-interceptor"))
+    }
+
+    @Test
+    fun `exact and absent versions are accepted`() {
+        assertEquals(null, LightSdkPlugin.findVersionViolation("3.4.2"))
+        assertEquals(null, LightSdkPlugin.findVersionViolation("0.1.70-anki26.09.3"))
+        assertEquals(null, LightSdkPlugin.findVersionViolation(null))
+        assertEquals(null, LightSdkPlugin.findVersionViolation(""))
+    }
+
+    @Test
+    fun `dynamic and snapshot versions are rejected`() {
+        listOf("1.+", "+", "[1.0,2.0)", "(,1.0]", "latest.release", "latest.integration", "1.0-SNAPSHOT", "1.0-snapshot")
+            .forEach { version ->
+                assertTrue(LightSdkPlugin.findVersionViolation(version) != null, "expected '$version' to be rejected")
+            }
+    }
+
+    @Test
+    fun `SDK version resource is filled in at build time`() {
+        assertTrue(LightSdkPlugin.SDK_VERSION.isNotBlank())
+        assertFalse("$" in LightSdkPlugin.SDK_VERSION, "unexpanded: ${LightSdkPlugin.SDK_VERSION}")
+    }
+
+    @Test
+    fun `dependency violations are reported once with every configuration`() {
+        val violations = DependencyViolations()
+        violations.add("releaseCompileClasspath", "com.google.code.gson:gson:2.11.0")
+        violations.add("implementation", "com.google.code.gson:gson:2.11.0")
+        violations.add("implementation", "com.google.code.gson:gson:2.11.0")
+        assertEquals(
+            listOf("  com.google.code.gson:gson:2.11.0 (in implementation, releaseCompileClasspath)"),
+            violations.lines(),
+        )
+    }
+
+    @Test
+    fun `allowlist is only listed next to dependency violations`() {
+        val source = LightSdkPlugin.formatViolations(listOf("  Foo.kt:3: blocked import"), emptyList())!!
+        assertFalse("Allowed dependencies:" in source, source)
+
+        val dependency = LightSdkPlugin.formatViolations(emptyList(), listOf("  a:b:1 (in implementation)"))!!
+        assertTrue("Allowed dependencies:" in dependency, dependency)
+
+        assertEquals(null, LightSdkPlugin.formatViolations(emptyList(), emptyList()))
+    }
+
+    @Test
+    fun `test configurations are recognised`() {
+        listOf("testImplementation", "debugUnitTestCompileClasspath", "debugAndroidTestRuntimeClasspath", "kspTestKotlin")
+            .forEach { assertTrue(LightSdkPlugin.isTestConfig(it), it) }
+        listOf("releaseRuntimeClasspath", "releaseCompileClasspath", "kspRelease")
+            .forEach { assertFalse(LightSdkPlugin.isTestConfig(it), it) }
+    }
 }

@@ -4,6 +4,7 @@ import android.media.AudioAttributes
 import android.media.MediaRecorder
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.AudioAttributes as Media3AudioAttributes
 
 /** Describes how the platform should classify, process, and prioritize audio. */
@@ -59,8 +60,10 @@ data class LightAudioError(
     val kind: LightAudioErrorKind,
     /** Stable media3 error-code name for logs and bug reports. */
     val diagnostic: String,
-    /** Queue index that failed, or `-1` when unavailable. */
+    /** Queue index that failed, or `-1` when unavailable. Follows queue edits. */
     val itemIndex: Int,
+    /** [LightQueueItem.id] of the item that failed, or `null` when unavailable. */
+    val itemId: String? = null,
 )
 
 internal fun errorKindFor(errorCode: Int): LightAudioErrorKind = when (errorCode) {
@@ -75,11 +78,24 @@ internal fun errorKindFor(errorCode: Int): LightAudioErrorKind = when (errorCode
     else -> LightAudioErrorKind.Unknown
 }
 
-internal fun PlaybackException.toLightAudioError(itemIndex: Int): LightAudioError = LightAudioError(
+/** media3 does not advance past a failed item, so the current item is the one that failed. */
+internal fun PlaybackException.toLightAudioError(player: Player): LightAudioError = LightAudioError(
     kind = errorKindFor(errorCode),
     diagnostic = PlaybackException.getErrorCodeName(errorCode),
-    itemIndex = itemIndex,
+    itemIndex = if (player.mediaItemCount == 0) NO_MEDIA_ITEM else player.currentMediaItemIndex,
+    itemId = player.currentMediaItem?.mediaId,
 )
+
+/** This error with [LightAudioError.itemIndex] moved to where its item now sits. */
+internal fun LightAudioError.relocatedIn(player: Player): LightAudioError {
+    val id = itemId ?: return this
+    val index = when {
+        player.mediaItemCount > 0 && player.currentMediaItem?.mediaId == id -> player.currentMediaItemIndex
+        else -> (0 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).mediaId == id }
+            ?: NO_MEDIA_ITEM
+    }
+    return copy(itemIndex = index)
+}
 
 internal data class AudioAttributeSpec(
     val usage: Int,
@@ -216,10 +232,14 @@ sealed interface LightAudioSource {
  *
  * @property source playable media location
  * @property metadata descriptive values forwarded to playback surfaces
+ * @property id stable identity and cache key, globally unique for each distinct
+ *   piece of audio and stable over time. Defaults to the source URL; rotating
+ *   signed URLs need an explicit id to reuse cached bytes.
  */
 data class LightAudioItem(
     val source: LightAudioSource,
     val metadata: LightMediaMetadata,
+    val id: String? = null,
 )
 
 internal const val DEFAULT_SAMPLE_RATE = 48_000

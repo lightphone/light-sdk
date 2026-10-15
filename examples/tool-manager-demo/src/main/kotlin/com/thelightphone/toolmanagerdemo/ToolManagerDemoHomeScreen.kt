@@ -26,7 +26,11 @@ import com.thelightphone.sdk.EntryPoint
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightEntryPoint
 import com.thelightphone.sdk.LightFileShare
+import com.thelightphone.sdk.LightJob
+import com.thelightphone.sdk.LightJobHandler
+import com.thelightphone.sdk.LightJobResult
 import com.thelightphone.sdk.SealedLightActivity
+import com.thelightphone.sdk.SealedLightContext
 import com.thelightphone.sdk.SimpleLightScreen
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightIcon
@@ -41,11 +45,17 @@ import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.toolmanager.ClientLeafNode
 import com.thelightphone.toolmanager.ClientToolManifest
 import com.thelightphone.toolmanager.FileBrowserSpec
+import com.thelightphone.toolmanager.JobSpec
+import io.ktor.util.encodeBase64
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlin.io.encoding.Base64
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @InitialScreen
 class ToolManagerDemoHomeScreen(sealedActivity: SealedLightActivity) :
@@ -125,17 +135,35 @@ private fun InnerContent(
     }
 }
 
+private const val EXPORT_JOB_TITLE = "export-job"
+private const val EXPORT_JOB_FILE = "output_file.txt"
+@LightJob(EXPORT_JOB_TITLE)
+val exportJob : LightJobHandler = { ctx, _ ->
+    // simulate exporting a file
+    delay((2..4).random().seconds)
+    // be sure to put in the directory that will be associated with the JobSpec
+    ctx.fileShare.write("$EXPORT_JOB_TITLE/$EXPORT_JOB_FILE") {
+        it.write("This is an exported file. Congratulations. Timestamp: ${Clock.System.now()}")
+    }
+    LightJobResult.Success(outputFilePath = EXPORT_JOB_FILE, message = "File export success!")
+}
+
 @EntryPoint
 object ToolEntryPoint : LightEntryPoint {
     val directories = listOf(
         FileBrowserSpec(label = "Main Directory", path = "main"),
         FileBrowserSpec(label = "Other Directory", path = "other")
     )
+    private val exportJobSpec = ClientLeafNode(
+        // The path is associated with the job key as well, whatever goes here should be used as the key
+        // for the associated @LightJob
+        JobSpec("Export File", EXPORT_JOB_TITLE, headerText = "This is an example job that exports a file. The file will be presented for download upon completion.", buttonText = "Start Export")
+    )
     internal val updateFlow = MutableStateFlow<Long>(0)
     override fun getToolManagerManifest(): ClientToolManifest {
         return ClientToolManifest(
             title = "Tool Manager Demo",
-            roots = directories.map { ClientLeafNode(it) }
+            roots = directories.map { ClientLeafNode(it) } + exportJobSpec
         )
     }
 

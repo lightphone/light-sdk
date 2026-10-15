@@ -1,0 +1,8 @@
+[tool]
+id = "com.example.ktorserver"
+label = "Ktor Server Fixture"
+versionCode = 1
+versionName = "1.0.0"
+permissions = ["android.permission.INTERNET"]
+capabilities = []
+serverPackage = "com.lightos"

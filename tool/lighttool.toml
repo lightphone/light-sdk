@@ -6,5 +6,5 @@ versionName = "1.0.0"
 permissions = ["android.permission.INTERNET"]
 capabilities = []
 serverPackage = "com.lightos"
-# for the LightOS emulator (docs/system_app) — don't commit this:
+# for the LightOS emulator (docs/system_app) — build with -DlightSdk.allowAltServerPackage=true, and don't commit this:
 # serverPackage = "com.thelightphone.sdk.emulator"

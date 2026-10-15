@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.nfc.NfcAdapter
+import android.nfc.Tag
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -19,12 +20,21 @@ import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 
 class LightNfcReader internal constructor(
     private val activity: LightActivity,
     private val config: LightNfcReaderConfig,
 ) {
-    fun asFlow(): Flow<LightNfcTap> = callbackFlow {
+    fun asFlow(): Flow<LightNfcTap> = readerFlow { it.readTap() }
+
+    suspend fun awaitTap(): LightNfcTap = asFlow().first()
+
+    // The block runs downstream of the reader flow, so reader mode stays held until it returns.
+    suspend fun <T> withIsoDep(block: suspend (LightIsoDep) -> T): T =
+        readerFlow { it }.map { tag -> tag.useIsoDep(block) }.first()
+
+    private fun <T> readerFlow(onTag: (Tag) -> T): Flow<T> = callbackFlow {
         val availability = activity.readNfcAvailability()
         if (!availability.isReady) {
             throw LightNfcUnavailableException(availability.unavailableMessage())
@@ -34,7 +44,7 @@ class LightNfcReader internal constructor(
 
         val session = ReaderModeSession(
             callback = NfcAdapter.ReaderCallback { tag ->
-                runCatching { tag.readTap() }
+                runCatching { onTag(tag) }
                     .onSuccess { trySend(it) }
                     .onFailure { error ->
                         close(error as? LightNfcException ?: LightNfcReadException(READ_FAILED_MESSAGE, error))
@@ -49,8 +59,6 @@ class LightNfcReader internal constructor(
 
         awaitClose { ReaderModes.stop(activity, session) }
     }.buffer(Channel.BUFFERED).flowOn(Dispatchers.Main.immediate)
-
-    suspend fun awaitTap(): LightNfcTap = asFlow().first()
 }
 
 internal class ReaderModeSession(

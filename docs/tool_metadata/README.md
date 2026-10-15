@@ -17,6 +17,7 @@ versionCode = 1                                # monotonically-increasing intege
 versionName = "1.0.0"                          # ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
 permissions  = ["android.permission.CAMERA"]   # allowlisted permissions only
 capabilities = []                              # allowlisted SDK features
+serverPackage = "com.lightos"                  # LightOS package your tool connects to
 orientation  = "portrait"                      # optional; omit for no orientation lock
 ```
 
@@ -50,6 +51,31 @@ capabilities = ["detached-audio"]
 ```
 
 `detached-audio` generates the `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permissions, the detached audio service, and the SDK marker checked by `LightAudio.newPlayer`. None of those permissions can be listed under `permissions`. The capability owns them, and the build fails with an error naming the capability to declare instead.
+
+DASH playback uses:
+
+```toml
+[tool]
+capabilities = ["audio-dash"]
+```
+
+`audio-dash` adds the media3 DASH source to your tool's dependencies, at the media3 version the SDK is built against. It is a capability rather than a dependency you declare because every tool would otherwise carry a format almost none of them play.
+
+A tool that syncs with a server on the user's own network uses:
+
+```toml
+[tool]
+capabilities = ["cleartext-http"]
+```
+
+`cleartext-http` sets `android:usesCleartextTraffic="true"` on the generated
+`<application>`. Android otherwise refuses plain-HTTP connections, which are
+the norm for self-hosted servers on a home network (a NAS, a printer, a
+personal sync server at a `192.168.x` address). Declaring it here keeps the
+opt-out reviewable in `lighttool.toml` rather than hidden in a manifest.
+
+### `serverPackage` — the LightOS package your tool connects to
+Must be `com.lightos`. The build fails on any other value unless you pass `-DlightSdk.allowAltServerPackage=true`. To build for the LightOS emulator, see [Building your tool for the emulator](../system_app/README.md#9-building-your-tool-for-the-emulator).
 
 ### `orientation` — optional screen orientation lock
 Set to `"portrait"` to keep the tool in portrait orientation. Omit this field to

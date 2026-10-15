@@ -1,9 +1,12 @@
 package com.thelightphone.sdk.audio
 
 import android.app.Application
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.OptIn
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -20,6 +23,7 @@ import androidx.media3.session.MediaSessionService
  * stopped by itself once playback is paused and no tool holds a handle — see
  * [shouldStartIdleStop].
  */
+@OptIn(UnstableApi::class)
 internal class LightAudioService : MediaSessionService() {
 
     private lateinit var player: ExoPlayer
@@ -32,14 +36,16 @@ internal class LightAudioService : MediaSessionService() {
 
         assertSharedProcess()
 
-        player = ExoPlayer.Builder(this).build().apply {
-            setAudioAttributes(LightAudioUsage.Music.toMedia3AudioAttributes(), true)
+        // Whatever the starting handle staged. Empty if the system revived the service.
+        val spec = detachedSessionState.stagedSpec()
+        player = buildSdkExoPlayer(this, spec.usage, spec.cache).apply {
             addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     refreshIdleStop()
                 }
             })
         }
+        detachedSessionState.adoptSpec(spec)
         session = MediaSession.Builder(this, player)
             .setId(packageName)
             .setCallback(SessionCallback())
@@ -51,6 +57,16 @@ internal class LightAudioService : MediaSessionService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession = session
+
+    /**
+     * Not sticky: a service the system recreates after killing the process has
+     * no handle, no queue, and only the default spec, which would then refuse
+     * the tool's own reconnect.
+     */
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+        return START_NOT_STICKY
+    }
 
     override fun onDestroy() {
         idleHandler.removeCallbacks(idleStop)
@@ -72,13 +88,9 @@ internal class LightAudioService : MediaSessionService() {
                 val requestedUsage = controller.connectionHints.requestedUsage()
                 // newPlayer checks this synchronously. Repeat it here because the
                 // service state may change before the async controller connects.
-                if (!isDetachedUsageCompatible(detachedSessionState.activeUsage(), requestedUsage)) {
+                val requestedSpec = detachedSessionState.stagedSpec().copy(usage = requestedUsage)
+                if (!isDetachedSpecCompatible(detachedSessionState.activeSpec(), requestedSpec)) {
                     return MediaSession.ConnectionResult.reject()
-                }
-                // An empty player has no live playback to preserve, so this fresh
-                // session may take the connecting tool's requested usage.
-                if (player.mediaItemCount == 0) {
-                    adoptUsage(requestedUsage)
                 }
             }
             return super.onConnect(session, controller)
@@ -93,12 +105,6 @@ internal class LightAudioService : MediaSessionService() {
         override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
             refreshIdleStop()
         }
-    }
-
-    /** A fresh session takes the connecting handle's usage; a live one keeps its own. */
-    private fun adoptUsage(usage: LightAudioUsage) {
-        player.setAudioAttributes(usage.toMedia3AudioAttributes(), true)
-        detachedSessionState.adoptUsage(usage)
     }
 
     private fun refreshIdleStop() {

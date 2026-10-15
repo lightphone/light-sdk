@@ -5,7 +5,7 @@ import android.content.pm.PackageManager
 import android.util.Log
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.CustomSpec
-import com.thelightphone.toolmanager.DropboxSpec
+import com.thelightphone.toolmanager.UploadSpec
 import com.thelightphone.toolmanager.EntryType
 import com.thelightphone.toolmanager.FileBrowserSpec
 import com.thelightphone.toolmanager.KeyCipher
@@ -118,7 +118,7 @@ fun LightSdkServer.getApkInboxAuthDirectory(context: Context): File {
 fun developerModeDataView(
     context: Context,
     cipher: KeyCipher,
-    inboxSpec: LeafViewSpec = DropboxSpec("Upload Tools", "apkInbox", headerText = "Use the button below to upload tools. If they meet your selected security settings, they'll be installed shortly after upload.", buttonText = "Choose APK to Install"),
+    inboxSpec: LeafViewSpec = UploadSpec("Upload Tools", "apkInbox", headerText = "Use the button below to upload tools. If they meet your selected security settings, they'll be installed shortly after upload.", buttonText = "Choose APK to Install"),
     signatureSpec: LeafViewSpec = FileBrowserSpec("Developer Keys", "developerSigningKeys", headerText = "You can allowlist specific signing keys, so you don't have to blow a hole in LightOS' security to install an in-progress tool.\n\nUpload a .txt file with your key's public hash as a hexadecimal string. You can upload as many as you want, but LightOS will only read one per file."),
     authSpec: LeafViewSpec = FileBrowserSpec("Authentication", "clientKeys", headerText = "Each file represents a persisted authentication key, which can be used to access the Tool Manager's API endpoints (to upload/download files, etc.). The files are encrypted on disk.\n\nIf you want a client (i.e. your dev machine) to always have access to the Tool Manager's API endpoints, you can upload a plaintext file with a key here. It will remain until you delete it. Keys minted by the server may also exist here - these will expire automatically, but feel free to delete them.")
 ): BranchView {

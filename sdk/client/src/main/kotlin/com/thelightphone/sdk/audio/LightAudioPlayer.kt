@@ -3,13 +3,16 @@ package com.thelightphone.sdk.audio
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.common.Timeline
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import java.io.File
@@ -30,6 +33,7 @@ import kotlinx.coroutines.flow.first
 enum class LightAudioPlayerAvailability {
     Initializing,
     Ready,
+    Refused,
     Released,
 }
 
@@ -40,18 +44,20 @@ enum class LightAudioPlayerAvailability {
  * Transient focus loss pauses and later resumes playback; duckable loss lowers
  * volume. Call [release] when the owning screen is destroyed.
  */
+@OptIn(UnstableApi::class)
 class LightAudioPlayer internal constructor(
     context: Context,
-    usage: LightAudioUsage = LightAudioUsage.Music,
-    internal val playback: LightAudioPlayback = LightAudioPlayback.Attached,
+    spec: LightPlayerSpec = LightPlayerSpec(),
     private val onRelease: () -> Unit = {},
 ) {
+    internal val playback = spec.playback
     private val scopeJob = SupervisorJob()
     private val scope = CoroutineScope(scopeJob + Dispatchers.Main.immediate)
     private val _positionMs = MutableStateFlow(0L)
     private val _durationMs = MutableStateFlow(0L)
     private val _isPlaying = MutableStateFlow(false)
     private val _currentMediaItemIndex = MutableStateFlow(NO_MEDIA_ITEM)
+    private val _queue = MutableStateFlow<List<LightQueueItem>>(emptyList())
     private val _error = MutableStateFlow<LightAudioError?>(null)
     private val commands = PendingPlayerCommands()
     private var positionJob: Job? = null
@@ -67,19 +73,18 @@ class LightAudioPlayer internal constructor(
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
     /** Current queue index, or `-1` when the queue is empty. */
     val currentMediaItemIndex: StateFlow<Int> = _currentMediaItemIndex.asStateFlow()
+    /** Queue entries visible to this player, including edits by another controller. */
+    val queue: StateFlow<List<LightQueueItem>> = _queue.asStateFlow()
     /** Current playback failure, or `null` after successful re-preparation. */
     val error: StateFlow<LightAudioError?> = _error.asStateFlow()
     /** Connection and command-acceptance lifecycle of this player. */
     val availability: StateFlow<LightAudioPlayerAvailability> = commands.availability
 
     init {
-        when (playback) {
-            LightAudioPlayback.Attached -> connectPlayer(
-                ExoPlayer.Builder(context).build().apply {
-                    setAudioAttributes(usage.toMedia3AudioAttributes(), true)
-                },
-            )
-            LightAudioPlayback.Detached -> connectDetachedPlayer(context, usage)
+        when (spec.playback) {
+            LightAudioPlayback.Attached ->
+                connectPlayer(buildSdkExoPlayer(context, spec.usage, spec.cache))
+            LightAudioPlayback.Detached -> connectDetachedPlayer(context, spec.usage)
         }
     }
 
@@ -96,6 +101,13 @@ class LightAudioPlayer internal constructor(
                 } else {
                     connectedPlayer.currentMediaItemIndex
                 }
+            }
+
+            // Editing the queue can move the current item without transitioning to
+            // it, and in detached mode another controller may edit it at any time.
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                refreshQueueState(connectedPlayer)
+                _error.value = _error.value?.relocatedIn(connectedPlayer)
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -117,16 +129,16 @@ class LightAudioPlayer internal constructor(
             }
 
             override fun onPlayerErrorChanged(error: PlaybackException?) {
-                _error.value = error?.toLightAudioError(connectedPlayer.currentMediaItemIndex)
+                _error.value = error?.toLightAudioError(connectedPlayer)
             }
         })
         val state = connectedPlayer.snapshotState()
         _currentMediaItemIndex.value = state.currentMediaItemIndex
+        _queue.value = state.queue
         _positionMs.value = state.positionMs
         _durationMs.value = state.durationMs
         _isPlaying.value = state.isPlaying
-        _error.value = connectedPlayer.playerError
-            ?.toLightAudioError(connectedPlayer.currentMediaItemIndex)
+        _error.value = connectedPlayer.playerError?.toLightAudioError(connectedPlayer)
         if (state.isPlaying) {
             startPositionUpdates()
         } else {
@@ -146,10 +158,16 @@ class LightAudioPlayer internal constructor(
                 cancelPendingConnection = null
                 runCatching(future::get)
                     .onSuccess(::connectPlayer)
-                    .onFailure { release() }
+                    .onFailure { refuse() }
             },
             context.mainExecutor,
         )
+    }
+
+    private fun refuse() {
+        if (released) return
+        commands.refuse()
+        release()
     }
 
     /** Playback rate, clamped to a minimum positive rate. */
@@ -192,7 +210,7 @@ class LightAudioPlayer internal constructor(
             return
         }
         require(startIndex in items.indices) { "Start index must reference a queue item" }
-        val mediaItems = items.mapIndexed { index, item -> item.toMediaItem(index) }
+        val mediaItems = items.map(LightAudioItem::toMediaItem)
         commands.dispatch { player ->
             player.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
             _currentMediaItemIndex.value = startIndex
@@ -203,12 +221,86 @@ class LightAudioPlayer internal constructor(
     }
 
     /**
-     * Start or resume playback if audio focus is available.
+     * Appends [item] to the queue.
+     */
+    fun addMediaItem(item: LightAudioItem) {
+        val mediaItem = item.toMediaItem()
+        commands.dispatch { player ->
+            player.addMediaItem(mediaItem)
+        }
+    }
+
+    /**
+     * Inserts [item] at [index], shifting later items back. An [index] past the
+     * end appends.
+     *
+     * @throws IllegalArgumentException when [index] is negative
+     */
+    fun addMediaItem(index: Int, item: LightAudioItem) {
+        require(index >= 0) { "Queue index must not be negative" }
+        val mediaItem = item.toMediaItem()
+        commands.dispatch { player ->
+            player.addMediaItem(index.coerceAtMost(player.mediaItemCount), mediaItem)
+        }
+    }
+
+    /**
+     * Removes the item at [index]. Removing the current item advances to the
+     * next one. An [index] past the end changes nothing.
+     *
+     * @throws IllegalArgumentException when [index] is negative
+     */
+    fun removeMediaItem(index: Int) {
+        require(index >= 0) { "Queue index must not be negative" }
+        commands.dispatch { player ->
+            if (index < player.mediaItemCount) player.removeMediaItem(index)
+        }
+    }
+
+    /**
+     * Moves the item at [fromIndex] to [toIndex] without interrupting playback
+     * of the current item. A [toIndex] past the end moves to the end, and a
+     * [fromIndex] past the end changes nothing.
+     *
+     * @throws IllegalArgumentException when either index is negative
+     */
+    fun moveMediaItem(fromIndex: Int, toIndex: Int) {
+        require(fromIndex >= 0 && toIndex >= 0) { "Queue indices must not be negative" }
+        commands.dispatch { player ->
+            val lastIndex = player.mediaItemCount - 1
+            if (fromIndex <= lastIndex) {
+                player.moveMediaItem(fromIndex, toIndex.coerceAtMost(lastIndex))
+            }
+        }
+    }
+
+    /**
+     * Replaces the item at [index] with [item]. An [index] past the end changes
+     * nothing. Replacing the current item restarts it from the beginning; seek
+     * afterwards to resume where it was.
+     *
+     * To swap an expired URL for a fresh one, give [item] the same
+     * [LightAudioItem.id] as the item it replaces. Cached bytes are filed under
+     * the id, so the new URL reuses what the old one already downloaded.
+     *
+     * @throws IllegalArgumentException when [index] is negative
+     */
+    fun replaceMediaItem(index: Int, item: LightAudioItem) {
+        require(index >= 0) { "Queue index must not be negative" }
+        val mediaItem = item.toMediaItem()
+        commands.dispatch { player ->
+            if (index < player.mediaItemCount) player.replaceMediaItem(index, mediaItem)
+        }
+    }
+
+    /**
+     * Start or resume playback if audio focus is available. An idle player is
+     * prepared first, and an ended one restarts its current item.
      *
      * Observe [isPlaying] for the actual playback state.
      */
     fun play() {
-        commands.dispatch(Player::play)
+        commands.dispatch(::startPlayback)
     }
 
     /** Pauses playback. */
@@ -219,6 +311,7 @@ class LightAudioPlayer internal constructor(
     /** Stops playback and returns to position zero. */
     fun stop() {
         commands.dispatch { player ->
+            player.playWhenReady = false
             player.stop()
             player.seekTo(0L)
             updatePosition(player)
@@ -233,16 +326,6 @@ class LightAudioPlayer internal constructor(
         }
     }
 
-    /** Seeks backward 15 seconds, clamped to the item bounds. */
-    fun skipBack() {
-        seekTo(skipPosition(positionMs.value, durationMs.value, -SKIP_INTERVAL_MS))
-    }
-
-    /** Seeks forward 15 seconds, clamped to the item bounds. */
-    fun skipForward() {
-        seekTo(skipPosition(positionMs.value, durationMs.value, SKIP_INTERVAL_MS))
-    }
-
     /** Selects the next queue item when one exists. */
     fun skipToNext() {
         commands.dispatch(Player::seekToNextMediaItem)
@@ -251,6 +334,17 @@ class LightAudioPlayer internal constructor(
     /** Selects the previous queue item when one exists. */
     fun skipToPrevious() {
         commands.dispatch(Player::seekToPreviousMediaItem)
+    }
+
+    /**
+     * Selects the queue item at [index], starting it at the beginning. An index past the end
+     * changes nothing.
+     */
+    fun seekToDefaultPosition(index: Int) {
+        require(index >= 0) { "Queue index must not be negative" }
+        commands.dispatch { player ->
+            if (index < player.mediaItemCount) player.seekToDefaultPosition(index)
+        }
     }
 
     /** Waits for connection, returning `false` if this player is released first. */
@@ -301,6 +395,18 @@ class LightAudioPlayer internal constructor(
     private fun updateDuration(player: Player) {
         _durationMs.value = player.duration.validDuration()
     }
+
+    private fun refreshQueueState(player: Player) {
+        val state = player.snapshotState()
+        _queue.value = state.queue
+        _currentMediaItemIndex.value = state.currentMediaItemIndex
+        _durationMs.value = state.durationMs
+    }
+
+}
+
+internal fun startPlayback(player: Player) {
+    Util.handlePlayButtonAction(player)
 }
 
 internal suspend fun awaitPlayerReady(
@@ -308,14 +414,16 @@ internal suspend fun awaitPlayerReady(
 ): Boolean = availability.first { it != LightAudioPlayerAvailability.Initializing } ==
     LightAudioPlayerAvailability.Ready
 
-internal fun LightAudioItem.toMediaItem(queueIndex: Int): MediaItem {
-    val uri = Uri.parse(source.uriString())
-    return MediaItem.Builder()
-        .setUri(uri)
-        .setMediaId(uri.toString())
-        .setMediaMetadata(metadata.toMedia3Metadata(queueIndex))
-        .build()
-}
+@OptIn(UnstableApi::class)
+internal fun LightAudioItem.toMediaItem(): MediaItem = MediaItem.Builder()
+    .setUri(Uri.parse(source.uriString()))
+    .setMediaId(stableId())
+    .setCustomCacheKey(stableId())
+    .setMediaMetadata(metadata.toMedia3Metadata())
+    .build()
+
+/** This item's [LightAudioItem.id], or its location when identity is location. */
+internal fun LightAudioItem.stableId(): String = id ?: source.uriString()
 
 internal fun LightAudioSource.uriString(): String = when (this) {
     is LightAudioSource.FileSource -> Uri.fromFile(file).toString()
@@ -323,22 +431,18 @@ internal fun LightAudioSource.uriString(): String = when (this) {
     is LightAudioSource.UrlSource -> url
 }
 
-private fun LightMediaMetadata.toMedia3Metadata(queueIndex: Int): MediaMetadata {
+private fun LightMediaMetadata.toMedia3Metadata(): MediaMetadata {
     return MediaMetadata.Builder()
         .setTitle(title)
         .setArtist(artist)
         .setAlbumTitle(album)
         .setDurationMs(durationMs)
-        .setTrackNumber(queueIndex + 1)
         .build()
-}
-
-internal fun skipPosition(positionMs: Long, durationMs: Long, deltaMs: Long): Long {
-    return (positionMs + deltaMs).coerceIn(0L, durationMs.validDuration())
 }
 
 internal data class ConnectedPlayerState(
     val currentMediaItemIndex: Int,
+    val queue: List<LightQueueItem>,
     val positionMs: Long,
     val durationMs: Long,
     val isPlaying: Boolean,
@@ -346,14 +450,26 @@ internal data class ConnectedPlayerState(
 
 internal fun Player.snapshotState(): ConnectedPlayerState = ConnectedPlayerState(
     currentMediaItemIndex = if (mediaItemCount == 0) NO_MEDIA_ITEM else currentMediaItemIndex,
+    queue = (0 until mediaItemCount).map { index -> getMediaItemAt(index).toLightQueueItem() },
     positionMs = currentPosition.coerceAtLeast(0L),
     durationMs = duration.validDuration(),
     isPlaying = isPlaying,
 )
 
+data class LightQueueItem(val id: String, val metadata: LightMediaMetadata)
+
+internal fun MediaItem.toLightQueueItem(): LightQueueItem = LightQueueItem(
+    id = mediaId,
+    metadata = LightMediaMetadata(
+        title = mediaMetadata.title?.toString().orEmpty(),
+        artist = mediaMetadata.artist?.toString(),
+        album = mediaMetadata.albumTitle?.toString(),
+        durationMs = mediaMetadata.durationMs,
+    ),
+)
+
 private fun Long.validDuration(): Long = takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
 
-private const val SKIP_INTERVAL_MS = 15_000L
 private const val POSITION_POLL_MS = 250L
 private const val MIN_SPEED = 0.1f
 /** Queue index reported when a player has no media item. */

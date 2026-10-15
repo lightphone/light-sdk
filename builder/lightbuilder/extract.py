@@ -30,6 +30,7 @@ from .allowlist import (
     BUILD_SCRIPT_FORBIDDEN_PATTERNS,
     EXTRACTION_TREES,
     FORBIDDEN_PATH_COMPONENTS,
+    FORBIDDEN_TOOL_ROOT_FILES,
     MAX_FILE_COUNT,
     MAX_FILE_SIZE_BYTES,
     MAX_TOTAL_EXTRACTED_BYTES,
@@ -125,6 +126,8 @@ def _copy_tool_root_files(
     for entry in src_tool.iterdir():
         if entry.is_dir():
             continue
+        if entry.name in FORBIDDEN_TOOL_ROOT_FILES:
+            raise ExtractionError(f"forbidden tool root file: {entry.name}")
         if entry.name not in ALLOWED_TOOL_ROOT_FILES:
             # Quietly ignore stray files (.gitignore, .DS_Store, etc.)
             continue

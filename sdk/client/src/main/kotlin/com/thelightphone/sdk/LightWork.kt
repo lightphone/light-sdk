@@ -44,15 +44,19 @@ import kotlin.time.toJavaDuration
 @Retention(AnnotationRetention.SOURCE)
 annotation class LightJob(val key: String)
 
+const val LIGHT_FAIL_REASON = "LIGHT_FAIL_REASON"
+const val LIGHT_SUCCESS_MESSAGE = "LIGHT_SUCCESS_MESSAGE"
+const val LIGHT_SUCCESS_OUTPUT_FILE = "LIGHT_SUCCESS_OUTPUT_FILE"
+
 sealed interface LightJobResult {
     /** Job finished successfully. */
-    class Success(val outputData: Map<String, String> = emptyMap()) : LightJobResult
+    class Success(val outputData: Map<String, String> = emptyMap(), val outputFilePath: String?, val message: String?) : LightJobResult
 
     /** Job hit a transient failure. Will automatically reschedule with backoff. */
     object Retry : LightJobResult
 
     /** Job has failed permanently. */
-    class Error(val outputData: Map<String, String> = emptyMap()) : LightJobResult
+    class Error(val reason: String, val outputData: Map<String, String> = emptyMap()) : LightJobResult
 }
 
 typealias LightJobHandler = suspend (SealedLightContext, Map<String, String>) -> LightJobResult
@@ -103,7 +107,7 @@ private fun LightJobState.isTerminal(): Boolean =
 
 private const val LIGHT_JOB_KEY_PARAM = "__light_job_key__"
 
-private fun Map<String, String>.toData(): Data {
+private fun Map<String, String?>.toData(): Data {
     val pairs = entries.map { it.key to it.value }.toTypedArray()
     return workDataOf(*pairs)
 }
@@ -200,6 +204,7 @@ object LightWork {
      * @param lightContext the sandboxed context
      * @param jobKeyOrTag the [LightJob.key] or custom `tag` used at enqueue time
      */
+
     fun observe(lightContext: SealedLightContext, jobKeyOrTag: String): Flow<LightJobState> =
         WorkManager.getInstance(lightContext.androidContext)
             .getWorkInfosForUniqueWorkFlow(jobKeyOrTag)
@@ -237,9 +242,17 @@ class LightJobWorkManagerWrapper(
         val input = inputData.toStringMap() - LIGHT_JOB_KEY_PARAM
         val sealedLightContext = SealedLightContext(applicationContext)
         return when (val result = handler(sealedLightContext, input)) {
-            is LightJobResult.Success -> Result.success(result.outputData.toData())
+            is LightJobResult.Success -> {
+                val outputData = result.outputData +
+                        (LIGHT_SUCCESS_OUTPUT_FILE to result.outputFilePath) +
+                        (LIGHT_SUCCESS_MESSAGE to result.message)
+                Result.success(outputData.toData())
+            }
             is LightJobResult.Retry -> Result.retry()
-            is LightJobResult.Error -> Result.failure(result.outputData.toData())
+            is LightJobResult.Error -> {
+                val outputData = result.outputData + (LIGHT_FAIL_REASON to result.reason)
+                Result.failure(outputData.toData())
+            }
         }
     }
 }

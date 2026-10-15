@@ -1,0 +1,37 @@
+{
+  "allow": [
+    {
+      "approvedArtifacts": [
+        {
+          "buildId": "build_02H"
+        },
+        {
+          "apkSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "minVersionCode": 7,
+      "signerSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "toolId": "com.example.tool"
+    }
+  ],
+  "block": [
+    {
+      "action": "purge",
+      "match": {
+        "toolId": "com.bad.tool"
+      },
+      "reason": "compromised"
+    }
+  ],
+  "issuedAt": "2026-08-25T00:00:00Z",
+  "revokedStampCerts": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  ],
+  "schemaVersion": 1,
+  "trustedStampCerts": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  ],
+  "version": 42
+}
