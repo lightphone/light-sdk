@@ -81,7 +81,7 @@ the SDK supplies the back button. Screens come in `LightScreen` / `LightViewMode
 | `GamesListScreen` / `GameListRow` | The tool's home: the player's games and what their status means |
 | `CreateGameScreen` / `JoinByPhraseScreen` / `LightCodeInput` | Invite-code create and join, OTP-style per-letter entry |
 | `SharePhrase` | Sharing the invite code from inside a game |
-| `GameView` / `ChessBoard` | The board, its ViewModel, and rendering (check highlight, last-move dot-and-arrow) |
+| `GameView` / `ChessBoard` | The board, its ViewModel, and rendering (check highlight, last-move square shading) |
 | `GameActions` / `GameOutcome` | Draw offer/answer/decline, resign, and how a game ended |
 | `ReplayLog` | Move history, numbered by half-move to match the backend |
 | `FlamingoApi` / `FlamingoModels` | Ktor HTTP client against `https://neoneon.dev/flamingo` |

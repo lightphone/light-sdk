@@ -153,8 +153,9 @@ class GameViewViewModel(
         // The square of the king currently in check (either color), marked on the board. Stored
         // rather than derived from [position], which alone can't answer it — see checkedKingSquare.
         val checkedKingSquare: Square? = null,
-        // The from/to squares of the move just played, pointed out by an arrow once the game is
-        // over, and how it ended. Null outcome means the game is still on.
+        // The from/to squares of the move just played, shaded on the board (always once the game is
+        // over, per lastMoveVisibility while it's live), and how it ended. Null outcome means the
+        // game is still on.
         val lastMove: Pair<Square, Square>? = null,
         val outcome: GameOutcome? = null,
         // The bell's toggle. Raised on its own when something lands that needs an answer; closed
@@ -241,7 +242,7 @@ class GameViewViewModel(
         replay.record(live)
         val outcome = gameOutcome(board.state, resignedColor, agreedDraw)
         // A finished game is read, not played: the board shows whichever frame the player has
-        // stepped to, taken whole so the opening position can't be shown under the arrow of the
+        // stepped to, taken whole so the opening position can't be shown under the shading of the
         // move that ended the game. While the game is on there is only ever one frame worth
         // showing — the live one — so the playing path is unchanged.
         val frame = if (outcome != null) replay.current ?: live else live
@@ -820,7 +821,7 @@ private fun GameScreen(
         ) {
             when {
                 // A finished game gets no pane of its own: GameContent already presents the
-                // ending on the nav bar with an arrow along the move it ended on, and the board
+                // ending on the nav bar with the move it ended on shaded, and the board
                 // is the thing worth looking at. endedGame() takes the overlays down for it.
                 //
                 // The notifications pane outranks the share one: it can be holding a decision
@@ -1197,9 +1198,9 @@ private fun checkedState(): GameViewViewModel.State {
     )
 }
 
-// The two ways a game ends, both built from a real board so the arrow and the outcome line come
-// from the same code the screen runs. Fool's mate leaves black's queen on h4 — a long diagonal
-// arrow across the board — with the mated white king underlined on e1.
+// The two ways a game ends, both built from a real board so the shaded squares and the outcome line
+// come from the same code the screen runs. Fool's mate leaves black's queen on h4, with d8 and h4
+// shaded and the mated white king underlined on e1.
 private fun matedState(): GameViewViewModel.State {
     val board = Board()
     var last: Move? = null
@@ -1323,8 +1324,8 @@ private fun PreviewGameViewInCheck(
     GameScreen(state = checkedState(), colors = colors)
 }
 
-// A game that ended in mate: "Checkmate, black won" on the nav bar's second line, an arrow along
-// the move that delivered it, and the mated king still underlined beneath it.
+// A game that ended in mate: "Checkmate, black won" on the nav bar's second line, the from- and
+// to-squares of the move that delivered it shaded, and the mated king still underlined beneath it.
 @Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
 @Composable
 private fun PreviewGameViewCheckmated(
