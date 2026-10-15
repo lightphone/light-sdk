@@ -44,6 +44,9 @@ android {
         versionName = "1.0"
         buildConfigField("String", "PUSH_DOMAIN", "\"${localProps.getProperty("pushDomain", "")}\"")
         buildConfigField("String", "MOLLYSOCKET_URI", "\"${localProps.getProperty("mollysocketUri", "")}\"")
+        // fallback is the shared dev instance, see https://github.com/lightphone/light-oauth-relay
+        // please don't use it for your own projects <3, set backupWorkerHost in local.properties
+        buildConfigField("String", "BACKUP_WORKER_HOST", "\"${localProps.getProperty("backupWorkerHost", "light-oauth-relay.dupontgu.workers.dev")}\"")
     }
 
     buildFeatures {
@@ -89,6 +92,11 @@ dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.server.auth)
+    implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.serialization.json)
     implementation(libs.androidx.splashscreen)
+    implementation(libs.androidx.work.runtime)
 }

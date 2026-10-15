@@ -15,9 +15,12 @@ sealed interface LightBarButton {
     val onClick: (() -> Unit)?
     val contentDescription: String?
 
+    val enabled: Boolean
+
     data class Text(
         val text: String,
         override val contentDescription: String? = null,
+        override val enabled: Boolean = true,
         override val onClick: (() -> Unit)?,
     ) : LightBarButton
 
@@ -31,6 +34,7 @@ sealed interface LightBarButton {
         override val onClick: (() -> Unit)?,
         override val contentDescription: String? = null,
         val sizeUnits: Float = LightBarButtonDefaults.ICON_SIZE_UNITS,
+        override val enabled: Boolean = true
     ) : LightBarButton
 
     /**
@@ -41,6 +45,7 @@ sealed interface LightBarButton {
         override val onClick: (() -> Unit)?,
         override val contentDescription: String? = icon.name,
         val sizeUnits: Float = LightBarButtonDefaults.ICON_SIZE_UNITS,
+        override val enabled: Boolean = true
     ) : LightBarButton
 }
 
@@ -71,7 +76,9 @@ internal fun LightBarButtonView(
     }
 
     val baseModifier = Modifier.let { modifier ->
-        if (button.onClick != null) modifier.lightClickable { button.onClick?.invoke() } else modifier
+        if (button.onClick != null) {
+            modifier.lightClickable(enabled = button.enabled) { button.onClick?.invoke() }
+        } else modifier
     }
 
     when (button) {
@@ -85,6 +92,7 @@ internal fun LightBarButtonView(
                     variant = textVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    lighten = !button.enabled
                 )
             }
         }
