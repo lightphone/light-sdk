@@ -1,9 +1,9 @@
 package com.thelightphone.sdk.emulator.backup
 
 import android.content.Context
-import com.thelightphone.backup.RemoteAccessTokenProvider
 import com.thelightphone.backup.RemoteBackup
 import com.thelightphone.backup.RemoteBackupProvider
+import com.thelightphone.backup.RemoteConnection
 import com.thelightphone.sdk.emulator.BuildConfig
 import com.thelightphone.sdk.server.backup.BaseBackupDependencyProvider
 import com.thelightphone.sdk.server.toolmanager.OAuthTunnelClient
@@ -17,11 +17,13 @@ class DefaultBackupDependencyProvider(
     rootPath: String,
 ) : BaseBackupDependencyProvider(appContext, logger, keyCipher, rootPath) {
 
+    // the dummy cloud only speaks OAuth, anything else means its account isn't linked
     override fun buildCustomRemoteBackup(
-        remoteAccessTokenProvider: RemoteAccessTokenProvider,
-        rootFilePath: String
-    ): RemoteBackup {
-        return EmulatorRemoteBackup(remoteAccessTokenProvider, rootFilePath)
+        connection: RemoteConnection?,
+        rootFolderPath: String
+    ): RemoteBackup? {
+        val oAuth = connection as? RemoteConnection.OAuth ?: return null
+        return EmulatorRemoteBackup(oAuth.tokenProvider, rootFolderPath)
     }
 
     override fun createOAuthTunnelClient(provider: RemoteBackupProvider): OAuthTunnelClient? {
