@@ -84,6 +84,9 @@ the SDK supplies the back button. Screens come in `LightScreen` / `LightViewMode
 | `SharePhrase` | Sharing the invite code from inside a game |
 | `GameView` / `ChessBoard` | The board, its ViewModel, and rendering (check highlight, last-move square shading) |
 | `GameActions` / `GameOutcome` | Draw offer/answer/decline, resign, and how a game ended |
+| `GamePanes` | Promotion picker, action row and centered message, shared by `GameView` and `HotSeatScreen` |
+| `HotSeatScreen` / `HotSeatGameModel` | "Local": two players on one phone, offline — see Hot seat below |
+| `HotSeatGame` / `HotSeatGameStore` (port) / `DataStoreHotSeatGameStore` (adapter) | The one stored hot seat game |
 | `ReplayLog` | Move history, numbered by half-move to match the backend |
 | `FlamingoApi` / `FlamingoModels` | Ktor HTTP client against `https://neoneon.dev/flamingo` |
 | `LiveTransport` (port) / `KtorLiveTransport` (adapter) | The live WebSocket |
@@ -96,6 +99,26 @@ the SDK supplies the back button. Screens come in `LightScreen` / `LightViewMode
 Keep the transport behind the `LiveTransport` port — `KtorLiveTransport` is the only thing
 that should know about Ktor websockets. The iOS side mirrors this split
 (`LiveTransport` / `URLSessionLiveTransport`), so the two clients stay comparable.
+
+## Hot seat
+
+Two people, one phone — `LOCAL` in the Games top bar, titled "Local" on screen. Ported from iOS
+(`flamingo`'s `docs/product/features/00008-hot-seat.md`), keeping its `HotSeat*` names.
+
+- **Local only and single.** No server, no `FlamingoApi`, no `GameViewViewModel`. `LOCAL` is
+  shown whatever the service status says. There is at most one hot seat game.
+- Stored as JSON under **`FLAMINGO_HOT_SEAT_GAME`** in the tool's DataStore. Nothing is written
+  until the first move; unreadable data is cleared. Writes go through one conflated channel in
+  `HotSeatViewModel`, so they land in order.
+- Stored as the **move list (LAN), not a FEN**: replaying through one chesskit `Board` keeps its
+  repetition counts, so threefold repetition survives a relaunch or a take-back. A stored list
+  that stops being legal is cut at the last legal move and saved back.
+- chesskit's `Board.move` **doesn't check whose turn it is** — `HotSeatGameModel` does.
+- `HotSeatGameModel` is plain Kotlin and holds the rules; take-back and reset rebuild the board
+  by replay. BACK on the promotion picker puts the pawn back (nothing was recorded for it).
+- **Turning the board is the screen's job**: the model's `orientation` trails the side to move
+  (`needsTurn`). 0.8 s after a move the board fades out (0.5 s), `turnToSideToMove()` flips it
+  while invisible, and it fades back in (0.5 s). Taps and the actions button wait for it.
 
 ## Wire contract
 

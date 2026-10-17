@@ -179,6 +179,14 @@ class GamesListScreen(sealedActivity: SealedLightActivity) :
             ) {
                 LightTopBar(
                     center = LightTopBarCenter.Text("Games"),
+                    // A game for two people on this one phone. It never touches the server, so
+                    // unlike JOIN and the add button it stays on offer whatever the service status
+                    // says — on the maintenance screen too.
+                    rightButton = LightBarButton.Text(
+                        text = "LOCAL",
+                        contentDescription = "Local game",
+                        onClick = { navigateTo(screenFactory = { HotSeatScreen(it) }) },
+                    ),
                     modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
                 )
 
