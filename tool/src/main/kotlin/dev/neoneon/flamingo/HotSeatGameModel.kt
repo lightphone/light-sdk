@@ -61,6 +61,9 @@ internal class HotSeatGameModel(storedMoves: List<String> = emptyList()) {
 
     val canTakeBack: Boolean get() = moves.isNotEmpty() || pendingPromotion != null
 
+    /** Only a finished game is worth keeping: one still being played has no result to show. */
+    val canSaveToArchive: Boolean get() = outcome != null
+
     /** The square of the king in check, either color. */
     val kingInCheck: Square? get() = checkedKingSquare(board.state, board.position)
 
@@ -189,4 +192,26 @@ internal class HotSeatGameModel(storedMoves: List<String> = emptyList()) {
             }
         }
     }
+}
+
+/**
+ * Every position the game passed through, for the archive's replay: the start position, then one
+ * after each move, with that move's squares and any check it gave. Stops where [playablePrefix]
+ * would — at a move that isn't legal, or one played after the game was already over.
+ *
+ * Mirrors iOS's `HotSeatGame.positions`.
+ */
+internal fun HotSeatGame.replayFrames(): List<ReplayFrame> {
+    val board = Board()
+    val frames = mutableListOf(ReplayFrame(position = board.position))
+    for (lan in moves) {
+        if (gameOutcome(board.state, resignedColor = null) != null) break
+        val move = HotSeatGameModel.playLan(board, lan) ?: break
+        frames += ReplayFrame(
+            position = board.position,
+            lastMove = move.start to move.end,
+            checkedKingSquare = checkedKingSquare(board.state, board.position),
+        )
+    }
+    return frames
 }

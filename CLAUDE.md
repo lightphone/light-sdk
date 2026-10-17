@@ -87,6 +87,8 @@ the SDK supplies the back button. Screens come in `LightScreen` / `LightViewMode
 | `GamePanes` | Promotion picker, action row and centered message, shared by `GameView` and `HotSeatScreen` |
 | `HotSeatScreen` / `HotSeatGameModel` | "Local": two players on one phone, offline — see Hot seat below |
 | `HotSeatGame` / `HotSeatGameStore` (port) / `DataStoreHotSeatGameStore` (adapter) | The one stored hot seat game |
+| `HotSeatArchive` / `HotSeatArchiveStore` (port) / `DataStoreHotSeatArchiveStore` (adapter) | Finished hot seat games saved to the archive |
+| `ArchiveScreen` / `HotSeatReplayScreen` | The archive, reached from Info, and an archived local game's replay |
 | `ReplayLog` | Move history, numbered by half-move to match the backend |
 | `FlamingoApi` / `FlamingoModels` | Ktor HTTP client against `https://neoneon.dev/flamingo` |
 | `LiveTransport` (port) / `KtorLiveTransport` (adapter) | The live WebSocket |
@@ -94,7 +96,7 @@ the SDK supplies the back button. Screens come in `LightScreen` / `LightViewMode
 | `PlayerKeyStore` / `SignedRequestPayload` | The AndroidKeyStore signing key, and the canonical payload every signed request agrees on |
 | `AccountScreen` | This install's display name — view and rename, reached from Info |
 | `SettingsScreen` / `LastMoveVisibility` | Settings, incl. last-move marking (`Hidden` / `Latest` / `OpponentOnly`) |
-| `InfoScreen` | Account, board settings, and legal docs, reached from the bottom bar |
+| `InfoScreen` | Archive, account, board settings, and legal docs, reached from the bottom bar |
 
 Keep the transport behind the `LiveTransport` port — `KtorLiveTransport` is the only thing
 that should know about Ktor websockets. The iOS side mirrors this split
@@ -108,8 +110,9 @@ Two people, one phone — `LOCAL` in the Games top bar, titled "Local" on screen
 - **Local only and single.** No server, no `FlamingoApi`, no `GameViewViewModel`. `LOCAL` is
   shown whatever the service status says. There is at most one hot seat game.
 - Stored as JSON under **`FLAMINGO_HOT_SEAT_GAME`** in the tool's DataStore. Nothing is written
-  until the first move; unreadable data is cleared. Writes go through one conflated channel in
-  `HotSeatViewModel`, so they land in order.
+  until the first move; unreadable data is cleared. Writes go through one channel in
+  `HotSeatViewModel`, so they land in order. It is unbounded, not conflated: a conflated one would
+  let the next game's first move swallow a pending archive write.
 - Stored as the **move list (LAN), not a FEN**: replaying through one chesskit `Board` keeps its
   repetition counts, so threefold repetition survives a relaunch or a take-back. A stored list
   that stops being legal is cut at the last legal move and saved back.
@@ -119,6 +122,15 @@ Two people, one phone — `LOCAL` in the Games top bar, titled "Local" on screen
 - **Turning the board is the screen's job**: the model's `orientation` trails the side to move
   (`needsTurn`). 0.8 s after a move the board fades out (0.5 s), `turnToSideToMove()` flips it
   while invisible, and it fades back in (0.5 s). Taps and the actions button wait for it.
+- **Save to archive** (first in Game actions, finished games only, asks first) moves the game into
+  the archive — JSON list under **`FLAMINGO_HOT_SEAT_ARCHIVE`**, newest first — and starts the
+  board over as Reset does. Moved, not copied: a take-back on an archived game would leave two
+  versions of it. The outcome is stored as iOS stores it (`whiteWins` / `blackWins` / `draw`), so
+  the list never replays a game. Mirrors iOS's `docs/product/features/00009-hot-seat-archive.md`.
+- The archive is **Info → Archive** (`ArchiveScreen`), the counterpart of iOS's Settings → Archive.
+  It follows the store as a flow. Rows open `HotSeatReplayScreen`: final position first, PREV/NEXT,
+  white at the bottom. There is no swipe on LightOS, so deleting is the replay's trash button; the
+  replay hands the id back as its result and the archive screen deletes it.
 
 ## Wire contract
 

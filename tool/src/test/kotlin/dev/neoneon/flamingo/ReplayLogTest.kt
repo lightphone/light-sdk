@@ -132,6 +132,13 @@ class ReplayLogTest {
     }
 
     @Test
+    fun thePositionLabelNamesTheMoveThatProducedIt() {
+        assertEquals("Start", replayPositionLabel(frameIndex = 0, frameCount = 5))
+        assertEquals("Move 2 of 4", replayPositionLabel(frameIndex = 2, frameCount = 5))
+        assertEquals("Move 4 of 4", replayPositionLabel(frameIndex = 4, frameCount = 5))
+    }
+
+    @Test
     fun aGameThatEndedBeforeAnyoneMovedHasOneFrameAndNowhereToStep() {
         val log = logOf()
 

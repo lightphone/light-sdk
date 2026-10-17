@@ -176,7 +176,7 @@ class GameViewViewModel(
         val canStepForward: Boolean get() = canReplay && frameIndex < frameCount - 1
 
         /** `0` is the opening position; the rest are numbered by the move that produced them. */
-        val replayLabel: String get() = if (frameIndex == 0) "Start" else "Move $frameIndex of ${frameCount - 1}"
+        val replayLabel: String get() = replayPositionLabel(frameIndex, frameCount)
 
         /** Only a game with an unfilled seat has anyone left to invite. */
         val hasOpenSeat: Boolean get() = whitePlayerId == null || blackPlayerId == null

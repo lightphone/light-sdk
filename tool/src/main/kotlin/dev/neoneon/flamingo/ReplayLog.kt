@@ -65,3 +65,10 @@ internal class ReplayLog {
         return true
     }
 }
+
+/**
+ * Where a replay stands, for the nav bar: `0` is the opening position, the rest are numbered by the
+ * move that produced them. Shared by a finished online game and an archived local one.
+ */
+internal fun replayPositionLabel(frameIndex: Int, frameCount: Int): String =
+    if (frameIndex == 0) "Start" else "Move $frameIndex of ${frameCount - 1}"

@@ -66,18 +66,29 @@ class HotSeatViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>
     // Built here rather than injected, like GamesListViewModel's: the model is an internal type,
     // and a public constructor may not name one.
     private val store: HotSeatGameStore = DataStoreHotSeatGameStore(dataStore)
+    private val archive: HotSeatArchiveStore = DataStoreHotSeatArchiveStore(dataStore)
     private val lastMoveVisibilityStore = LastMoveVisibilityStore(dataStore)
     private var model: HotSeatGameModel? = null
 
     /** `null` until the first move: opening the screen writes nothing on its own. */
     private var game: HotSeatGame? = null
 
-    // One writer, so saves land in the order they were made; conflated, so a burst of moves only
-    // writes the last of them. `null` clears the stored game.
-    private val writes = Channel<HotSeatGame?>(Channel.CONFLATED)
+    /** One change to what is stored. */
+    private sealed interface Write {
+        data class Save(val game: HotSeatGame) : Write
+        data object Clear : Write
+
+        /** Moves [archived] into the archive and off the board. */
+        data class Archive(val archived: ArchivedHotSeatGame) : Write
+    }
+
+    // One writer, so writes land in the order they were made. Unbounded rather than conflated: a
+    // conflated channel would let the first move of the next game swallow an archive write still
+    // waiting its turn, and moves come at a human pace, so there is no burst worth collapsing.
+    private val writes = Channel<Write>(Channel.UNLIMITED)
 
     /** What is laid over the board. The promotion picker isn't one: [State.promotion] drives it. */
-    enum class Pane { None, Actions, ConfirmingReset }
+    enum class Pane { None, Actions, ConfirmingReset, ConfirmingSave }
 
     data class State(
         val isLoading: Boolean = true,
@@ -94,6 +105,7 @@ class HotSeatViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>
         val promotion: Move? = null,
         val pane: Pane = Pane.None,
         val canTakeBack: Boolean = false,
+        val canSaveToArchive: Boolean = false,
         /** The board faces the player who just moved; the screen turns it. */
         val needsTurn: Boolean = false,
         /**
@@ -116,14 +128,24 @@ class HotSeatViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>
         }
         viewModelScope.launch {
             for (write in writes) {
-                if (write == null) store.clear() else store.save(write)
+                when (write) {
+                    is Write.Save -> store.save(write.game)
+                    Write.Clear -> store.clear()
+                    // Archived first, cleared second: a tool killed in between leaves the game in
+                    // both places rather than in neither, and saving it again replaces the
+                    // archived copy by its id.
+                    is Write.Archive -> {
+                        archive.add(write.archived)
+                        store.clear()
+                    }
+                }
             }
         }
         viewModelScope.launch {
             val stored = store.load()
             val loaded = HotSeatGameModel(stored?.moves.orEmpty())
             game = stored?.copy(moves = loaded.moves)
-            if (loaded.wasTrimmed) writes.trySend(game)
+            if (loaded.wasTrimmed) game?.let { writes.trySend(Write.Save(it)) }
             model = loaded
             publish { copy(isLoading = false) }
         }
@@ -200,10 +222,47 @@ class HotSeatViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>
     }
 
     fun confirmReset() {
+        startOver(Write.Clear)
+    }
+
+    /** Saving to the archive takes the game off the board for good, so it asks first, as a reset does. */
+    fun requestSaveToArchive() {
+        if (model?.canSaveToArchive != true) return
+        publish { copy(pane = Pane.ConfirmingSave) }
+    }
+
+    fun cancelSaveToArchive() {
+        publish { copy(pane = Pane.Actions) }
+    }
+
+    /**
+     * Moves the finished game into the archive and starts the board over. Moved rather than
+     * copied: there is only one hot seat game, and a take-back on a game that is already archived
+     * would leave two versions of it that disagree.
+     */
+    fun confirmSaveToArchive() {
+        val model = model ?: return
+        val outcome = model.outcome ?: return
+        // A finished game has moves, so it has been saved at least once.
+        val game = game ?: return
+        startOver(
+            Write.Archive(
+                ArchivedHotSeatGame(
+                    game = game.copy(moves = model.moves),
+                    outcome = outcome.archived(),
+                    archivedAtMillis = System.currentTimeMillis(),
+                ),
+            ),
+        )
+    }
+
+    // Back to the start position once [write] has dealt with the game that was on the board. Still
+    // facing as it was, so the players see the board turn back to white.
+    private fun startOver(write: Write) {
         val model = model ?: return
         model.reset()
         game = null
-        writes.trySend(null)
+        writes.trySend(write)
         publish { copy(pane = Pane.None, turnKey = turnKey + 1) }
     }
 
@@ -217,7 +276,7 @@ class HotSeatViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>
         val model = model ?: return
         val updated = (game ?: HotSeatGame()).copy(moves = model.moves)
         game = updated
-        writes.trySend(updated)
+        writes.trySend(Write.Save(updated))
     }
 
     // Every change goes out through here, so the board on screen can't drift from the model.
@@ -242,6 +301,7 @@ internal fun HotSeatGameModel.snapshot(base: HotSeatViewModel.State) = base.copy
     outcome = outcome,
     promotion = pendingPromotion,
     canTakeBack = canTakeBack,
+    canSaveToArchive = canSaveToArchive,
     needsTurn = needsTurn,
 )
 
@@ -272,6 +332,9 @@ class HotSeatScreen(sealedActivity: SealedLightActivity) :
                 onRequestReset = { viewModel.requestReset() },
                 onCancelReset = { viewModel.cancelReset() },
                 onConfirmReset = { viewModel.confirmReset() },
+                onRequestSaveToArchive = { viewModel.requestSaveToArchive() },
+                onCancelSaveToArchive = { viewModel.cancelSaveToArchive() },
+                onConfirmSaveToArchive = { viewModel.confirmSaveToArchive() },
                 onTurnToSideToMove = { viewModel.turnToSideToMove() },
             ),
         )
@@ -290,6 +353,9 @@ private data class HotSeatActions(
     val onRequestReset: () -> Unit = {},
     val onCancelReset: () -> Unit = {},
     val onConfirmReset: () -> Unit = {},
+    val onRequestSaveToArchive: () -> Unit = {},
+    val onCancelSaveToArchive: () -> Unit = {},
+    val onConfirmSaveToArchive: () -> Unit = {},
     val onTurnToSideToMove: () -> Unit = {},
 )
 
@@ -315,6 +381,7 @@ private fun HotSeatContent(
                 promotion != null -> PromotionPane(promotion = promotion, actions = actions)
                 state.pane == HotSeatViewModel.Pane.Actions -> ActionsPane(state = state, actions = actions)
                 state.pane == HotSeatViewModel.Pane.ConfirmingReset -> ConfirmResetPane(actions = actions)
+                state.pane == HotSeatViewModel.Pane.ConfirmingSave -> ConfirmSavePane(actions = actions)
                 else -> {
                     // Lives with the board, so a pane laid over it cancels the turn and putting the
                     // board back starts it again — which is what a take-back or reset from the
@@ -450,6 +517,11 @@ private fun ColumnScope.ActionsPane(state: HotSeatViewModel.State, actions: HotS
             .padding(horizontal = 1f.gridUnitsAsDp()),
         verticalArrangement = Arrangement.Center,
     ) {
+        ActionRow(
+            label = "Save to archive",
+            enabled = state.canSaveToArchive,
+            onClick = actions.onRequestSaveToArchive,
+        )
         ActionRow(label = "Take back move", enabled = state.canTakeBack, onClick = actions.onTakeBack)
         ActionRow(label = "Reset board", enabled = state.canTakeBack, onClick = actions.onRequestReset)
     }
@@ -470,6 +542,25 @@ private fun ColumnScope.ConfirmResetPane(actions: HotSeatActions) {
         items = listOf(
             LightBarButton.Text(text = "CANCEL", onClick = actions.onCancelReset),
             LightBarButton.Text(text = "RESET", onClick = actions.onConfirmReset),
+        ),
+    )
+}
+
+@Composable
+private fun ColumnScope.ConfirmSavePane(actions: HotSeatActions) {
+    LightTopBar(
+        leftButton = LightBarButton.LightIcon(
+            icon = LightIcons.BACK,
+            onClick = actions.onCancelSaveToArchive,
+            contentDescription = "Back to game actions",
+        ),
+        center = LightTopBarCenter.Text("Save to archive?"),
+    )
+    CenteredMessage("The game moves to the archive,\nwhere you can replay it.\nThe board starts over.")
+    LightBottomBar(
+        items = listOf(
+            LightBarButton.Text(text = "CANCEL", onClick = actions.onCancelSaveToArchive),
+            LightBarButton.Text(text = "SAVE", onClick = actions.onConfirmSaveToArchive),
         ),
     )
 }
@@ -530,6 +621,29 @@ private fun PreviewHotSeatConfirmReset(
 ) {
     HotSeatContent(
         state = previewState(listOf("e2e4"), pane = HotSeatViewModel.Pane.ConfirmingReset),
+        colors = colors,
+    )
+}
+
+// Over, so "Save to archive" is on offer.
+@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
+@Composable
+private fun PreviewHotSeatActionsFinished(
+    @PreviewParameter(LightColorsPreviewProvider::class) colors: LightColors,
+) {
+    HotSeatContent(
+        state = previewState(listOf("f2f3", "e7e5", "g2g4", "d8h4"), pane = HotSeatViewModel.Pane.Actions),
+        colors = colors,
+    )
+}
+
+@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
+@Composable
+private fun PreviewHotSeatConfirmSave(
+    @PreviewParameter(LightColorsPreviewProvider::class) colors: LightColors,
+) {
+    HotSeatContent(
+        state = previewState(listOf("f2f3", "e7e5", "g2g4", "d8h4"), pane = HotSeatViewModel.Pane.ConfirmingSave),
         colors = colors,
     )
 }

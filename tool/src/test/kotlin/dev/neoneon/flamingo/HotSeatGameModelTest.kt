@@ -292,4 +292,77 @@ class HotSeatGameModelTest {
     fun takeBackAndResetStayAvailableAfterTheGameEnds() {
         assertTrue(HotSeatGameModel(foolsMate).canTakeBack)
     }
+
+    // MARK: Saving to the archive
+
+    @Test
+    fun onlyAFinishedGameCanBeSavedToTheArchive() {
+        assertFalse(HotSeatGameModel().canSaveToArchive)
+        assertFalse(HotSeatGameModel(listOf("e2e4", "e7e5")).canSaveToArchive)
+        assertTrue(HotSeatGameModel(foolsMate).canSaveToArchive)
+        assertTrue(HotSeatGameModel(stalemate).canSaveToArchive)
+        assertTrue(HotSeatGameModel(repetition).canSaveToArchive)
+    }
+
+    @Test
+    fun aPromotionWaitingForItsPieceCannotBeSaved() {
+        val model = HotSeatGameModel(beforePromotion)
+        play("g7h8", model)
+        assertFalse(model.canSaveToArchive)
+    }
+
+    @Test
+    fun takingBackTheLastMoveOfAFinishedGameTakesSavingAway() {
+        val model = HotSeatGameModel(foolsMate)
+        model.takeBack()
+        assertFalse(model.canSaveToArchive)
+    }
+
+    // MARK: Replay
+
+    @Test
+    fun aGameWithoutMovesReplaysAsTheStartPosition() {
+        val frames = HotSeatGame(moves = emptyList()).replayFrames()
+        assertEquals(1, frames.size)
+        assertEquals(Board().position, frames.single().position)
+        assertNull(frames.single().lastMove)
+    }
+
+    @Test
+    fun replayHasTheStartThenOnePositionPerMove() {
+        val frames = HotSeatGame(moves = foolsMate).replayFrames()
+        assertEquals(5, frames.size)
+        assertEquals(Board().position, frames.first().position)
+        assertNull(frames.first().lastMove)
+        assertEquals(Square("f2") to Square("f3"), frames[1].lastMove)
+        assertEquals(HotSeatGameModel(foolsMate).position, frames.last().position)
+    }
+
+    @Test
+    fun replayMarksTheMateOnItsLastFrame() {
+        val last = HotSeatGame(moves = foolsMate).replayFrames().last()
+        assertEquals(Square("d8") to Square("h4"), last.lastMove)
+        assertEquals(Square("e1"), last.checkedKingSquare)
+    }
+
+    @Test
+    fun replayPlaysAPromotion() {
+        val frames = HotSeatGame(moves = beforePromotion + "g7h8q").replayFrames()
+        assertEquals(beforePromotion.size + 2, frames.size)
+        assertEquals(
+            Piece(Piece.Kind.queen, Piece.Color.white, Square("h8")),
+            frames.last().position.piece(at = Square("h8")),
+        )
+    }
+
+    @Test
+    fun replayStopsAtTheFirstIllegalMove() {
+        assertEquals(2, HotSeatGame(moves = listOf("e2e4", "e2e4", "e7e5")).replayFrames().size)
+    }
+
+    @Test
+    fun replayStopsWhereTheGameEnded() {
+        assertEquals(foolsMate.size + 1, HotSeatGame(moves = foolsMate + "a2a3").replayFrames().size)
+        assertEquals(repetition.size + 1, HotSeatGame(moves = repetition + "e2e4").replayFrames().size)
+    }
 }

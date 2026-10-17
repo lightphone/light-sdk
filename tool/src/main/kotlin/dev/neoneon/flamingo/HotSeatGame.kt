@@ -25,7 +25,8 @@ data class HotSeatGame(
     val moves: List<String> = emptyList(),
 )
 
-private val hotSeatJson = Json { ignoreUnknownKeys = true }
+// Shared with the archive (HotSeatArchive.kt), which keeps finished games in this same shape.
+internal val hotSeatJson = Json { ignoreUnknownKeys = true }
 
 internal fun encodeHotSeatGame(game: HotSeatGame): String = hotSeatJson.encodeToString(HotSeatGame.serializer(), game)
 
