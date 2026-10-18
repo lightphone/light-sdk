@@ -179,13 +179,13 @@ class GamesListScreen(sealedActivity: SealedLightActivity) :
             ) {
                 LightTopBar(
                     center = LightTopBarCenter.Text("Games"),
-                    // A game for two people on this one phone. It never touches the server, so
-                    // unlike JOIN and the add button it stays on offer whatever the service status
-                    // says — on the maintenance screen too.
-                    rightButton = LightBarButton.Text(
-                        text = "LOCAL",
-                        contentDescription = "Local game",
-                        onClick = { navigateTo(screenFactory = { HotSeatScreen(it) }) },
+                    // Info: the archive, the account, board settings and the legal docs. It
+                    // always stays — the terms and the privacy policy are readable whatever else
+                    // is going on.
+                    rightButton = LightBarButton.LightIcon(
+                        icon = LightIcons.ELLIPSES,
+                        onClick = { navigateTo(screenFactory = { InfoScreen(it) }) },
+                        contentDescription = "Info",
                     ),
                     modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
                 )
@@ -310,38 +310,30 @@ class GamesListScreen(sealedActivity: SealedLightActivity) :
                 }
 
                 LightBottomBar(
-                    // JOIN and the add button drop out when the service has closed those paths:
-                    // the server would refuse the request anyway, and a button that can only
-                    // produce an error is worse than no button. Info always stays — the terms
-                    // and the privacy policy are readable whatever else is going on.
-                    items = listOfNotNull(
-                        // Info: read-only Terms of Service and Privacy Policy.
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.ELLIPSES,
-                            onClick = { navigateTo(screenFactory = { InfoScreen(it) }) },
-                            contentDescription = "Info",
-                        ),
-                        // Join a game a friend created by entering the invite code they shared.
+                    // `listOf`, not `listOfNotNull`: the bar centers a lone item, so a REMOTE that
+                    // drops out has to leave its slot behind to keep LOCAL at the left.
+                    items = listOf(
+                        // A game for two people on this one phone. It never touches the server,
+                        // so unlike REMOTE it stays on offer whatever the service status says —
+                        // on the maintenance screen too.
                         LightBarButton.Text(
-                            text = "JOIN",
+                            text = "LOCAL",
+                            contentDescription = "Local game",
+                            onClick = { navigateTo(screenFactory = { HotSeatScreen(it) }) },
+                        ),
+                        // Create a game or join one by code. It drops out once the service has
+                        // closed both paths: the server would refuse the request anyway, and a
+                        // button that can only produce an error is worse than no button.
+                        LightBarButton.Text(
+                            text = "REMOTE",
+                            contentDescription = "Remote game",
                             onClick = {
                                 navigateTo(
-                                    screenFactory = { JoinByPhraseScreen(it) },
+                                    screenFactory = { RemoteGameScreen(it, status.features) },
                                     resultCallback = { destination -> openGame(destination) },
                                 )
                             },
-                        ).takeIf { status.features.invites },
-                        // Create a game: choose a color, then share the minted code.
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.ADD,
-                            onClick = {
-                                navigateTo(
-                                    screenFactory = { CreateGameScreen(it) },
-                                    resultCallback = { destination -> openGame(destination) },
-                                )
-                            },
-                            contentDescription = "New game",
-                        ).takeIf { status.features.newGames },
+                        ).takeIf { status.features.newGames || status.features.invites },
                     ),
                 )
             }
@@ -349,8 +341,8 @@ class GamesListScreen(sealedActivity: SealedLightActivity) :
     }
 }
 
-// Shown only once the list has loaded and come back empty. It names no buttons: JOIN and
-// the add button drop out when the service closes those paths, and this text stays the same.
+// Shown only once the list has loaded and come back empty. It names no buttons: REMOTE drops
+// out when the service closes its paths, and this text stays the same.
 private val emptyGamesParagraphs = listOf(
     "Chess was invented for two people sitting at one table. Somewhere near you is someone " +
         "who'd love to beat you at it, or lose to you gracefully. Go find them.",

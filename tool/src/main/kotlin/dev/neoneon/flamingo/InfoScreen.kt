@@ -107,8 +107,9 @@ class InfoScreen(sealedActivity: SealedLightActivity) : SimpleLightScreen<Unit>(
     }
 }
 
+/** One tappable row of a menu screen — Info's, and [RemoteGameScreen]'s. */
 @Composable
-private fun InfoRow(title: String, onClick: () -> Unit) {
+internal fun InfoRow(title: String, onClick: () -> Unit) {
     LightText(
         text = title,
         variant = LightTextVariant.Copy,

@@ -111,7 +111,7 @@ class CreateGameScreen(sealedActivity: SealedLightActivity) :
                     leftButton = LightBarButton.LightIcon(
                         icon = LightIcons.BACK,
                         onClick = { goBack() },
-                        contentDescription = "Back to games",
+                        contentDescription = "Back",
                     ),
                     center = LightTopBarCenter.Text("New game"),
                     modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),

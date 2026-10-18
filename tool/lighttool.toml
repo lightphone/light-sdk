@@ -1,6 +1,6 @@
 [tool]
 id = "dev.neoneon.flamingo"
-label = "Bird Chess"
+label = "Flamingo Chess"
 versionCode = 2
 versionName = "1.1.0"
 permissions = ["android.permission.INTERNET"]

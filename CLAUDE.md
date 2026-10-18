@@ -80,7 +80,7 @@ the SDK supplies the back button. Screens come in `LightScreen` / `LightViewMode
 |------|----------------|
 | `ToolEntryPoint` | `@EntryPoint` — LightOS registration data and push notifications |
 | `GamesListScreen` / `GameListRow` | The tool's home: the player's games and what their status means |
-| `CreateGameScreen` / `JoinByPhraseScreen` / `LightCodeInput` | Invite-code create and join, OTP-style per-letter entry |
+| `RemoteGameScreen` / `CreateGameScreen` / `JoinByPhraseScreen` / `LightCodeInput` | REMOTE in the Games bottom bar: invite-code create and join, OTP-style per-letter entry |
 | `SharePhrase` | Sharing the invite code from inside a game |
 | `GameView` / `ChessBoard` | The board, its ViewModel, and rendering (check highlight, last-move square shading) |
 | `GameActions` / `GameOutcome` | Draw offer/answer/decline, resign, and how a game ended |
@@ -96,7 +96,7 @@ the SDK supplies the back button. Screens come in `LightScreen` / `LightViewMode
 | `PlayerKeyStore` / `SignedRequestPayload` | The AndroidKeyStore signing key, and the canonical payload every signed request agrees on |
 | `AccountScreen` | This install's display name — view and rename, reached from Info |
 | `SettingsScreen` / `LastMoveVisibility` | Settings, incl. last-move marking (`Hidden` / `Latest` / `OpponentOnly`) |
-| `InfoScreen` | Archive, account, board settings, and legal docs, reached from the bottom bar |
+| `InfoScreen` | Archive, account, board settings, and legal docs, reached from the ellipsis in the Games top bar |
 
 Keep the transport behind the `LiveTransport` port — `KtorLiveTransport` is the only thing
 that should know about Ktor websockets. The iOS side mirrors this split
@@ -104,7 +104,7 @@ that should know about Ktor websockets. The iOS side mirrors this split
 
 ## Hot seat
 
-Two people, one phone — `LOCAL` in the Games top bar, titled "Local" on screen. Ported from iOS
+Two people, one phone — `LOCAL` in the Games bottom bar, titled "Local" on screen. Ported from iOS
 (`flamingo`'s `docs/product/features/00008-hot-seat.md`), keeping its `HotSeat*` names.
 
 - **Local only and single.** No server, no `FlamingoApi`, no `GameViewViewModel`. `LOCAL` is
