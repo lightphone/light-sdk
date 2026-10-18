@@ -3,6 +3,7 @@ package dev.neoneon.flamingo
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -40,6 +41,45 @@ class FlamingoModelsTest {
         assertEquals("96596872", detail.game.whitePlayerID)
         assertEquals("AB98F326", detail.game.blackPlayerID)
         assertEquals("active", detail.game.status)
+    }
+
+    @Test
+    fun decodesTheArchiveFlags() {
+        val body = """{"game":{"id":"g","fen":"f","status":"checkmate","createdAt":"x","updatedAt":"y",""" +
+            """"whitePlayerID":"W","blackPlayerID":"B","archivedByWhite":true,"archivedByBlack":false}}"""
+
+        val game = json.decodeFromString<ArchiveResponse>(body).game
+
+        assertTrue(game.archivedByWhite)
+        assertFalse(game.archivedByBlack)
+    }
+
+    @Test
+    fun aGameWithoutArchiveFlagsIsArchivedByNobody() {
+        val body = """{"id":"g","fen":"f","status":"checkmate","createdAt":"x","updatedAt":"y",""" +
+            """"whitePlayerID":"W","blackPlayerID":"B"}"""
+
+        val game = json.decodeFromString<Game>(body)
+
+        assertFalse(game.isArchivedBy("W"))
+        assertFalse(game.isArchivedBy("B"))
+    }
+
+    @Test
+    fun archivingIsReadFromOurOwnSeat() {
+        val game = Game(
+            id = "g", fen = "f", status = "checkmate", createdAt = "x", updatedAt = "y",
+            whitePlayerID = "96596872-5FE3-4574-8684-ACA1047AFA23",
+            blackPlayerID = "AB98F326-AA39-4F83-8E15-EA8ECABBFC05",
+            archivedByWhite = true,
+        )
+
+        // The server echoes ids uppercase; this client stores its own lowercase.
+        assertTrue(game.isArchivedBy("96596872-5fe3-4574-8684-aca1047afa23"))
+        // The opponent archiving it says nothing about our seat.
+        assertFalse(game.isArchivedBy("ab98f326-aa39-4f83-8e15-ea8ecabbfc05"))
+        assertFalse(game.isArchivedBy("someone-else"))
+        assertFalse(game.isArchivedBy(null))
     }
 
     @Test

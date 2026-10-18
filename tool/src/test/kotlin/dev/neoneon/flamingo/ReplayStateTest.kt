@@ -1,5 +1,6 @@
 package dev.neoneon.flamingo
 
+import dev.neoneon.chesskit.Board
 import dev.neoneon.chesskit.Piece
 import dev.neoneon.chesskit.Position
 import kotlin.test.Test
@@ -85,5 +86,42 @@ class ReplayStateTest {
         // "7 of 8".
         assertEquals("Move 7 of 7", state(outcome = checkmate, frameIndex = 7, frameCount = 8).replayLabel)
         assertEquals("Move 3 of 7", state(outcome = checkmate, frameIndex = 3, frameCount = 8).replayLabel)
+    }
+
+    // MARK: Archiving
+
+    private fun seated(outcome: GameOutcome?, isLoading: Boolean = false) = state(outcome = outcome).copy(
+        isLoading = isLoading,
+        playerId = "96596872-5fe3-4574-8684-aca1047afa23",
+        whitePlayerId = "96596872-5FE3-4574-8684-ACA1047AFA23",
+        blackPlayerId = "AB98F326-AA39-4F83-8E15-EA8ECABBFC05",
+    )
+
+    @Test
+    fun aFinishedGameWeSitInCanBeArchived() {
+        assertTrue(seated(outcome = checkmate).canArchive)
+        assertTrue(seated(outcome = GameOutcome.Resigned(Piece.Color.black)).canArchive)
+    }
+
+    @Test
+    fun aGameStillBeingPlayedCannotBeArchived() {
+        assertFalse(seated(outcome = null).canArchive)
+    }
+
+    @Test
+    fun aDrawTheServerDoesNotRecordCannotBeArchived() {
+        // It stays `active` on the server, which would refuse the request.
+        val repetition = GameOutcome.Drawn(Board.State.DrawReason.repetition)
+        assertFalse(seated(outcome = repetition).canArchive)
+    }
+
+    @Test
+    fun nothingCanBeArchivedBeforeTheRecordHasLoaded() {
+        assertFalse(seated(outcome = checkmate, isLoading = true).canArchive)
+    }
+
+    @Test
+    fun aGameWeDoNotSitInCannotBeArchived() {
+        assertFalse(seated(outcome = checkmate).copy(playerId = "someone-else").canArchive)
     }
 }

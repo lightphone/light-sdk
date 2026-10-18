@@ -67,6 +67,18 @@ internal val GameOutcome.label: String
     }
 
 /**
+ * Whether the server holds a game that ended this way as finished, which is what lets a player
+ * archive it. It detects checkmate and stalemate and records resignations and agreed draws, but
+ * not the draws chesskit finds on its own — repetition, fifty moves, too few pieces — so those
+ * games stay `active` there, and archiving one would be refused.
+ */
+internal val GameOutcome.isRecordedByServer: Boolean
+    get() = when (this) {
+        is GameOutcome.Checkmate, GameOutcome.Stalemate, is GameOutcome.Resigned -> true
+        is GameOutcome.Drawn -> reason == Board.State.DrawReason.agreement
+    }
+
+/**
  * Which seat [playerId] holds, or `null` if it holds neither.
  *
  * Both records of a resignation name a player rather than a color — the move log's

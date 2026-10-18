@@ -13,7 +13,19 @@ data class Game(
     val status: String,
     val createdAt: String,
     val updatedAt: String,
+    // Per seat: each player hides a finished game from their own list without touching the
+    // opponent's. Both flags come back to both players. Optional, so a body without them decodes.
+    val archivedByWhite: Boolean = false,
+    val archivedByBlack: Boolean = false,
 )
+
+/**
+ * Whether [playerId]'s seat has put this game in its archive. False for anyone in neither seat.
+ * Compared through [samePlayer], as the server echoes ids uppercase.
+ */
+fun Game.isArchivedBy(playerId: String?): Boolean =
+    (archivedByWhite && samePlayer(playerId, whitePlayerID)) ||
+        (archivedByBlack && samePlayer(playerId, blackPlayerID))
 
 /**
  * The raw backend status rendered for humans — `waitingForOpponent` is no way to talk to
@@ -113,6 +125,12 @@ data class InviteResponse(
     val gameID: String,
     val phrase: String,
     val expiresAt: String,
+)
+
+/** Response to `POST /flamingo/games/:id/archive` — the game with our seat's flag set. */
+@Serializable
+data class ArchiveResponse(
+    val game: Game,
 )
 
 /** Response to `POST /flamingo/games/join-by-phrase` — the game after our seat was filled. */

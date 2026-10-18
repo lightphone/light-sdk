@@ -6,7 +6,9 @@ import dev.neoneon.chesskit.Position
 import dev.neoneon.chesskit.Square
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class GameOutcomeTest {
 
@@ -141,5 +143,20 @@ class GameOutcomeTest {
         val moves = listOf(move("m1", resignPlayerID = "someone"))
 
         assertNull(moves.resignedColor(whitePlayerId = null, blackPlayerId = null))
+    }
+
+    @Test
+    fun theServerRecordsMateStalemateResignationAndAgreement() {
+        assertTrue(GameOutcome.Checkmate(Piece.Color.white).isRecordedByServer)
+        assertTrue(GameOutcome.Stalemate.isRecordedByServer)
+        assertTrue(GameOutcome.Resigned(Piece.Color.black).isRecordedByServer)
+        assertTrue(GameOutcome.Drawn(Board.State.DrawReason.agreement).isRecordedByServer)
+    }
+
+    @Test
+    fun theServerDoesNotRecordTheDrawsChesskitFindsOnItsOwn() {
+        assertFalse(GameOutcome.Drawn(Board.State.DrawReason.repetition).isRecordedByServer)
+        assertFalse(GameOutcome.Drawn(Board.State.DrawReason.fiftyMoves).isRecordedByServer)
+        assertFalse(GameOutcome.Drawn(Board.State.DrawReason.insufficientMaterial).isRecordedByServer)
     }
 }

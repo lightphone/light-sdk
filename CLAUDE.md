@@ -88,7 +88,7 @@ the SDK supplies the back button. Screens come in `LightScreen` / `LightViewMode
 | `HotSeatScreen` / `HotSeatGameModel` | "Local": two players on one phone, offline — see Hot seat below |
 | `HotSeatGame` / `HotSeatGameStore` (port) / `DataStoreHotSeatGameStore` (adapter) | The one stored hot seat game |
 | `HotSeatArchive` / `HotSeatArchiveStore` (port) / `DataStoreHotSeatArchiveStore` (adapter) | Finished hot seat games saved to the archive |
-| `ArchiveScreen` / `HotSeatReplayScreen` | The archive, reached from Info, and an archived local game's replay |
+| `ArchiveScreen` / `ArchiveState` / `HotSeatReplayScreen` | The archive, reached from Info — see Archive below — and an archived local game's replay |
 | `ReplayLog` | Move history, numbered by half-move to match the backend |
 | `FlamingoApi` / `FlamingoModels` | Ktor HTTP client against `https://neoneon.dev/flamingo` |
 | `LiveTransport` (port) / `KtorLiveTransport` (adapter) | The live WebSocket |
@@ -127,10 +127,29 @@ Two people, one phone — `LOCAL` in the Games top bar, titled "Local" on screen
   board over as Reset does. Moved, not copied: a take-back on an archived game would leave two
   versions of it. The outcome is stored as iOS stores it (`whiteWins` / `blackWins` / `draw`), so
   the list never replays a game. Mirrors iOS's `docs/product/features/00009-hot-seat-archive.md`.
-- The archive is **Info → Archive** (`ArchiveScreen`), the counterpart of iOS's Settings → Archive.
-  It follows the store as a flow. Rows open `HotSeatReplayScreen`: final position first, PREV/NEXT,
-  white at the bottom. There is no swipe on LightOS, so deleting is the replay's trash button; the
-  replay hands the id back as its result and the archive screen deletes it.
+
+## Archive
+
+**Info → Archive** (`ArchiveScreen`), the counterpart of iOS's Settings → Archive: online games
+first, then local ones.
+
+- **Online archiving is per seat and lives on the server.** `GET /flamingo/games?archived=true`
+  lists it (the live list sends `archived=false`), `POST /flamingo/games/:id/archive` moves a game
+  in or out (`FlamingoApi.setArchived`). The opponent's lists never change. Read our flag through
+  `Game.isArchivedBy`, which compares with `samePlayer`.
+- **Archive** / **Unarchive** is the last row of the game's actions pane, behind the ellipsis at the
+  top right (`GameView`; the ellipsis replaced the alarm-clock icon). It is greyed while the game is
+  on, and a finished game keeps the ellipsis only while it can be archived. On success the screen
+  goes back to the list it came from, which reloads on show.
+- Offered only for endings the server holds as finished (`GameOutcome.isRecordedByServer`): mate,
+  stalemate, resignation, agreed draw. Repetition, fifty-move and too-few-pieces draws are found by
+  chesskit alone and stay `active` on the server, which refuses to archive them (409).
+- The online half reloads every time the screen shows and closes with the service (`disabled`
+  shows its message in place of the rows). The local half follows its store as a flow and shows
+  whatever the status says.
+- Local rows open `HotSeatReplayScreen`: final position first, PREV/NEXT, white at the bottom.
+  There is no swipe on LightOS, so deleting is the replay's trash button; the replay hands the id
+  back as its result and the archive screen deletes it.
 
 ## Wire contract
 

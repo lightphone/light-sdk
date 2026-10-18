@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -121,7 +122,7 @@ class GameViewViewModel(
      * Whether the notifications pane is on screen, and at which level.
      *
      * Deliberately orthogonal to *what* is pending — that lives in [Promotion] / [DrawOffer] /
-     * [GameOutcome] — so the bell can show and hide the pane without disturbing the decisions
+     * [GameOutcome] — so the ellipsis can show and hide the pane without disturbing the decisions
      * waiting inside it. Modelling the resign confirmation as a level of the pane rather than a
      * flag beside it makes "confirming while the pane is closed" unrepresentable, and gets it
      * dismissed by every path that closes the pane.
@@ -130,6 +131,17 @@ class GameViewViewModel(
         data object Hidden : Notifications
         data object Shown : Notifications
         data object ConfirmingResign : Notifications
+    }
+
+    /**
+     * Moving a finished game into this seat's archive or back out of it. [Done] sends the screen
+     * back to the list it came from, which the game has now left.
+     */
+    sealed interface ArchiveUpdate {
+        data object Idle : ArchiveUpdate
+        data object Sending : ArchiveUpdate
+        data object Done : ArchiveUpdate
+        data class Failed(val message: String) : ArchiveUpdate
     }
 
     data class State(
@@ -153,8 +165,8 @@ class GameViewViewModel(
         // game is still on.
         val lastMove: Pair<Square, Square>? = null,
         val outcome: GameOutcome? = null,
-        // The bell's toggle. Raised on its own when something lands that needs an answer; closed
-        // by the bell, the pane's back button, or the decision being made.
+        // The ellipsis's toggle. Raised on its own when something lands that needs an answer;
+        // closed by the ellipsis, the pane's back button, or the decision being made.
         val notifications: Notifications = Notifications.Hidden,
         val drawOffer: DrawOffer = DrawOffer.None,
         // Where the player has stepped to in a finished game, and how many positions there are to
@@ -165,6 +177,9 @@ class GameViewViewModel(
         // the init block) so a change made on the settings screen reaches a game already on the
         // back stack. Only gates the live board — see shouldShowLiveLastMove.
         val lastMoveVisibility: LastMoveVisibility = LastMoveVisibility.OpponentOnly,
+        // Whether this seat has the game in its archive, from the server's record.
+        val isArchived: Boolean = false,
+        val archiveUpdate: ArchiveUpdate = ArchiveUpdate.Idle,
     ) {
         /** A finished game with more than its opening position is worth stepping through. */
         val canReplay: Boolean get() = outcome != null && frameCount > 1
@@ -195,6 +210,15 @@ class GameViewViewModel(
         val canOfferDraw: Boolean
             get() = hasOpponent && outcome == null && drawOffer is DrawOffer.None &&
                 promotion is Promotion.Hidden && position.sideToMove == localColor
+
+        /**
+         * A finished game we hold a seat in can be archived, or taken back out — once the server
+         * holds it as finished too, which it does for every ending but the draws chesskit finds
+         * on its own (see [isRecordedByServer]).
+         */
+        val canArchive: Boolean
+            get() = !isLoading && outcome?.isRecordedByServer == true &&
+                colorOfPlayer(playerId, whitePlayerId, blackPlayerId) != null
 
         /** Resigning is gated on terminality alone: you may concede on the opponent's clock. */
         val canResign: Boolean
@@ -254,7 +278,13 @@ class GameViewViewModel(
     /** Steps the finished-game board one position back or forward, stopping at either end. */
     fun onStepReplay(forward: Boolean) {
         if (!replay.step(forward)) return
-        _state.update { it.withCurrentBoard() }
+        // A failed archive's message shares the nav bar line that says where the player has
+        // stepped to, so stepping retires it.
+        _state.update { current ->
+            current.withCurrentBoard().let {
+                if (it.archiveUpdate is ArchiveUpdate.Failed) it.copy(archiveUpdate = ArchiveUpdate.Idle) else it
+            }
+        }
     }
 
     override fun onScreenShow(screen: SimpleLightScreen<Unit>) {
@@ -300,6 +330,7 @@ class GameViewViewModel(
         var whiteId: String? = _state.value.whitePlayerId
         var blackId: String? = _state.value.blackPlayerId
         var actions = GameActionState(_state.value.drawOffer, agreedDraw)
+        var archived = _state.value.isArchived
         api.fetchGame(gameId).onSuccess { detail ->
             // A draw or resign entry shares the number of the move it precedes, so the number
             // alone doesn't order the log. The ISO-8601 timestamp breaks that tie — an action is
@@ -325,6 +356,7 @@ class GameViewViewModel(
             // black (a black creator, or a not-yet-joined invitee whose seat is still open).
             resolvedColor =
                 if (samePlayer(playerId, detail.game.whitePlayerID)) Piece.Color.white else Piece.Color.black
+            archived = detail.game.isArchivedBy(playerId)
         }.onFailure { error ->
             Log.w(TAG, "No existing state loaded for game $gameId, starting fresh", error)
         }
@@ -335,6 +367,7 @@ class GameViewViewModel(
                 playerId = playerId,
                 whitePlayerId = whiteId,
                 blackPlayerId = blackId,
+                isArchived = archived,
                 drawOffer = actions.drawOffer,
                 // The board was just rebuilt from scratch, so a Pending here would hold a Move
                 // belonging to a Board that no longer exists. The move was never sent — the pawn
@@ -537,7 +570,7 @@ class GameViewViewModel(
                             current.drawOffer
                         },
                         // A promotion needs a piece picked before the move can go out, so put the
-                        // picker up rather than leaving the player to find the bell.
+                        // picker up rather than leaving the player to find the ellipsis.
                         notifications = if (pending != null) Notifications.Shown else current.notifications,
                     )
                 }
@@ -650,7 +683,7 @@ class GameViewViewModel(
         }
     }
 
-    /** The bell: shows the pane, or puts it away again. */
+    /** The ellipsis: shows the pane, or puts it away again. */
     fun toggleNotifications() {
         _state.update {
             it.copy(
@@ -725,6 +758,32 @@ class GameViewViewModel(
         _state.update { it.copy(share = Share.Hidden) }
     }
 
+    /**
+     * Puts the finished game in this seat's archive, or takes it back out. Private to us: the
+     * opponent's lists don't change. No confirmation, since either way is one tap to undo.
+     */
+    fun toggleArchived() {
+        val current = _state.value
+        if (!current.canArchive || current.archiveUpdate is ArchiveUpdate.Sending) return
+        val playerId = current.playerId ?: return
+        val archived = !current.isArchived
+        // Back to the board: success leaves the screen, and a failure is told on the nav bar.
+        _state.update { it.copy(archiveUpdate = ArchiveUpdate.Sending, notifications = Notifications.Hidden) }
+        viewModelScope.launch(Dispatchers.IO) {
+            api.setArchived(gameId, playerId, archived).fold(
+                onSuccess = { game ->
+                    _state.update {
+                        it.copy(isArchived = game.isArchivedBy(playerId), archiveUpdate = ArchiveUpdate.Done)
+                    }
+                },
+                onFailure = { error ->
+                    val message = error.message ?: if (archived) "Couldn't archive" else "Couldn't unarchive"
+                    _state.update { it.copy(archiveUpdate = ArchiveUpdate.Failed(message)) }
+                },
+            )
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         transport.close()
@@ -755,6 +814,12 @@ class GameView(
         val themeColors by LightThemeController.colors.collectAsState()
         val state by viewModel.state.collectAsState()
 
+        // Archiving moves the game to the other list, so the one behind this screen is where the
+        // player sees it worked — and it reloads on the way back.
+        LaunchedEffect(state.archiveUpdate) {
+            if (state.archiveUpdate is GameViewViewModel.ArchiveUpdate.Done) goBack()
+        }
+
         GameScreen(
             state = state,
             colors = themeColors,
@@ -773,6 +838,7 @@ class GameView(
                 onCancelResign = { viewModel.cancelResign() },
                 onConfirmResign = { viewModel.confirmResign() },
                 onStepReplay = { viewModel.onStepReplay(it) },
+                onToggleArchived = { viewModel.toggleArchived() },
             ),
         )
     }
@@ -797,6 +863,7 @@ private data class GameActions(
     val onCancelResign: () -> Unit = {},
     val onConfirmResign: () -> Unit = {},
     val onStepReplay: (Boolean) -> Unit = {},
+    val onToggleArchived: () -> Unit = {},
 )
 
 // The whole screen, driven only by [state] and callbacks so every state it can be in — a pending
@@ -861,6 +928,8 @@ private fun ColumnScope.GameContent(
         // chesskit flips the side to move the instant the pawn lands, so the bar would read
         // "Waiting for opponent…" while it is really waiting for you.
         center = when {
+            outcome != null && state.archiveUpdate is GameViewViewModel.ArchiveUpdate.Failed ->
+                LightTopBarCenter.TwoLineDetail(line1 = "Game", line2 = state.archiveUpdate.message)
             // Once the player steps off the final position the outcome is no longer what the
             // board shows, so the line reports where they are instead of restating the result.
             outcome != null && state.canStepForward ->
@@ -874,21 +943,22 @@ private fun ColumnScope.GameContent(
                 LightTopBarCenter.TwoLineDetail(line1 = "Game", line2 = "Waiting for opponent…")
             else -> LightTopBarCenter.Text("Game")
         },
-        // The bar has one right slot and three claims on it. A finished game takes neither button:
-        // there's nothing left to decide, and a game someone resigned out of can still have an
-        // empty seat but no one worth inviting into it. Otherwise the bell and the invite are near
-        // enough mutually exclusive — a draw needs an opponent, and the invite exists precisely
-        // because there isn't one yet. The exception is worth spelling out: white can play, and
-        // promote, before anyone joins, and a pane you can't re-open is a dead end.
+        // The bar has one right slot and three claims on it. A finished game keeps the ellipsis
+        // only for archiving, so only while it can be archived; never the invite, since a game
+        // someone resigned out of can still have an empty seat but no one worth inviting into it.
+        // Otherwise the ellipsis and the invite are near enough mutually exclusive — a draw needs
+        // an opponent, and the invite exists precisely because there isn't one yet. The exception
+        // is worth spelling out: white can play, and promote, before anyone joins, and a pane you
+        // can't re-open is a dead end.
         rightButton = when {
-            state.isLoading || outcome != null -> null
-            state.hasPendingNotification || !state.hasOpenSeat -> LightBarButton.LightIcon(
-                icon = LightIcons.ALARM,
+            state.isLoading || (outcome != null && !state.canArchive) -> null
+            outcome != null || state.hasPendingNotification || !state.hasOpenSeat -> LightBarButton.LightIcon(
+                icon = LightIcons.ELLIPSES,
                 onClick = actions.onToggleNotifications,
                 contentDescription = if (state.promotion is GameViewViewModel.Promotion.Pending) {
                     "Finish promotion"
                 } else {
-                    "Notifications"
+                    "Game actions"
                 },
             )
             else -> LightBarButton.LightIcon(
@@ -981,7 +1051,7 @@ private fun ColumnScope.SharePane(share: GameViewViewModel.Share, onClose: () ->
 }
 
 /**
- * The one pane the bell opens: whatever is currently waiting on the player.
+ * The one pane the ellipsis opens: whatever is currently waiting on the player.
  *
  * A pending promotion outranks a draw offer — it's holding back a move of ours — and both
  * outrank the idle offer-draw / resign actions. Always dismissible; see [GameViewViewModel.Promotion]
@@ -1061,6 +1131,11 @@ private fun ColumnScope.ActionOptions(
     ) {
         ActionRow(label = "Offer draw", enabled = state.canOfferDraw, onClick = actions.onOfferDraw)
         ActionRow(label = "Resign", enabled = state.canResign, onClick = actions.onRequestResign)
+        ActionRow(
+            label = if (state.isArchived) "Unarchive" else "Archive",
+            enabled = state.canArchive && state.archiveUpdate !is GameViewViewModel.ArchiveUpdate.Sending,
+            onClick = actions.onToggleArchived,
+        )
     }
 }
 
@@ -1129,6 +1204,9 @@ private fun matedState(): GameViewViewModel.State {
         position = board.position,
         localColor = Piece.Color.white,
         isLoading = false,
+        playerId = "us",
+        whitePlayerId = "us",
+        blackPlayerId = "them",
         checkedKingSquare = checkedKingSquare(board.state, board.position),
         lastMove = last!!.let { it.start to it.end },
         outcome = gameOutcome(board.state, resignedColor = null),
@@ -1162,7 +1240,7 @@ private fun PreviewGameViewPromoting(
     GameScreen(state = promotingState(), colors = colors)
 }
 
-// The same promotion with the pane put away — the state the bell makes reachable. Worth its own
+// The same promotion with the pane put away — the state the ellipsis makes reachable. Worth its own
 // preview: it's the one place the board shows a pawn sitting unpromoted on the last rank, and the
 // nav bar has to say why rather than claiming we're waiting on the opponent.
 @Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
@@ -1191,7 +1269,8 @@ private fun PreviewGameViewDrawOffered(
     )
 }
 
-// The pane as the bell opens it with nothing pending: the two actions the player can start.
+// The pane as the ellipsis opens it with nothing pending: the actions the player can start, with
+// archiving greyed until the game is over.
 @Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
 @Composable
 private fun PreviewGameViewActions(
@@ -1249,6 +1328,30 @@ private fun PreviewGameViewCheckmated(
     @PreviewParameter(LightColorsPreviewProvider::class) colors: LightColors,
 ) {
     GameScreen(state = matedState(), colors = colors)
+}
+
+// The ellipsis on a finished game: draw and resign are over, archiving is what is left.
+@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
+@Composable
+private fun PreviewGameViewCheckmatedActions(
+    @PreviewParameter(LightColorsPreviewProvider::class) colors: LightColors,
+) {
+    GameScreen(
+        state = matedState().copy(notifications = GameViewViewModel.Notifications.Shown),
+        colors = colors,
+    )
+}
+
+// The same game opened from the archive: the pane offers to take it back out.
+@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
+@Composable
+private fun PreviewGameViewCheckmatedArchived(
+    @PreviewParameter(LightColorsPreviewProvider::class) colors: LightColors,
+) {
+    GameScreen(
+        state = matedState().copy(isArchived = true, notifications = GameViewViewModel.Notifications.Shown),
+        colors = colors,
+    )
 }
 
 // The same presentation for a game someone resigned, where the board itself gives nothing away.

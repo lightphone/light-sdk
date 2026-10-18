@@ -32,8 +32,12 @@ internal class FlamingoApi(private val keyStore: PlayerKeyStore = PlayerKeyStore
         }
     }
 
-    suspend fun listGames(playerId: String): Result<List<Game>> = runCatching {
-        val response = client.get("$BASE_URL/games?playerID=$playerId")
+    /**
+     * [playerId]'s games: the live list, or with [archived] the ones this seat has archived. The
+     * two never overlap, and archiving is per seat, so the opponent's lists are unaffected.
+     */
+    suspend fun listGames(playerId: String, archived: Boolean = false): Result<List<Game>> = runCatching {
+        val response = client.get("$BASE_URL/games?playerID=$playerId&archived=$archived")
         if (!response.status.isSuccess()) {
             // Keeps the status, so the games list can tell a deliberate rejection (and go read
             // the status document) from an ordinary failure.
@@ -43,6 +47,22 @@ internal class FlamingoApi(private val keyStore: PlayerKeyStore = PlayerKeyStore
             )
         }
         response.body()
+    }
+
+    /**
+     * Moves a finished game into [playerId]'s archive, or with [archived] `false` back out of it.
+     * Only this seat's flag changes, and the game's `updatedAt` stays as it was. The server
+     * refuses a game it doesn't hold as finished (409) — see [GameOutcome.isRecordedByServer].
+     */
+    suspend fun setArchived(gameId: String, playerId: String, archived: Boolean): Result<Game> = runCatching {
+        val response = client.post("$BASE_URL/games/$gameId/archive") {
+            contentType(ContentType.Application.Json)
+            setBody(ArchiveRequest(playerID = playerId, archived = archived))
+        }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException(archiveErrorMessage(response.status.value, archived))
+        }
+        response.body<ArchiveResponse>().game
     }
 
     suspend fun fetchGame(gameId: String): Result<GameDetail> = runCatching {
@@ -312,6 +332,14 @@ private fun renameErrorMessage(status: Int): String = when (status) {
     else -> "Couldn't save name ($status)"
 }
 
+// Short enough for the nav bar's second line, where the game screen shows them.
+private fun archiveErrorMessage(status: Int, archived: Boolean): String = when (status) {
+    403 -> "Not your game"
+    404 -> "Game not found"
+    409 -> "Game isn't over yet"
+    else -> if (archived) "Couldn't archive ($status)" else "Couldn't unarchive ($status)"
+}
+
 private fun joinErrorMessage(status: Int): String = when (status) {
     400 -> "Enter a valid 5-letter code"
     404 -> "No game for that code"
@@ -349,6 +377,14 @@ private data class InviteRequest(
     val whitePlayerID: String? = null,
     val blackPlayerID: String? = null,
     val origin: String,
+)
+
+// Neither field has a default, so both are always encoded — `archived: false` included, which
+// the server needs to tell an unarchive from a malformed body.
+@Serializable
+private data class ArchiveRequest(
+    val playerID: String,
+    val archived: Boolean,
 )
 
 @Serializable
