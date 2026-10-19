@@ -15,7 +15,7 @@ import android.os.Process
 import android.os.UserHandle
 import android.util.Log
 import com.thelightphone.sdk.server.backup.BackupCapableTool
-import com.thelightphone.sdk.server.toolmanager.getApkInboxAuthDirectory
+import com.thelightphone.sdk.server.backup.SmsBackupExclusion
 import com.thelightphone.toolmanager.AndroidKeystoreKeyCipher
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.DataView
@@ -27,8 +27,6 @@ import com.thelightphone.sdk.shared.LightConstants
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.toolmanager.LocalNetworkInfo
-import com.thelightphone.toolmanager.ToolManagerAuth
-import com.thelightphone.toolmanager.TotpToolManagerAuth
 import java.io.File
 import java.security.MessageDigest
 
@@ -324,6 +322,16 @@ object LightSdkServer {
      * the top level of each directory (no recursion). Empty means videos aren't backed up.
      */
     var getAlbumVideoBackupDirs: () -> List<File> = { emptyList() }
+
+    /**
+     * SMS rows that should be left out of message backups (e.g. placeholder rows the enclosing
+     * app writes for its own bookkeeping). They're also ignored when working out how far back the
+     * first backup needs to go. Null means every SMS is backed up.
+     *
+     * Here because LightOS stores some metadata in the sms table using "impossible" timestamps,
+     * dont want to back those up
+     */
+    var getSmsBackupExclusion: () -> SmsBackupExclusion? = { null }
 
 
     /**
