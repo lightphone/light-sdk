@@ -75,11 +75,29 @@ class AudioTypesTest {
     }
 
     @Test
-    fun onlySpeechSeeksInFifteenSecondSteps() {
-        assertEquals(15_000L, LightAudioUsage.Speech.seekIncrementMs())
-        assertNull(LightAudioUsage.Music.seekIncrementMs())
-        assertNull(LightAudioUsage.Alarm.seekIncrementMs())
-        assertNull(LightAudioUsage.VoiceCall.seekIncrementMs())
+    fun seeksInFifteenSecondSteps() {
+        assertEquals(15_000L, SEEK_INCREMENT_MS)
+    }
+
+    @Test
+    fun onlyMusicAndSpeechAreItemUsages() {
+        assertEquals(
+            setOf(LightAudioUsage.Music, LightAudioUsage.Speech),
+            LightAudioUsage.entries.filter { it.isItemUsage() }.toSet()
+        )
+    }
+
+    @Test
+    fun anItemsOwnUsageWinsOverThePlayers() {
+        assertEquals(LightAudioUsage.Speech, effectiveUsage(LightAudioUsage.Speech, LightAudioUsage.Music))
+        assertEquals(LightAudioUsage.Music, effectiveUsage(null, LightAudioUsage.Music))
+    }
+
+    @Test
+    fun itemUsageReadsBackFromItsExtraValue() {
+        LightAudioUsage.entries.forEach { assertEquals(it, itemUsageFromExtra(it.name)) }
+        assertNull(itemUsageFromExtra(null))
+        assertNull(itemUsageFromExtra("Podcast"))
     }
 
     @Test

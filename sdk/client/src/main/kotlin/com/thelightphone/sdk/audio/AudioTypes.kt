@@ -158,11 +158,6 @@ internal fun LightAudioUsage.sessionUsageValue(): String? = when (this) {
     LightAudioUsage.Alarm, LightAudioUsage.VoiceCall -> null
 }
 
-/** Seek-back and seek-forward step, or null to keep media3's defaults. */
-internal fun LightAudioUsage.seekIncrementMs(): Long? = when (this) {
-    LightAudioUsage.Speech -> SPEECH_SEEK_INCREMENT_MS
-    LightAudioUsage.Music, LightAudioUsage.Alarm, LightAudioUsage.VoiceCall -> null
-}
 
 /**
  * Player commands withheld from controllers other than the tool's own, so the
@@ -182,7 +177,27 @@ internal fun LightAudioUsage.hiddenExternalPlayerCommands(): IntArray = when (th
     LightAudioUsage.Alarm, LightAudioUsage.VoiceCall -> intArrayOf()
 }
 
-internal const val SPEECH_SEEK_INCREMENT_MS = 15_000L
+/**
+ * Seek-back and seek-forward step for every usage. Media3 only takes it at build
+ * time and items can switch usage mid-queue; music hides seeking from external
+ * controllers, so only speech surfaces it.
+ */
+internal const val SEEK_INCREMENT_MS = 15_000L
+
+/** Media metadata extras key carrying a queue item's own usage to the player holding it. */
+internal const val ITEM_USAGE_EXTRA = "com.thelightphone.sdk.audio.ITEM_USAGE"
+
+/** Whether a queue item may set this usage; the others only make sense for a whole player. */
+internal fun LightAudioUsage.isItemUsage(): Boolean =
+    this == LightAudioUsage.Music || this == LightAudioUsage.Speech
+
+/** The usage an item plays with: its own, else the player's. */
+internal fun effectiveUsage(itemUsage: LightAudioUsage?, playerUsage: LightAudioUsage): LightAudioUsage =
+    itemUsage ?: playerUsage
+
+/** Reads back a usage written under [ITEM_USAGE_EXTRA], or null when absent or unknown. */
+internal fun itemUsageFromExtra(value: String?): LightAudioUsage? =
+    LightAudioUsage.entries.firstOrNull { it.name == value }
 
 /**
  * Recorder input and encoded-output configuration.
@@ -274,11 +289,17 @@ sealed interface LightAudioSource {
  * @property id stable identity and cache key, globally unique for each distinct
  *   piece of audio and stable over time. Defaults to the source URL; rotating
  *   signed URLs need an explicit id to reuse cached bytes.
+ * @property usage how this item plays while it is current, overriding the
+ *   player's [LightPlayerSpec.usage]: audio processing, the lock screen
+ *   controls (previous/next for [LightAudioUsage.Music], ±15s for
+ *   [LightAudioUsage.Speech]) and the usage LightOS reads. Only
+ *   [LightAudioUsage.Music] and [LightAudioUsage.Speech]; null follows the player.
  */
 data class LightAudioItem(
     val source: LightAudioSource,
     val metadata: LightMediaMetadata,
     val id: String? = null,
+    val usage: LightAudioUsage? = null,
 )
 
 internal const val DEFAULT_SAMPLE_RATE = 48_000

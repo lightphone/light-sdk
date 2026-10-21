@@ -41,7 +41,8 @@ internal class LightAudioService : MediaSessionService() {
 
         // Whatever the starting handle staged. Empty if the system revived the service.
         val spec = detachedSessionState.stagedSpec()
-        player = buildSdkExoPlayer(this, spec.usage, spec.cache).apply {
+        usage = spec.usage
+        player = buildSdkExoPlayer(this, spec.usage, spec.cache, ::applyUsage).apply {
             addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     refreshIdleStop()
@@ -64,11 +65,8 @@ internal class LightAudioService : MediaSessionService() {
             )
         }
         session = sessionBuilder.build()
-        usage = spec.usage
         // Set after build(): builder extras never reach the platform session LightOS reads.
-        usage.sessionUsageValue()?.let { value ->
-            session.setSessionExtras(Bundle().apply { putString(SESSION_USAGE_EXTRA, value) })
-        }
+        session.setSessionExtras(usageExtras(usage))
         detachedSessionState.setHandleChangedListener {
             idleHandler.post(::refreshIdleStop)
         }
@@ -116,11 +114,7 @@ internal class LightAudioService : MediaSessionService() {
             // The media notification controller's commands become the platform
             // session's actions, which is what LightOS's lock screen renders.
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
-                .setAvailablePlayerCommands(
-                    MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
-                        .removeAll(*usage.hiddenExternalPlayerCommands())
-                        .build()
-                )
+                .setAvailablePlayerCommands(externalPlayerCommands(usage))
                 .build()
         }
 
@@ -132,6 +126,25 @@ internal class LightAudioService : MediaSessionService() {
 
         override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
             refreshIdleStop()
+        }
+    }
+
+    /**
+     * Follows the current item's usage: republishes the usage LightOS reads and
+     * the external controllers' commands, which become the platform session's
+     * actions. The tool's own controller keeps every command.
+     */
+    private fun applyUsage(next: LightAudioUsage) {
+        usage = next
+        if (!::session.isInitialized) return
+        session.setSessionExtras(usageExtras(next))
+        for (controller in session.connectedControllers) {
+            if (controller.connectionHints.isToolController()) continue
+            session.setAvailableCommands(
+                controller,
+                MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS,
+                externalPlayerCommands(next),
+            )
         }
     }
 
@@ -178,3 +191,13 @@ internal fun shouldStartIdleStop(isPlaying: Boolean, handleOpen: Boolean): Boole
     !isPlaying && !handleOpen
 
 internal const val IDLE_STOP_MS = 15 * 60_000L
+
+private fun usageExtras(usage: LightAudioUsage): Bundle = Bundle().apply {
+    usage.sessionUsageValue()?.let { putString(SESSION_USAGE_EXTRA, it) }
+}
+
+@OptIn(UnstableApi::class)
+private fun externalPlayerCommands(usage: LightAudioUsage): Player.Commands =
+    MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
+        .removeAll(*usage.hiddenExternalPlayerCommands())
+        .build()
