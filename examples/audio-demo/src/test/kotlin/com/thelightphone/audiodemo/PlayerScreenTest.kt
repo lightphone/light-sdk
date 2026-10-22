@@ -4,6 +4,7 @@ import com.thelightphone.sdk.audio.LightAudioError
 import com.thelightphone.sdk.audio.LightAudioErrorKind
 import com.thelightphone.sdk.audio.LightAudioPlayback
 import com.thelightphone.sdk.audio.LightAudioSource
+import com.thelightphone.sdk.audio.LightAudioUsage
 import com.thelightphone.sdk.audio.LightMediaMetadata
 import com.thelightphone.sdk.audio.NO_MEDIA_ITEM
 import com.thelightphone.sdk.audio.LightQueueItem
@@ -65,6 +66,22 @@ class PlayerScreenTest {
                 LightQueueItem(firstId, LightMediaMetadata("Broken Dawn")),
             ).staleExpiredDawnIndex(secondId),
         )
+    }
+
+    @Test
+    fun clipsCarryTheirUsageIntoThePlayerQueue() {
+        val audrey = SampleAudioCatalog.clips.first { it.id == "audrey-tang-interview" }
+
+        assertEquals(LightAudioUsage.Speech, audrey.toLightAudioItem().usage)
+    }
+
+    @Test
+    fun queueRowsShowUsageAndId() {
+        assertEquals(
+            "SPEECH · id: audrey-tang-interview",
+            queueItemDetail(LightQueueItem("audrey-tang-interview", LightMediaMetadata("Audrey"), LightAudioUsage.Speech)),
+        )
+        assertEquals("MUSIC · id: plain", queueItemDetail(LightQueueItem("plain", LightMediaMetadata("Plain"))))
     }
 
     @Test
