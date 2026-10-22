@@ -1,6 +1,7 @@
 package com.thelightphone.sdk.audio
 
 import android.app.Application
+import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -48,10 +49,21 @@ internal class LightAudioService : MediaSessionService() {
             })
         }
         detachedSessionState.adoptSpec(spec)
-        session = MediaSession.Builder(this, player)
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        val sessionBuilder = MediaSession.Builder(this, player)
             .setId(packageName)
             .setCallback(SessionCallback())
-            .build()
+        if (launchIntent != null) {
+            sessionBuilder.setSessionActivity(
+                PendingIntent.getActivity(
+                    this,
+                    0,
+                    launchIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            )
+        }
+        session = sessionBuilder.build()
         usage = spec.usage
         // Set after build(): builder extras never reach the platform session LightOS reads.
         usage.sessionUsageValue()?.let { value ->
