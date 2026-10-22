@@ -3,6 +3,7 @@ package com.thelightphone.sdk.audio
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -197,7 +198,8 @@ class LightAudioPlayer internal constructor(
      * clears playback and ignores [startIndex].
      *
      * @throws IllegalArgumentException when a non-empty queue has an invalid
-     *   [startIndex]
+     *   [startIndex], or an item has a [LightAudioItem.usage] other than
+     *   [LightAudioUsage.Music] or [LightAudioUsage.Speech]
      */
     fun setMediaQueue(items: List<LightAudioItem>, startIndex: Int = 0) {
         if (items.isEmpty()) {
@@ -222,6 +224,9 @@ class LightAudioPlayer internal constructor(
 
     /**
      * Appends [item] to the queue.
+     *
+     * @throws IllegalArgumentException when [item] has a [LightAudioItem.usage]
+     *   other than [LightAudioUsage.Music] or [LightAudioUsage.Speech]
      */
     fun addMediaItem(item: LightAudioItem) {
         val mediaItem = item.toMediaItem()
@@ -234,7 +239,9 @@ class LightAudioPlayer internal constructor(
      * Inserts [item] at [index], shifting later items back. An [index] past the
      * end appends.
      *
-     * @throws IllegalArgumentException when [index] is negative
+     * @throws IllegalArgumentException when [index] is negative, or [item] has
+     *   a [LightAudioItem.usage] other than [LightAudioUsage.Music] or
+     *   [LightAudioUsage.Speech]
      */
     fun addMediaItem(index: Int, item: LightAudioItem) {
         require(index >= 0) { "Queue index must not be negative" }
@@ -283,7 +290,9 @@ class LightAudioPlayer internal constructor(
      * [LightAudioItem.id] as the item it replaces. Cached bytes are filed under
      * the id, so the new URL reuses what the old one already downloaded.
      *
-     * @throws IllegalArgumentException when [index] is negative
+     * @throws IllegalArgumentException when [index] is negative, or [item] has
+     *   a [LightAudioItem.usage] other than [LightAudioUsage.Music] or
+     *   [LightAudioUsage.Speech]
      */
     fun replaceMediaItem(index: Int, item: LightAudioItem) {
         require(index >= 0) { "Queue index must not be negative" }
@@ -415,12 +424,19 @@ internal suspend fun awaitPlayerReady(
     LightAudioPlayerAvailability.Ready
 
 @OptIn(UnstableApi::class)
-internal fun LightAudioItem.toMediaItem(): MediaItem = MediaItem.Builder()
-    .setUri(Uri.parse(source.uriString()))
-    .setMediaId(stableId())
-    .setCustomCacheKey(stableId())
-    .setMediaMetadata(metadata.toMedia3Metadata())
-    .build()
+internal fun LightAudioItem.toMediaItem(): MediaItem {
+    usage?.let { require(it.isItemUsage()) { "Queue items may only use Music or Speech, not $it" } }
+    return MediaItem.Builder()
+        .setUri(Uri.parse(source.uriString()))
+        .setMediaId(stableId())
+        .setCustomCacheKey(stableId())
+        .setMediaMetadata(metadata.toMedia3Metadata(usage))
+        .build()
+}
+
+/** The usage this item set for itself, carried in its metadata extras. */
+internal fun MediaItem.itemUsage(): LightAudioUsage? =
+    itemUsageFromExtra(mediaMetadata.extras?.getString(ITEM_USAGE_EXTRA))
 
 /** This item's [LightAudioItem.id], or its location when identity is location. */
 internal fun LightAudioItem.stableId(): String = id ?: source.uriString()
@@ -431,12 +447,13 @@ internal fun LightAudioSource.uriString(): String = when (this) {
     is LightAudioSource.UrlSource -> url
 }
 
-private fun LightMediaMetadata.toMedia3Metadata(): MediaMetadata {
+private fun LightMediaMetadata.toMedia3Metadata(usage: LightAudioUsage?): MediaMetadata {
     return MediaMetadata.Builder()
         .setTitle(title)
         .setArtist(artist)
         .setAlbumTitle(album)
         .setDurationMs(durationMs)
+        .setExtras(usage?.let { Bundle().apply { putString(ITEM_USAGE_EXTRA, it.name) } })
         .build()
 }
 
@@ -456,7 +473,16 @@ internal fun Player.snapshotState(): ConnectedPlayerState = ConnectedPlayerState
     isPlaying = isPlaying,
 )
 
-data class LightQueueItem(val id: String, val metadata: LightMediaMetadata)
+/**
+ * A queue entry as the player holds it.
+ *
+ * @property usage the item's own [LightAudioItem.usage], or null when it follows the player
+ */
+data class LightQueueItem(
+    val id: String,
+    val metadata: LightMediaMetadata,
+    val usage: LightAudioUsage? = null,
+)
 
 internal fun MediaItem.toLightQueueItem(): LightQueueItem = LightQueueItem(
     id = mediaId,
@@ -466,6 +492,7 @@ internal fun MediaItem.toLightQueueItem(): LightQueueItem = LightQueueItem(
         album = mediaMetadata.albumTitle?.toString(),
         durationMs = mediaMetadata.durationMs,
     ),
+    usage = itemUsage(),
 )
 
 private fun Long.validDuration(): Long = takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
