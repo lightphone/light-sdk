@@ -76,6 +76,11 @@ class EmulatorApplication : Application() {
                 }
             }
             rootToolManagerDataProvider = ::buildToolManagerRoot
+            canBeUninstalledByToolManager = { true }
+            onApkUninstalled = {
+                updateValidSignatures()
+                _installedToolsRefreshCount.value++
+            }
             onApkInstalled = {
                 updateValidSignatures()
                 _installedToolsRefreshCount.value++

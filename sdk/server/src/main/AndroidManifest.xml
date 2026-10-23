@@ -21,6 +21,9 @@
         <receiver
             android:name=".installer.LightApkInstallResultReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".installer.LightApkUninstallResultReceiver"
+            android:exported="false" />
         <service android:name=".toolmanager.ToolManagerLifecycleWrapperService"
             android:exported="false"/>
         <service

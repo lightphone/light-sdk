@@ -272,6 +272,8 @@ object LightSdkServer {
     var isLightApproved: (callingPackage: String, signatureHash: String) -> Boolean =
         { _, _ -> false }
 
+    var canBeUninstalledByToolManager: (packageName: String) -> Boolean = { false }
+
     /**
      * Given an android permission id (android.manifest.CAMERA, for example), return whether
      * this server instance is allowed to grant that permission to the calling package
@@ -299,6 +301,13 @@ object LightSdkServer {
         if (!apkPath.isNullOrBlank()) {
             Log.d(TAG, "Successfully installed APK: $apkPath")
         }
+    }
+
+    /**
+     * Called when the SDK server successfully uninstalls a tool
+     */
+    var onApkUninstalled: (packageName: String) -> Unit = { packageName ->
+        Log.d(TAG, "Successfully uninstalled package: $packageName")
     }
 
     /**
