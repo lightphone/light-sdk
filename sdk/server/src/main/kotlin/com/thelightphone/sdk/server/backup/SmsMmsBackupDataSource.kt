@@ -52,8 +52,12 @@ class SmsMmsBackupDataSource(
     }.onFailure { logger.reportError(TAG, it, "Failed to list backup paths") }
 
     override suspend fun getEarliestPossibleBackupDate(parent: Path): Result<Instant> = runCatching {
-        val earliestSms = earliestSinceEpoch(Telephony.Sms.CONTENT_URI, Telephony.Sms.DATE) { Instant.fromEpochMilliseconds(it) }
-        val earliestMms = earliestSinceEpoch(Telephony.Mms.CONTENT_URI, Telephony.Mms.DATE) { Instant.fromEpochSeconds(it) }
+        val earliestSms = earliestSinceEpoch(
+            Telephony.Sms.CONTENT_URI,
+            Telephony.Sms.DATE,
+            LightSdkServer.getSmsBackupExclusion(),
+        ) { Instant.fromEpochMilliseconds(it) }
+        val earliestMms = earliestSinceEpoch(Telephony.Mms.CONTENT_URI, Telephony.Mms.DATE, null) { Instant.fromEpochSeconds(it) }
         val earliest = listOfNotNull(earliestSms, earliestMms).minOrNull() ?: Clock.System.now()
         logger.log(TAG, "Earliest possible backup date: $earliest")
         earliest
@@ -76,16 +80,19 @@ class SmsMmsBackupDataSource(
         if (mmsIds.isNotEmpty()) {
             files += FileKey.MmsWindow(lowerBound, upperBound).toPath()
             for (mmsId in mmsIds) {
-                for (part in partsFor(mmsId)) {
+                // text/SMIL parts are inlined in the mms window file, only media parts are files
+                for (part in partsFor(mmsId).filter { it.hasFile }) {
                     files += FileKey.MmsPart(lowerBound, upperBound, mmsId, part.id, part.fileName).toPath()
                     partCount++
                 }
             }
         }
-        logger.log(
-            TAG,
-            "Window ($lowerBound, $upperBound]: sms=$hasSms, mms=${mmsIds.size}, mmsParts=$partCount",
-        )
+        if (files.isNotEmpty()) {
+            logger.log(
+                TAG,
+                "Window ($lowerBound, $upperBound]: sms=$hasSms, mms=${mmsIds.size}, mmsParts=$partCount",
+            )
+        }
         files
     }.onFailure { logger.reportError(TAG, it, "Failed to list files to back up for window ($lowerBound, $upperBound]") }
 
@@ -116,11 +123,12 @@ class SmsMmsBackupDataSource(
         runCatching { FileKey.parse(path).describe() }.getOrDefault("<unparseable backup path>")
 
     private fun hasSmsInRange(lower: Instant, upper: Instant): Boolean {
+        val (selection, selectionArgs) = smsWindowSelection(lower, upper)
         val cursor = contentResolver.query(
             Telephony.Sms.CONTENT_URI,
             arrayOf(Telephony.Sms._ID),
-            "${Telephony.Sms.DATE} > ? AND ${Telephony.Sms.DATE} <= ?",
-            arrayOf(lower.toEpochMilliseconds().toString(), upper.toEpochMilliseconds().toString()),
+            selection,
+            selectionArgs,
             null
         ) ?: throw IllegalStateException("SMS provider query returned null - is READ_SMS granted?")
         return cursor.use { it.moveToFirst() }
@@ -137,18 +145,32 @@ class SmsMmsBackupDataSource(
         return cursor.use { c -> generateSequence { if (c.moveToNext()) c.getLong(0) else null }.toList() }
     }
 
-    private fun earliestSinceEpoch(uri: Uri, dateColumn: String, toInstant: (Long) -> Instant): Instant? {
-        val cursor = contentResolver.query(uri, arrayOf(dateColumn), null, null, "$dateColumn ASC")
+    private fun earliestSinceEpoch(
+        uri: Uri,
+        dateColumn: String,
+        exclusion: SmsBackupExclusion?,
+        toInstant: (Long) -> Instant,
+    ): Instant? {
+        val (selection, selectionArgs) = exclusion.applyTo(null, emptyArray())
+        val cursor = contentResolver.query(uri, arrayOf(dateColumn), selection, selectionArgs, "$dateColumn ASC")
             ?: throw IllegalStateException("Telephony provider query returned null - is READ_SMS granted?")
         return cursor.use { if (it.moveToFirst()) toInstant(it.getLong(0)) else null }
     }
 
+    // SMS in (lower, upper], minus anything the host app excludes from backups
+    private fun smsWindowSelection(lower: Instant, upper: Instant): Pair<String?, Array<String>> =
+        LightSdkServer.getSmsBackupExclusion().applyTo(
+            "${Telephony.Sms.DATE} > ? AND ${Telephony.Sms.DATE} <= ?",
+            arrayOf(lower.toEpochMilliseconds().toString(), upper.toEpochMilliseconds().toString()),
+        )
+
     private fun smsWindowStream(lower: Instant, upper: Instant): InputStream {
+        val (selection, selectionArgs) = smsWindowSelection(lower, upper)
         val cursor = contentResolver.query(
             Telephony.Sms.CONTENT_URI,
             SMS_PROJECTION,
-            "${Telephony.Sms.DATE} > ? AND ${Telephony.Sms.DATE} <= ?",
-            arrayOf(lower.toEpochMilliseconds().toString(), upper.toEpochMilliseconds().toString()),
+            selection,
+            selectionArgs,
             "${Telephony.Sms.DATE} ASC"
         ) ?: throw IllegalStateException("SMS provider query returned null - is READ_SMS granted?")
         return CursorNdjsonInputStream(cursor, ::smsRowToJson)
@@ -196,6 +218,8 @@ class SmsMmsBackupDataSource(
                         put("id", part.id)
                         put("cType", part.contentType)
                         put("fName", part.fileName)
+                        // parts without a backing file (message text, SMIL layout) only exist here
+                        if (!part.hasFile) put("text", part.text)
                     }
                 }))
             }
@@ -227,18 +251,21 @@ class SmsMmsBackupDataSource(
         else -> "unknown"
     }
 
-    // "_id"/"ct"/"name"/"cl" are undocumented columns of the mms part sub-table
+    // "_id"/"ct"/"name"/"cl"/"_data"/"text" are undocumented columns of the mms part sub-table.
+    // Media parts have a backing file (_data); text and SMIL parts don't, their content is in "text"
+    // and opening them as a stream fails.
     private fun partsFor(mmsId: Long): List<MmsPartInfo> {
         val uri = Uri.withAppendedPath(Telephony.Mms.CONTENT_URI, "$mmsId/part")
         val result = mutableListOf<MmsPartInfo>()
-        contentResolver.query(uri, arrayOf("_id", "ct", "name", "cl"), null, null, null)?.use { c ->
+        contentResolver.query(uri, arrayOf("_id", "ct", "name", "cl", "_data", "text"), null, null, null)?.use { c ->
             while (c.moveToNext()) {
                 val partId = c.getLongOrNull("_id") ?: continue
                 val contentType = c.getStringOrNull("ct") ?: "application/octet-stream"
                 val fileName = (c.getStringOrNull("name") ?: c.getStringOrNull("cl"))
                     ?.replace('/', '_')?.replace('\\', '_')
                     ?: defaultPartFileName(partId, contentType)
-                result += MmsPartInfo(partId, contentType, fileName)
+                val hasFile = c.getStringOrNull("_data") != null
+                result += MmsPartInfo(partId, contentType, fileName, hasFile, c.getStringOrNull("text"))
             }
         }
         return result
@@ -274,7 +301,13 @@ class SmsMmsBackupDataSource(
         }
     }
 
-    private data class MmsPartInfo(val id: Long, val contentType: String, val fileName: String)
+    private data class MmsPartInfo(
+        val id: Long,
+        val contentType: String,
+        val fileName: String,
+        val hasFile: Boolean,
+        val text: String?,
+    )
 
     companion object {
         private const val TAG = "SmsMmsBackupDataSource"
@@ -304,6 +337,18 @@ class SmsMmsBackupDataSource(
             Telephony.Mms.SUBJECT,
         )
     }
+}
+
+private val WINDOW_BOUNDS_REGEX = Regex("""(-?\d+)-(-?\d+)""")
+
+// Parses a "<lower>-<upper>" window (epoch ms). Either bound can be negative: a message with a
+// zero date puts the earliest window before 1970 once the runner subtracts its buffer, so the
+// string can't simply be split on the first '-'.
+internal fun parseWindowBounds(raw: String): Pair<Instant, Instant> {
+    val match = WINDOW_BOUNDS_REGEX.matchEntire(raw)
+        ?: throw IllegalArgumentException("Malformed backup window: $raw")
+    val (lower, upper) = match.destructured
+    return Instant.fromEpochMilliseconds(lower.toLong()) to Instant.fromEpochMilliseconds(upper.toLong())
 }
 
 // Encodes/decodes the synthetic Paths this data source hands out
@@ -344,17 +389,13 @@ private sealed class FileKey {
     companion object {
         fun parse(path: Path): FileKey {
             val segments = path.toString().split("/")
-            val bounds = { raw: String ->
-                val (lower, upper) = raw.split("-", limit = 2)
-                Instant.fromEpochMilliseconds(lower.toLong()) to Instant.fromEpochMilliseconds(upper.toLong())
-            }
             return when (segments.getOrNull(0)) {
                 "sms" -> {
-                    val (lower, upper) = bounds(segments[1])
+                    val (lower, upper) = parseWindowBounds(segments[1])
                     SmsWindow(lower, upper)
                 }
                 "mms" -> {
-                    val (lower, upper) = bounds(segments[1])
+                    val (lower, upper) = parseWindowBounds(segments[1])
                     if (segments.getOrNull(2) == "parts") {
                         val (mmsId, partId, fileName) = segments[3].split("-", limit = 3)
                         MmsPart(lower, upper, mmsId.toLong(), partId.toLong(), fileName)

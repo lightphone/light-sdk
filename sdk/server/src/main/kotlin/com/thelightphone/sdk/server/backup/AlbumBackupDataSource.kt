@@ -54,7 +54,7 @@ class AlbumBackupDataSource(
         kind.directories()
             .flatMap { dir -> filesIn(dir).filter { it.lastModified() in (lowerMs + 1)..upperMs }.map { dir to it } }
             .map { (dir, file) -> pathFor(kind, dir, file) }
-            .also { logger.log(TAG, "${it.size} ${kind.label} files to be backed up.") }
+            .also { if (it.isNotEmpty()) logger.log(TAG, "${it.size} ${kind.label} files to be backed up.") }
     }.onFailure { logger.reportError(TAG, it, "Failed to list files to back up for $parent") }
 
     override suspend fun getEarliestPossibleBackupDate(parent: Path): Result<Instant> = runCatching {

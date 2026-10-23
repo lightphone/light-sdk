@@ -8,8 +8,8 @@ import com.thelightphone.backup.BackupDataSource
 import com.thelightphone.backup.BackupDependencyProvider
 import com.thelightphone.backup.BackupPreferences
 import com.thelightphone.backup.BackupStatus
-import com.thelightphone.backup.RemoteAccessTokenProvider
 import com.thelightphone.backup.RemoteBackupProvider
+import com.thelightphone.backup.RemoteConnection
 import com.thelightphone.sdk.server.toolmanager.OAuthTunnelClient
 import com.thelightphone.sdk.server.toolmanager.StoredOAuthTokenProvider
 import com.thelightphone.sdk.server.toolmanager.StoredOAuthTokens
@@ -49,6 +49,10 @@ abstract class BaseBackupDependencyProvider(
         DefaultTokenStorage(preferences, keyCipher)
     }
 
+    val webDavCredentialStorage: WebDavCredentialStorage by lazy {
+        DefaultWebDavCredentialStorage(preferences, keyCipher)
+    }
+
     suspend fun getBackupCapableTools(): List<BackupCapableTool> {
         val external = sdkBackupSource.getBackupCapableTools().map {
             BackupCapableTool(it.packageName, false)
@@ -69,12 +73,18 @@ abstract class BaseBackupDependencyProvider(
 
     protected abstract fun createOAuthTunnelClient(provider: RemoteBackupProvider): OAuthTunnelClient?
 
-    override fun createTokenProvider(provider: RemoteBackupProvider): RemoteAccessTokenProvider? {
+    override suspend fun createOAuthConnection(provider: RemoteBackupProvider): RemoteConnection.OAuth? {
         val tunnelClient = createOAuthTunnelClient(provider) ?: return null
-        return StoredOAuthTokenProvider(provider.name, tokenStorage) { refreshToken ->
+        // nothing linked yet, let the caller fall through to another connection type
+        tokenStorage.getOAuthDetails(provider.name) ?: return null
+        val tokenProvider = StoredOAuthTokenProvider(provider.name, tokenStorage) { refreshToken ->
             tunnelClient.refreshAccessToken(refreshToken)
         }
+        return RemoteConnection.OAuth(tokenProvider)
     }
+
+    override suspend fun createWebDavConnection(): RemoteConnection.WebDav? =
+        webDavCredentialStorage.getWebDavCredentials()?.toConnection()
 
     override fun rootFolderPath(): String = rootPath
 }
@@ -131,18 +141,17 @@ class DefaultTokenStorage(
         return existed
     }
 
-    private fun KeyCipher.encryptToString(plaintext: String): String =
-        Base64.encodeToString(encrypt(plaintext), Base64.NO_WRAP)
+}
 
-    private fun KeyCipher.decryptStringOrNull(encoded: String): String? = try {
-        decrypt(Base64.decode(encoded, Base64.NO_WRAP))
-    } catch (e: Exception) {
-        Log.w(TAG, "Failed to decrypt stored OAuth token, treating as unlinked", e)
-        null
-    }
+private const val TAG = "BackupCredentialStorage"
 
-    private companion object {
-        const val TAG = "EmulatorTokenStorage"
-    }
+internal fun KeyCipher.encryptToString(plaintext: String): String =
+    Base64.encodeToString(encrypt(plaintext), Base64.NO_WRAP)
+
+internal fun KeyCipher.decryptStringOrNull(encoded: String): String? = try {
+    decrypt(Base64.decode(encoded, Base64.NO_WRAP))
+} catch (e: Exception) {
+    Log.w(TAG, "Failed to decrypt stored credential, treating as unlinked", e)
+    null
 }
 

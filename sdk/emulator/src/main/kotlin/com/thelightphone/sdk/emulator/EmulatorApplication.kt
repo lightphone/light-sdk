@@ -13,7 +13,7 @@ import com.thelightphone.backup.BackupScheduler
 import com.thelightphone.backup.BackupWorkerFactory
 import com.thelightphone.backup.RemoteBackupProvider
 import com.thelightphone.sdk.emulator.backup.DefaultBackupDependencyProvider
-import com.thelightphone.sdk.emulator.backup.dummyCloudBackupDataTree
+import com.thelightphone.sdk.emulator.backup.dummyCloudBackupLeafView
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.RootViewSpec
 import com.thelightphone.toolmanager.datatree.RootDataTree
@@ -26,6 +26,7 @@ import com.thelightphone.sdk.server.backup.BackupScheduleSyncer
 import com.thelightphone.sdk.server.backup.DefaultBackupSettingsViewModel
 import com.thelightphone.sdk.server.backup.DefaultObservableBackupPreferences
 import com.thelightphone.sdk.server.backup.InternalToolBackupSpec
+import com.thelightphone.sdk.server.backup.webDavBackupLeafView
 import com.thelightphone.sdk.server.toolmanager.developerModeDataView
 import com.thelightphone.sdk.server.toolmanager.getApkInboxSignaturesDirectory
 import com.thelightphone.sdk.server.toolmanager.readSigningKeyHash
@@ -91,7 +92,10 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 BackupScheduler.enqueueImmediateBackup(this@EmulatorApplication)
 
             override suspend fun removeStoredCredentials(provider: RemoteBackupProvider) {
-                backupDependencyProvider.tokenStorage.removeOAuthDetails(provider.name)
+                when (provider) {
+                    RemoteBackupProvider.WebDav -> backupDependencyProvider.webDavCredentialStorage.removeWebDavCredentials()
+                    else -> backupDependencyProvider.tokenStorage.removeOAuthDetails(provider.name)
+                }
             }
 
             override suspend fun cancelBackupWork() {
@@ -213,13 +217,25 @@ class EmulatorApplication : Application(), Configuration.Provider {
         return RootDataTree {
             val developerMode =
                 developerModeDataView(this, LightSdkServer.getToolManagerKeyCipher())
-            val backupBranch = dummyCloudBackupDataTree(
-                backupDependencyProvider.tokenStorage,
-                BuildConfig.BACKUP_WORKER_HOST,
-                BACKUP_ROOT_PATH
-            ) {
+            val onBackupLinked: suspend (RemoteBackupProvider) -> Unit = {
                 backupObservablePreferences.setActiveProvider(it)
             }
+            val backupBranch = BranchView(
+                RootViewSpec("Backup", BACKUP_ROOT_PATH),
+                StaticBranchProvider(
+                    listOf(
+                        dummyCloudBackupLeafView(
+                            backupDependencyProvider.tokenStorage,
+                            BuildConfig.BACKUP_WORKER_HOST,
+                            onLinked = onBackupLinked
+                        ),
+                        webDavBackupLeafView(
+                            backupDependencyProvider.webDavCredentialStorage,
+                            onLinked = onBackupLinked
+                        ),
+                    )
+                )
+            )
             val toolBranch = DiscoveredToolsBranchProvider(this, toolManagerLogger) {
                 LightSdkServer.isPackageAllowed(settings.clientFilterLevel, this, it)
             }
