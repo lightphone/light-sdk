@@ -5,9 +5,13 @@ import android.net.Uri
 import androidx.core.net.toUri
 import com.thelightphone.toolmanager.LightFileProvider
 import java.io.File
+import java.io.InputStream
 import java.io.InputStreamReader
+import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.nio.charset.Charset
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import kotlin.time.Instant
 
 /**
@@ -57,6 +61,38 @@ class LightFileShare internal constructor(private val androidContext: Context) {
         val file = resolve(relativePath)
         file.parentFile?.mkdirs()
         file.writer().use(block)
+    }
+
+    fun <T> readStream(relativePath: String, block: (InputStream) -> T): T? {
+        val file = resolve(relativePath)
+        if (!file.isFile) return null
+        return file.inputStream().use(block)
+    }
+
+    fun writeBytes(relativePath: String, bytes: ByteArray) {
+        writeStream(relativePath) { it.write(bytes) }
+    }
+
+    /**
+     * Writes raw bytes to the file by streaming them through [block], replacing any existing
+     * content. Use this (rather than [write]) for binary data.
+     *
+     * The data is written to a temporary file first and only moved into place once [block]
+     * returns, so a reader (such as a backup) never sees a half-written file, and a failure
+     * partway through leaves any existing file untouched.
+     */
+    fun writeStream(relativePath: String, block: (OutputStream) -> Unit) {
+        val file = resolve(relativePath)
+        val dir = file.parentFile
+        dir?.mkdirs()
+        // dot-prefixed so backups skip it (hidden files aren't backed up by default)
+        val temp = File.createTempFile(".${file.name}.", ".tmp", dir)
+        try {
+            temp.outputStream().use(block)
+            Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } finally {
+            temp.delete()
+        }
     }
 
     private fun resolve(relativePath: String): File {

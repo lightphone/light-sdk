@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.thelightphone.backup.BackupPreferences
 import com.thelightphone.sdk.emulator.Nav.*
 import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.sdk.server.LightSdkServer.queryEnabledClients
@@ -59,6 +60,7 @@ import java.time.format.DateTimeFormatter
 class MainActivity : ComponentActivity() {
 
     val lightAudioManager get() = (application as EmulatorApplication).lightAudioManager
+    val backupSettingsViewModel get() = (application as EmulatorApplication).backupSettingsViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -104,8 +106,9 @@ class MainActivity : ComponentActivity() {
                     fetchExternalTools = {
                         queryEnabledClients(serverSettings).map {
                             val appInfo = it.packageInfo.applicationInfo!!
-                            val label =
-                                packageManager.getApplicationLabel(appInfo).toString()
+                            val label = LightSdkServer
+                                .getToolLabel(appInfo.packageName)
+                                .toString()
                             ExternalTool(label, it.packageInfo.packageName)
                         }
                     }, launchPackage = {
@@ -122,7 +125,7 @@ class MainActivity : ComponentActivity() {
                     }, launchDefaultTool = {
                         when (it) {
                             DefaultTool.Settings -> EmulatorNavController.navigateTo(Settings())
-                            DefaultTool.ToolManager -> LightSdkServer.foregroundToolManagerUi(this)
+                            DefaultTool.ToolManager -> LightSdkServer.foregroundToolManagerUi(this, null)
                         }
                     })
             }
@@ -134,7 +137,12 @@ class MainActivity : ComponentActivity() {
 
                     override val ringerVolume: StateFlow<Float> = lightAudioManager.ringerVolume
                 }
-                EmulatorSettings(serverSettings, emulatorSettingsAudio, navSnapshot) {
+                EmulatorSettings(
+                    serverSettings,
+                    emulatorSettingsAudio,
+                    navSnapshot,
+                    backupSettingsViewModel,
+                ) {
                     EmulatorNavController.navigateTo(Nav.Toolbox)
                 }
             }

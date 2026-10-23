@@ -63,3 +63,5 @@ object ToolEntryPoint : LightEntryPoint {
 ```
 `onToolManagerDataUpdate()` is invoked from a `WorkManager` worker, so you're free to perform longer-running operations. The limit is ~10 minutes, but we kinda hope you're not using all of that.
 We recommend launching your own worker using the `LightWork` APIs here for better bookkeeping.
+
+4. (Optional) Flag a leaf with `canBeBackedUp = true` to include its files in the user's cloud backups. See [Backups](../backups).
