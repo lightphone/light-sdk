@@ -1,9 +1,9 @@
 [tool]
 id = "com.thelightphone.app"
-label = "Light SDK Tool"
+label = "Compass + Level"
 versionCode = 1
 versionName = "1.0.0"
-permissions = ["android.permission.INTERNET"]
+permissions = []
 capabilities = []
 # for the LightOS emulator, use the line below and build with -DlightSdk.allowAltServerPackage=true
 # serverPackage = "com.thelightphone.sdk.emulator"

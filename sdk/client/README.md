@@ -63,6 +63,16 @@ navigateTo(::DetailScreen) { result ->
 
 The SDK manages its own back stack and renders a back bar at the bottom of the screen. The system back gesture is wired to the same logic; you don't need to handle it yourself.
 
+### Motion sensors
+
+`LightScreen.lightContext.motionSensors` provides compass and level readings without giving the
+tool a raw Android `Context` or `SensorManager`. It exposes a `StateFlow<LightMotionReading>`;
+call `start(LightMotionMode.Compass)` or `start(LightMotionMode.Level)` while the screen is active,
+and call `stop()` from `onScreenHide` and `onAppPause`. A compass uses the rotation-vector sensor
+when available, with an accelerometer/magnetometer fallback. A level uses the gravity sensor when
+available, with an accelerometer fallback. Check `compassAvailable` and `levelAvailable` before
+presenting readings. These sensors do not require a runtime permission.
+
 ### Per-screen storage and files
 
 Every screen gets:
