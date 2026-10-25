@@ -1,5 +1,5 @@
 [tool]
-id = "com.thelightphone.app"
+id = "com.lokeshbv.compasslevel"
 label = "Compass + Level"
 versionCode = 1
 versionName = "1.0.0"
