@@ -2,9 +2,12 @@ package com.thelightphone.sdk.audio
 
 import android.app.Application
 import android.content.Intent
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.OptIn
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Metadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -42,6 +45,16 @@ internal class LightAudioService : MediaSessionService() {
             addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     refreshIdleStop()
+                }
+
+                @OptIn(UnstableApi::class)
+                override fun onMetadata(metadata: Metadata) {
+                    val streamMetadata = metadata.toLightStreamMetadata() ?: return
+                    session.sessionExtras = streamMetadata.toSessionExtras()
+                }
+
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    session.sessionExtras = Bundle()
                 }
             })
         }
