@@ -1,0 +1,6 @@
+{
+  "name": "Light Phone Gemini Tool & Studio",
+  "description": "Distraction-free AI assistant tool for Light Phone III powered by Gemini, featuring an interactive e-ink device simulator and complete Android SDK integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
