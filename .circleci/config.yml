@@ -83,6 +83,21 @@ jobs:
               builder/
 
       - run:
+          name: publish SDK Maven artifacts
+          no_output_timeout: 30m
+          command: |
+            set -euo pipefail
+            : "${GH_PACKAGES_USER:?GH_PACKAGES_USER must be set}"
+            : "${GH_PACKAGES_TOKEN:?GH_PACKAGES_TOKEN must be set}"
+
+            docker run --rm \
+              --entrypoint /bin/bash \
+              -e GITHUB_ACTOR="${GH_PACKAGES_USER}" \
+              -e GITHUB_TOKEN="${GH_PACKAGES_TOKEN}" \
+              "thelightphone/light-sdk-builder:${SDK_VERSION}" \
+              -lc 'cd "$LIGHT_SDK_HOME" && ./gradlew :sdk:shared:publish :sdk:server:publish :sdk:ui:publish --no-daemon'
+
+      - run:
           name: docker hub login
           command: |
             set -euo pipefail
