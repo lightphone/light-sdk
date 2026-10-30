@@ -55,6 +55,8 @@ dependencies {
     api(project(":sdk:shared"))
     api(libs.light.toolmanager.server)
     api(libs.light.backup)
+    // the keyboard settings live in system settings, which the keyboard reads too
+    implementation(libs.light.keyboard)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.work.runtime)
