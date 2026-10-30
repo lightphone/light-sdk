@@ -27,6 +27,10 @@
 #
 # Runtime: see bin/build.sh, which CI runs too. Without LIGHT_MAVEN_PROXY
 # the build runs strictly --offline against the warmed cache.
+#
+# The same build also yields the SDK's Maven bundle (sdk-shared, sdk-server,
+# sdk-ui) published with each release: --target maven-bundle-out
+# --output type=local,dest=DIR (see stage 5).
 
 ARG ANDROID_CMDLINE_TOOLS_VERSION=11076708
 ARG ANDROID_PLATFORM_VERSION=android-36
@@ -83,38 +87,92 @@ RUN git clone --no-tags "${SDK_GIT_URL}" /opt/light-sdk; \
     git -C /opt/light-sdk checkout -q "${SDK_GIT_REF}"; \
     rm -rf /opt/light-sdk/.git
 
-# ─── Stage 3: pre-warm gradle cache ──────────────────────────────────────────
-# Builds the sample tool once, through the Maven proxy and with the runtime
-# build's flags, so its dependencies need no proxy round trips at runtime.
-FROM --platform=linux/amd64 sdk AS warm
+# ─── Stage 3: Maven proxy ────────────────────────────────────────────────────
+# nginx and the proxy scripts, shared by the warm-up and the runtime image.
+FROM --platform=linux/amd64 sdk AS proxy-base
 
 RUN apt-get update && apt-get install -y --no-install-recommends nginx \
     && rm -rf /var/lib/apt/lists/*
 
 COPY proxy /opt/light-builder/proxy
-COPY bin/maven-proxy.sh /opt/light-builder/bin/maven-proxy.sh
+COPY bin/maven-proxy.sh bin/with-proxy.sh /opt/light-builder/bin/
 
-# An incomplete cache cannot support builds; fail the image build too.
+# nginx's working directory (see proxy/nginx.conf); handed to the builder user
+# in the runtime stage.
+RUN mkdir -p /tmp/nginx
+
+# ─── Stage 4: pre-warm gradle cache ──────────────────────────────────────────
+# Builds the sample tool once, through the Maven proxy and with the runtime
+# build's flags, so its dependencies need no proxy round trips at runtime.
+# Build outputs stay in this stage for maven-bundle; the runtime image only
+# takes the Gradle cache (see runtime-base).
+FROM --platform=linux/amd64 proxy-base AS gradle-warmup
+
+# Only /opt/gradle-cache leaves this stage, so packages AGP installs on its own
+# would be missing at runtime; they belong in the base stage's sdkmanager list.
 RUN set -eu; \
-    if ! getent hosts maven-proxy | grep -q '^127\.0\.0\.1'; then \
-        echo "build the image with --add-host maven-proxy=127.0.0.1" >&2; exit 1; \
-    fi; \
-    LIGHT_BUILDER_HOME=/opt/light-builder bash /opt/light-builder/bin/maven-proxy.sh & \
-    proxy_pid=$!; \
-    for _ in $(seq 1 30); do \
-        curl -fsS -o /dev/null http://maven-proxy:8080/healthz && break; sleep 1; \
-    done; \
+    find "$ANDROID_SDK_ROOT" -name package.xml | sort > /tmp/android-sdk-before; \
     cd /opt/light-sdk; \
-    LIGHT_MAVEN_PROXY=http://maven-proxy:8080/ ./gradlew :tool:assembleRelease \
+    LIGHT_MAVEN_PROXY=http://maven-proxy:8080/ /opt/light-builder/bin/with-proxy.sh \
+        ./gradlew :tool:assembleRelease \
         --no-daemon --stacktrace \
         --init-script /opt/light-builder/proxy/init.gradle.kts \
         -DlightSdk.unsigned=true -DlightSdk.abiFilters=arm64-v8a; \
-    kill "$proxy_pid"; \
-    # Drop build outputs but keep the populated dep cache.
-    find /opt/light-sdk -path '*/build' -type d -prune -exec rm -rf {} +
+    find "$ANDROID_SDK_ROOT" -name package.xml | sort > /tmp/android-sdk-after; \
+    if ! diff -u /tmp/android-sdk-before /tmp/android-sdk-after; then \
+        echo "the warm-up installed Android SDK packages; add them to the base stage" >&2; \
+        exit 1; \
+    fi
 
-# ─── Stage 4: final runtime image ────────────────────────────────────────────
-FROM --platform=linux/amd64 warm AS runtime
+# ─── Stage 5: Maven bundle ───────────────────────────────────────────────────
+# Publishes sdk-shared, sdk-server and sdk-ui as a Maven repository directory
+# for the GitHub release. Reuses gradle-warmup's compiled outputs; sdk-server's
+# extra dependencies stay in this stage and never reach the runtime image,
+# whose cache defines the image's approved native libraries.
+FROM --platform=linux/amd64 gradle-warmup AS maven-bundle
+
+COPY release/bundle.init.gradle.kts /opt/light-builder/release/bundle.init.gradle.kts
+
+RUN cd /opt/light-sdk && \
+    LIGHT_MAVEN_PROXY=http://maven-proxy:8080/ \
+    LIGHT_RELEASE_BUNDLE_DIR=/opt/maven-release \
+    /opt/light-builder/bin/with-proxy.sh \
+        ./gradlew \
+        :sdk:shared:publishAllPublicationsToReleaseBundleRepository \
+        :sdk:server:publishAllPublicationsToReleaseBundleRepository \
+        :sdk:ui:publishAllPublicationsToReleaseBundleRepository \
+        --no-daemon --stacktrace \
+        --init-script /opt/light-builder/proxy/init.gradle.kts \
+        --init-script /opt/light-builder/release/bundle.init.gradle.kts \
+        -DlightSdk.unsigned=true -DlightSdk.abiFilters=arm64-v8a
+
+# Resolves the bundle from a consumer project before it can be exported.
+FROM --platform=linux/amd64 maven-bundle AS bundle-smoke
+
+COPY release/smoke /opt/light-builder/release/smoke
+
+RUN cd /opt/light-builder/release/smoke && \
+    sdk_version="$(sed -n 's/^sdkVersion=//p' /opt/light-sdk/gradle.properties)" && \
+    /opt/light-builder/bin/with-proxy.sh \
+        /opt/light-sdk/gradlew -p . resolveBundle \
+        --no-daemon --stacktrace \
+        -PsdkVersion="$sdk_version" \
+        -PlightReleaseBundle=/opt/maven-release \
+        -PlightMavenProxy=http://maven-proxy:8080/ \
+        -PlightSdkCatalog=/opt/light-sdk/gradle/libs.versions.toml
+
+# Export with: docker build --target maven-bundle-out --output type=local,dest=DIR
+FROM scratch AS maven-bundle-out
+COPY --from=bundle-smoke /opt/maven-release /
+
+# ─── Stage 6: runtime base ───────────────────────────────────────────────────
+# Clean SDK source plus the warmed Gradle cache, without build outputs.
+FROM --platform=linux/amd64 proxy-base AS runtime-base
+
+COPY --from=gradle-warmup /opt/gradle-cache /opt/gradle-cache
+
+# ─── Stage 7: final runtime image ────────────────────────────────────────────
+FROM --platform=linux/amd64 runtime-base AS runtime
 
 ARG SDK_GIT_REF
 

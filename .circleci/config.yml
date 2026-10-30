@@ -5,6 +5,125 @@ parameters:
     type: boolean
     default: false
 
+commands:
+  resolve-sdk-version:
+    steps:
+      - run:
+          name: resolve sdk version
+          command: |
+            set -euo pipefail
+            SDK_VERSION="$(
+              awk -F= '/^[[:space:]]*sdkVersion[[:space:]]*=/ {
+                value = $2
+                gsub(/^[[:space:]]+|[[:space:]\r]+$/, "", value)
+                print value
+                exit
+              }' gradle.properties
+            )"
+            if [[ ! "$SDK_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]]; then
+              echo "sdkVersion '$SDK_VERSION' is missing or not a valid Docker tag" >&2
+              exit 1
+            fi
+            echo "SDK_VERSION=$SDK_VERSION"
+            echo "export SDK_VERSION='$SDK_VERSION'" >> "$BASH_ENV"
+
+  unit-tests:
+    steps:
+      - run:
+          name: builder unit tests
+          command: |
+            set -euo pipefail
+            python3 -m venv /tmp/venv
+            /tmp/venv/bin/pip install -q pytest
+            cd builder && /tmp/venv/bin/python -m pytest -q
+      - run:
+          name: plugin unit tests
+          command: |
+            set -euo pipefail
+            docker run --rm -v "$PWD:/src" -w /src/plugin eclipse-temurin:17-jdk-noble \
+              ../gradlew test --no-daemon
+      - run:
+          name: shellcheck
+          command: |
+            set -euo pipefail
+            docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:v0.10.0 \
+              builder/bin/with-proxy.sh
+
+  # Builds the runtime image into the local Docker image store. No credentials
+  # are passed into the build.
+  build-image:
+    parameters:
+      tag:
+        type: string
+    steps:
+      - run:
+          name: build light-builder image
+          no_output_timeout: 60m
+          command: |
+            set -euo pipefail
+            DOCKER_BUILDKIT=1 docker build \
+              -f builder/Dockerfile \
+              --platform=linux/amd64 \
+              --add-host maven-proxy=127.0.0.1 \
+              --build-arg "SDK_GIT_URL=https://github.com/lightphone/light-sdk" \
+              --build-arg "SDK_GIT_REF=${CIRCLE_SHA1}" \
+              --target runtime \
+              -t "<< parameters.tag >>" \
+              builder/
+
+  test-image:
+    parameters:
+      image:
+        type: string
+    steps:
+      - run:
+          name: proxy starts without network access
+          command: |
+            set -euo pipefail
+            bash builder/tests/check_proxy_startup.sh "<< parameters.image >>"
+      - run:
+          name: build sample tool and fixtures behind the Maven proxy
+          no_output_timeout: 60m
+          command: |
+            set -euo pipefail
+            builder/tests/integration.sh "<< parameters.image >>" /tmp/light-builder-integration
+      - store_artifacts:
+          path: /tmp/light-builder-integration
+          destination: integration
+
+  # Exports the Maven bundle from the same build as the image: every step the
+  # two share must come from cache. Needs SDK_VERSION (resolve-sdk-version).
+  build-bundle:
+    steps:
+      - run:
+          name: build Maven bundle
+          no_output_timeout: 60m
+          command: |
+            set -euo pipefail
+            mkdir -p /tmp/bundle
+            DOCKER_BUILDKIT=1 docker build \
+              -f builder/Dockerfile \
+              --platform=linux/amd64 \
+              --add-host maven-proxy=127.0.0.1 \
+              --build-arg "SDK_GIT_URL=https://github.com/lightphone/light-sdk" \
+              --build-arg "SDK_GIT_REF=${CIRCLE_SHA1}" \
+              --target maven-bundle-out \
+              --output type=local,dest=/tmp/maven-release \
+              --progress=plain \
+              builder/ 2>&1 | tee /tmp/bundle/bundle-build.log
+            python3 builder/tests/check_cached.py /tmp/bundle/bundle-build.log \
+              base sdk proxy-base gradle-warmup
+      - run:
+          name: package Maven bundle
+          command: |
+            set -euo pipefail
+            BUNDLE="light-sdk-maven-${SDK_VERSION}.zip"
+            (cd /tmp/maven-release && python3 -m zipfile -c "/tmp/bundle/$BUNDLE" com)
+            (cd /tmp/bundle && sha256sum "$BUNDLE" > "$BUNDLE.sha256" && cat "$BUNDLE.sha256")
+      - store_artifacts:
+          path: /tmp/bundle
+          destination: bundle
+
 jobs:
   build-and-push-light-builder:
     machine:
@@ -112,56 +231,17 @@ jobs:
     resource_class: xlarge
     steps:
       - checkout
+      - resolve-sdk-version
+      - unit-tests
+      - build-image:
+          tag: light-sdk-builder:candidate
+      - test-image:
+          image: light-sdk-builder:candidate
+      - build-bundle
 
-      - run:
-          name: builder unit tests
-          command: |
-            set -euo pipefail
-            python3 -m venv /tmp/venv
-            /tmp/venv/bin/pip install -q pytest
-            cd builder && /tmp/venv/bin/python -m pytest -q
-
-      - run:
-          name: plugin unit tests
-          command: |
-            set -euo pipefail
-            docker run --rm -v "$PWD:/src" -w /src/plugin eclipse-temurin:17-jdk-noble \
-              ../gradlew test --no-daemon
-
-      - run:
-          name: build light-builder image
-          no_output_timeout: 60m
-          command: |
-            set -euo pipefail
-            docker build \
-              -f builder/Dockerfile \
-              --platform=linux/amd64 \
-              --add-host maven-proxy=127.0.0.1 \
-              --build-arg "SDK_GIT_URL=https://github.com/lightphone/light-sdk" \
-              --build-arg "SDK_GIT_REF=${CIRCLE_SHA1}" \
-              -t light-sdk-builder:verify \
-              builder/
-
-      - run:
-          name: proxy starts without network access
-          command: |
-            set -euo pipefail
-            bash builder/tests/check_proxy_startup.sh light-sdk-builder:verify
-
-      - run:
-          name: build sample tool and fixtures behind the Maven proxy
-          no_output_timeout: 60m
-          command: |
-            set -euo pipefail
-            builder/tests/integration.sh light-sdk-builder:verify /tmp/light-builder-integration
-
-      - store_artifacts:
-          path: /tmp/light-builder-integration
-          destination: integration
-
-      # Test images for light-two's pipeline. dev-* tags never move latest or a
-      # version tag; light-two pulls them only when LIGHT_BUILDER_SDK_GIT_REF is set.
-      # Login happens after every tool build has finished.
+      # Test images for light-tool-ci-builder's pipeline. dev-* tags never move
+      # a version tag; tool builds pull them only when LIGHT_BUILDER_SDK_GIT_REF
+      # is set. Login happens after every tool build has finished.
       - run:
           name: push dev image
           command: |
@@ -169,7 +249,7 @@ jobs:
             DEV_TAG="thelightphone/light-sdk-builder:dev-${CIRCLE_SHA1:0:12}"
             echo "$LIGHT_DOCKER_HUB_PASSWORD" | \
               docker login -u "$LIGHT_DOCKER_HUB_USERNAME" --password-stdin
-            docker tag light-sdk-builder:verify "$DEV_TAG"
+            docker tag light-sdk-builder:candidate "$DEV_TAG"
             docker push "$DEV_TAG"
             docker logout
             {

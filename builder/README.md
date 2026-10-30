@@ -95,6 +95,43 @@ DOCKER_BUILDKIT=1 docker build \
 `--add-host` is required: the warm-up resolves through the proxy at the same
 URL the runtime build uses, because Gradle caches metadata per repository URL.
 
+### Maven bundle
+
+The same Dockerfile produces the SDK's Maven bundle (`sdk-shared`,
+`sdk-server`, `sdk-ui` as a Maven repository directory), which releases
+publish alongside the image:
+
+```sh
+DOCKER_BUILDKIT=1 docker build \
+  -f builder/Dockerfile \
+  --add-host maven-proxy=127.0.0.1 \
+  --build-arg SDK_GIT_URL=https://github.com/lightphone/light-sdk \
+  --build-arg SDK_GIT_REF=<tag-or-commit> \
+  --target maven-bundle-out \
+  --output type=local,dest=./maven-release \
+  builder/
+```
+
+Stages:
+
+| Stage | Holds | Shipped |
+|---|---|---|
+| `base` | OS, JDK 17, Android SDK | – |
+| `sdk` | SDK source at `SDK_GIT_REF` | – |
+| `proxy-base` | nginx and the proxy scripts | – |
+| `gradle-warmup` | the warm-up build: Gradle cache, build outputs | – |
+| `maven-bundle` | `gradle-warmup` plus the published bundle | – |
+| `bundle-smoke` | resolves the bundle from a consumer project (`release/smoke/`) | – |
+| `maven-bundle-out` | the bundle only | release asset |
+| `runtime-base` | `proxy-base` plus `gradle-warmup`'s Gradle cache | – |
+| `runtime` | the builder | Docker Hub |
+
+`maven-bundle` reuses `gradle-warmup`'s compiled outputs, so building the
+bundle right after the image recompiles only `sdk-server`. `sdk-server`'s
+dependencies stay out of `runtime`, whose Gradle cache defines the image's
+approved native libraries. Image build steps that need the proxy run through
+`bin/with-proxy.sh`.
+
 ### Apple Silicon
 
 The Dockerfile pins `--platform=linux/amd64` on every stage because Google
