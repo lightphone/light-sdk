@@ -283,6 +283,7 @@ object LightSdkServer {
             // default grantable permissions; enclosing app may override
             setOf(
                 Manifest.permission.CAMERA,
+                Manifest.permission.POST_NOTIFICATIONS,
                 Manifest.permission.READ_MEDIA_AUDIO,
                 Manifest.permission.RECORD_AUDIO,
                 Manifest.permission.ACCESS_FINE_LOCATION,
