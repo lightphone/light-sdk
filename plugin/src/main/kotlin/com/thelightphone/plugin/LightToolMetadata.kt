@@ -23,6 +23,7 @@ data class LightToolMetadata(
     val capabilities: List<String> = emptyList(),
     val serverPackage: String,
     val orientation: String? = null,
+    val largeHeap: Boolean = false,
 ) {
     companion object {
         const val FILE_NAME: String = "lighttool.toml"
@@ -62,6 +63,7 @@ data class LightToolMetadata(
                 capabilities = validateCapabilities(tool.tomlStringList("capabilities")),
                 serverPackage = validateServerPackage(tool.tomlString("serverPackage"), allowAltServerPackage),
                 orientation = validateOrientation(tool.tomlString("orientation")),
+                largeHeap = validateLargeHeap(tool.tomlBoolean(LightToolPolicy.LARGE_HEAP)),
             )
         }
 
@@ -126,6 +128,9 @@ data class LightToolMetadata(
             return value
         }
 
+        /** Absent = false; a non-boolean value is rejected by [tomlBoolean]. */
+        private fun validateLargeHeap(value: Boolean?): Boolean = value ?: false
+
         private fun validatePermissions(values: List<String>?): List<String> {
             val list = values ?: emptyList()
             val seen = mutableSetOf<String>()
@@ -182,6 +187,8 @@ object LightToolPolicy {
     const val MAX_VERSION_CODE: Int = 2_100_000_000
     const val LIGHTOS_SERVER_PACKAGE: String = "com.lightos"
     val ALLOWED_ORIENTATIONS: Set<String> = setOf("portrait")
+
+    const val LARGE_HEAP: String = "largeHeap"
 
     val ALLOWED_PERMISSIONS: Set<String> = setOf(
         "android.permission.INTERNET",
@@ -284,6 +291,12 @@ private fun org.tomlj.TomlTable.tomlLong(key: String): Long? = try {
     if (contains(key)) getLong(key) else null
 } catch (e: TomlInvalidTypeException) {
     throw LightToolMetadataException("tool.$key must be an integer")
+}
+
+private fun org.tomlj.TomlTable.tomlBoolean(key: String): Boolean? = try {
+    if (contains(key)) getBoolean(key) else null
+} catch (e: TomlInvalidTypeException) {
+    throw LightToolMetadataException("tool.$key must be a boolean")
 }
 
 private fun org.tomlj.TomlTable.tomlStringList(key: String): List<String>? {
