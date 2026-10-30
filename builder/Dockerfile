@@ -35,6 +35,9 @@
 ARG ANDROID_CMDLINE_TOOLS_VERSION=11076708
 ARG ANDROID_PLATFORM_VERSION=android-36
 ARG ANDROID_BUILD_TOOLS_VERSION=36.0.0
+# AGP's default build-tools, used by every module (and dev tool) that sets no
+# buildToolsVersion. Must follow the AGP version in gradle/libs.versions.toml.
+ARG AGP_DEFAULT_BUILD_TOOLS_VERSION=35.0.0
 
 # ─── Stage 1: base OS + JDK + Android SDK ────────────────────────────────────
 # Pinned to linux/amd64 because Google only ships AAPT2 as an x86_64 binary.
@@ -45,6 +48,7 @@ FROM --platform=linux/amd64 eclipse-temurin:17-jdk-noble AS base
 ARG ANDROID_CMDLINE_TOOLS_VERSION
 ARG ANDROID_PLATFORM_VERSION
 ARG ANDROID_BUILD_TOOLS_VERSION
+ARG AGP_DEFAULT_BUILD_TOOLS_VERSION
 
 ENV DEBIAN_FRONTEND=noninteractive \
     ANDROID_SDK_ROOT=/opt/android-sdk \
@@ -73,7 +77,8 @@ RUN set -eux; \
     sdkmanager --install \
         "platform-tools" \
         "platforms;${ANDROID_PLATFORM_VERSION}" \
-        "build-tools;${ANDROID_BUILD_TOOLS_VERSION}" > /dev/null
+        "build-tools;${ANDROID_BUILD_TOOLS_VERSION}" \
+        "build-tools;${AGP_DEFAULT_BUILD_TOOLS_VERSION}" > /dev/null
 
 # ─── Stage 2: SDK source ─────────────────────────────────────────────────────
 FROM --platform=linux/amd64 base AS sdk
