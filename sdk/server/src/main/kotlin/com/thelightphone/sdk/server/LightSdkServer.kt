@@ -292,6 +292,7 @@ object LightSdkServer {
             setOf(
                 Manifest.permission.CAMERA,
                 Manifest.permission.READ_MEDIA_AUDIO,
+                Manifest.permission.READ_CONTACTS,
                 Manifest.permission.RECORD_AUDIO,
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION,
