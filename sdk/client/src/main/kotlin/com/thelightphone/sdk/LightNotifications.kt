@@ -1,11 +1,14 @@
 package com.thelightphone.sdk
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import androidx.annotation.RequiresPermission
 
 class LightNotifications(private val context: Context) {
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     fun post(title: String, text: String) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
