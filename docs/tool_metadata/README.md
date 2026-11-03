@@ -24,7 +24,7 @@ orientation  = "portrait"                      # optional; omit for no orientati
 ## Fields
 
 ### `id` — your tool's unique identifier
-A dotted, lowercase Java package identifier with at least two segments — e.g. `com.example.mytool`. Once a tool is published you can't change this without it being treated as a different tool, so pick something stable. If your tool is going in the Light tool library, this will need to be globally unique! We'll let you know if you're trying to pick one that's already been used.
+A dotted, lowercase Java package identifier with at least two segments — e.g. `com.example.mytool`. Ids in the `lightphone` and `thelightphone` namespaces (e.g. `com.lightphone.*`, `org.thelightphone.*`) are reserved for Light: the dashboard won't register them and the build server rejects them, so use a namespace you own. Once a tool is published you can't change this without it being treated as a different tool, so pick something stable. If your tool is going in the Light tool library, this will need to be globally unique! We'll let you know if you're trying to pick one that's already been used.
 
 ### `label` — the name shown on the device
 1–50 printable characters, no `<`, `>`, or control characters. This is what users see in the Light Phone launcher.

@@ -1,5 +1,5 @@
 [tool]
-id = "com.thelightphone.app"
+id = "com.example.mytool"
 label = "Light SDK Tool"
 versionCode = 1
 versionName = "1.0.0"
