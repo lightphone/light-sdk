@@ -495,10 +495,16 @@ lightContext.media.Video(
     modifier = Modifier.fillMaxWidth().height(8f.gridUnitsAsDp()),
     scale = ContentScale.Crop,
 )
+
+val bytes = lightContext.media.readItem(imageItem) { input ->
+    input.readBytes()
+}
 ```
 
+`loadImages` returns `Item.Image` values and `loadVideos` returns `Item.Video` values. `decodeImage` accepts an image, `Video` accepts a video, and `readItem` accepts either.
 `decodeImage` returns the pixels for an image item, which allows you to render them with `Image` and `ContentScale`.
 `Video` plays a video inside the `modifier` frame.
+`readItem` opens an image or a video as an `InputStream` so a tool can upload it or process the bytes. The stream is only valid inside the block, and a file that has been removed returns null.
 
 ### Location
 

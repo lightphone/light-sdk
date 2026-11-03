@@ -26,35 +26,54 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.FileNotFoundException
+import java.io.InputStream
 
 class LightMedia internal constructor(private val androidContext: Context) {
-    enum class Kind {
-        Image,
-        Video,
+    sealed interface Item {
+        val id: Long
+        val name: String
+        val sizeBytes: Long
+
+        data class Image(
+            override val id: Long,
+            override val name: String,
+            override val sizeBytes: Long,
+        ) : Item
+
+        data class Video(
+            override val id: Long,
+            override val name: String,
+            override val sizeBytes: Long,
+        ) : Item
     }
 
-    data class Item(
-        val id: Long,
-        val name: String,
-        val sizeBytes: Long,
-        val kind: Kind,
-    )
-
-    data class Library(
-        val items: List<Item>,
+    data class Library<out T : Item>(
+        val items: List<T>,
         val truncated: Boolean,
     )
 
-    fun loadImages(limit: Int = MAX_LISTED): Library =
-        load(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, Kind.Image, "image", limit)
+    fun loadImages(limit: Int = MAX_LISTED): Library<Item.Image> =
+        load(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image", limit, Item::Image)
 
-    fun loadVideos(limit: Int = MAX_LISTED): Library =
-        load(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, Kind.Video, "video", limit)
+    fun loadVideos(limit: Int = MAX_LISTED): Library<Item.Video> =
+        load(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, "video", limit, Item::Video)
 
-    suspend fun decodeImage(item: Item): ImageBitmap? {
-        if (item.kind != Kind.Image) return null
-        return withContext(Dispatchers.IO) { decodeImageBytes(item) }
-    }
+    suspend fun decodeImage(item: Item.Image): ImageBitmap? =
+        withContext(Dispatchers.IO) { decodeImageBytes(item) }
+
+    /**
+     * opens video or image [item] and passes the raw bytes to [block]
+     */
+    suspend fun <R> readItem(item: Item, block: suspend (InputStream) -> R): R? =
+        withContext(Dispatchers.IO) {
+            val stream = try {
+                androidContext.contentResolver.openInputStream(contentUri(item))
+            } catch (_: FileNotFoundException) {
+                null
+            } ?: return@withContext null
+            stream.use { block(it) }
+        }
 
     /**
      * plays video [item] inside [modifier]. [scale] controls how the picture fills that
@@ -62,7 +81,7 @@ class LightMedia internal constructor(private val androidContext: Context) {
      */
     @Composable
     fun Video(
-        item: Item,
+        item: Item.Video,
         modifier: Modifier = Modifier,
         scale: ContentScale = ContentScale.Fit,
     ) {
@@ -107,13 +126,18 @@ class LightMedia internal constructor(private val androidContext: Context) {
             .align(Alignment.Center)
     }
 
-    private fun load(collection: Uri, kind: Kind, singular: String, limit: Int): Library {
+    private fun <T : Item> load(
+        collection: Uri,
+        singular: String,
+        limit: Int,
+        itemFactory: (id: Long, name: String, sizeBytes: Long) -> T,
+    ): Library<T> {
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.SIZE,
         )
-        val items = mutableListOf<Item>()
+        val items = mutableListOf<T>()
         var truncated = false
 
         androidContext.contentResolver.query(
@@ -132,11 +156,10 @@ class LightMedia internal constructor(private val androidContext: Context) {
                     break
                 }
                 val id = cursor.getLong(idColumn)
-                items += Item(
-                    id = id,
-                    name = cursor.getString(nameColumn) ?: "$singular $id",
-                    sizeBytes = cursor.getLong(sizeColumn),
-                    kind = kind,
+                items += itemFactory(
+                    id,
+                    cursor.getString(nameColumn) ?: "$singular $id",
+                    cursor.getLong(sizeColumn),
                 )
             }
         } ?: return Library(emptyList(), truncated = false)
@@ -145,14 +168,14 @@ class LightMedia internal constructor(private val androidContext: Context) {
     }
 
     private fun contentUri(item: Item): Uri {
-        val collection = when (item.kind) {
-            Kind.Image -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            Kind.Video -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        val collection = when (item) {
+            is Item.Image -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            is Item.Video -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         }
         return ContentUris.withAppendedId(collection, item.id)
     }
 
-    private fun decodeImageBytes(item: Item): ImageBitmap? {
+    private fun decodeImageBytes(item: Item.Image): ImageBitmap? {
         val uri = contentUri(item)
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         androidContext.contentResolver.openInputStream(uri)?.use { input ->
