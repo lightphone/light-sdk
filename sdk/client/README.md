@@ -444,6 +444,49 @@ lightConnectivity.observeNetworkStatus().collect {
 }
 ```
 
+### Images and video
+
+`lightContext.media` is a `LightMedia` instance that allows tools to access media.
+
+Declare the permissions you need in `lighttool.toml` and request each one at runtime before loading (`checkPermission` / `rememberPermissionRequestLauncher`):
+
+```toml
+permissions = [
+  "android.permission.READ_MEDIA_IMAGES",
+  "android.permission.READ_MEDIA_VIDEO",
+]
+```
+
+```kotlin
+val images = lightContext.media.loadImages()
+val videos = lightContext.media.loadVideos()
+
+val bitmap = lightContext.media.decodeImage(imageItem)
+if (bitmap != null) {
+    Image(
+        bitmap = bitmap,
+        contentDescription = imageItem.name,
+        modifier = Modifier.fillMaxWidth().height(8f.gridUnitsAsDp()),
+        contentScale = ContentScale.Crop,
+    )
+}
+
+lightContext.media.Video(
+    item = videoItem,
+    modifier = Modifier.fillMaxWidth().height(8f.gridUnitsAsDp()),
+    scale = ContentScale.Crop,
+)
+
+val bytes = lightContext.media.readItem(imageItem) { input ->
+    input.readBytes()
+}
+```
+
+`loadImages` returns `Item.Image` values and `loadVideos` returns `Item.Video` values. `decodeImage` accepts an image, `Video` accepts a video, and `readItem` accepts either.
+`decodeImage` returns the pixels for an image item, which allows you to render them with `Image` and `ContentScale`.
+`Video` plays a video inside the `modifier` frame.
+`readItem` opens an image or a video as an `InputStream` so a tool can upload it or process the bytes. The stream is only valid inside the block, and a file that has been removed returns null.
+
 ### Location
 
 Four `LightServiceMethod`s expose the device's location. Unlike Audio and NFC there's no dedicated wrapper class yet — call them directly with `callRemoteServiceMethod` (see [Talking to LightOS](#talking-to-lightos) below).
