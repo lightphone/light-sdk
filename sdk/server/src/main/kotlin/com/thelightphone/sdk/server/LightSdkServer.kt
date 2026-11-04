@@ -301,6 +301,7 @@ object LightSdkServer {
             setOf(
                 Manifest.permission.CAMERA,
                 Manifest.permission.POST_NOTIFICATIONS,
+                Manifest.permission.USE_FULL_SCREEN_INTENT,
                 Manifest.permission.READ_MEDIA_AUDIO,
                 Manifest.permission.READ_MEDIA_IMAGES,
                 Manifest.permission.READ_MEDIA_VIDEO,

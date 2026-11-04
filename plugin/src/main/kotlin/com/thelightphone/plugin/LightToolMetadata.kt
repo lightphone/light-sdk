@@ -24,6 +24,7 @@ data class LightToolMetadata(
     val serverPackage: String,
     val orientation: String? = null,
     val largeHeap: Boolean = false,
+    val alertReceiver: String? = null,
 ) {
     companion object {
         const val FILE_NAME: String = "lighttool.toml"
@@ -64,6 +65,7 @@ data class LightToolMetadata(
                 serverPackage = validateServerPackage(tool.tomlString("serverPackage"), allowAltServerPackage),
                 orientation = validateOrientation(tool.tomlString("orientation")),
                 largeHeap = validateLargeHeap(tool.tomlBoolean(LightToolPolicy.LARGE_HEAP)),
+                alertReceiver = validateAlertReceiver(tool.tomlString("alertReceiver")),
             )
         }
 
@@ -128,6 +130,15 @@ data class LightToolMetadata(
             return value
         }
 
+        private fun validateAlertReceiver(value: String?): String? {
+            if (value == null) return null
+            require(LightToolPolicy.CLASS_NAME_PATTERN.matches(value)) {
+                "tool.alertReceiver must be a fully qualified class name " +
+                    "(e.g. com.example.mytool.AlarmReceiver); got '$value'"
+            }
+            return value
+        }
+
         /** Absent = false; a non-boolean value is rejected by [tomlBoolean]. */
         private fun validateLargeHeap(value: Boolean?): Boolean = value ?: false
 
@@ -181,6 +192,7 @@ class LightToolMetadataException(message: String) : RuntimeException(message)
 /** Policy values lifted into one object so tests and the validator share them. */
 object LightToolPolicy {
     val TOOL_ID_PATTERN: Regex = Regex("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$")
+    val CLASS_NAME_PATTERN: Regex = Regex("^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$")
 
     /** Second id segment of Light's own namespaces, under any first segment; the build server rejects them. */
     val RESERVED_TOOL_ID_NAMESPACES: Set<String> = setOf("thelightphone", "lightphone")
@@ -201,6 +213,8 @@ object LightToolPolicy {
         "android.permission.WAKE_LOCK",
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_FULL_SCREEN_INTENT",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_MEDIA_AUDIO",
