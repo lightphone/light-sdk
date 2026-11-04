@@ -58,6 +58,7 @@ class EmulatorApplication : Application(), Configuration.Provider {
 
     val lightAudioManager by lazy { LightAudioManager(this) }
     val deviceKeyHandler by lazy { EmulatorDeviceKeyHandler(lightAudioManager) }
+    val platformMediaSessions by lazy { PlatformMediaSessionObserver(this) }
 
     val backupSharedPrefs: SharedPreferences by lazy {
         getSharedPreferences(
@@ -179,6 +180,7 @@ class EmulatorApplication : Application(), Configuration.Provider {
         }
         updateValidSignatures()
         EmulatorHttpServer(this).start()
+        platformMediaSessions.subscribe()
 
         val backupScheduleSyncer = BackupScheduleSyncer(this, backupObservablePreferences)
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch { backupScheduleSyncer.run() }
