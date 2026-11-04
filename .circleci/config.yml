@@ -143,10 +143,12 @@ jobs:
               builder/
 
       - run:
-          name: proxy starts without network access
+          name: proxy isolation and response headers
           command: |
             set -euo pipefail
             bash builder/tests/check_proxy_startup.sh light-sdk-builder:verify
+            LIGHT_BUILDER_TEST_IMAGE=light-sdk-builder:verify \
+              /tmp/venv/bin/python -m pytest -q builder/tests/test_proxy_headers.py
 
       - run:
           name: build sample tool and fixtures behind the Maven proxy
