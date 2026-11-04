@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Surface
@@ -60,6 +61,7 @@ import java.time.format.DateTimeFormatter
 class MainActivity : ComponentActivity() {
 
     val lightAudioManager get() = (application as EmulatorApplication).lightAudioManager
+    val platformMediaSessions get() = (application as EmulatorApplication).platformMediaSessions
     val backupSettingsViewModel get() = (application as EmulatorApplication).backupSettingsViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -96,7 +98,12 @@ class MainActivity : ComponentActivity() {
         val currentNav by EmulatorNavController.currentNav.collectAsState()
         when (val navSnapshot = currentNav) {
             Nav.LockScreen -> {
-                LightLockscreen {
+                val mediaSession by platformMediaSessions.state.collectAsState()
+                LightLockscreen(
+                    mediaSession = mediaSession,
+                    onMediaControl = { it.send(platformMediaSessions) },
+                    onMediaOpen = platformMediaSessions::open,
+                ) {
                     EmulatorNavController.navigateTo(Nav.Toolbox)
                 }
             }
@@ -225,7 +232,12 @@ private fun ToolList(
 }
 
 @Composable
-private fun LightLockscreen(onUnlockClicked: () -> Unit) {
+private fun LightLockscreen(
+    mediaSession: PlatformMediaSession?,
+    onMediaControl: (MediaControl) -> Unit,
+    onMediaOpen: () -> Unit,
+    onUnlockClicked: () -> Unit,
+) {
     Surface {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -255,11 +267,14 @@ private fun LightLockscreen(onUnlockClicked: () -> Unit) {
                 }
 
                 val formatter = remember { DateTimeFormatter.ofPattern("h:mm") }
-                LightText(
-                    time.format(formatter),
-                    variant = LightTextVariant.Title,
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.align(BiasAlignment(0f, -0.1f))
-                )
+                ) {
+                    LightText(time.format(formatter), variant = LightTextVariant.Title)
+                    Spacer(Modifier.height(0.75f.gridUnitsAsDp()))
+                    PlatformMediaSessionControls(mediaSession, onMediaControl, onMediaOpen)
+                }
             }
             Box(Modifier.clickable(onClick = onUnlockClicked)) {
                 LightIcon(
@@ -275,7 +290,7 @@ private fun LightLockscreen(onUnlockClicked: () -> Unit) {
 @Composable
 fun LockScreenPreview() {
     LightTheme(colors = LightThemeColors.Dark) {
-        LightLockscreen { }
+        LightLockscreen(null, {}, {}) { }
     }
 }
 
@@ -283,6 +298,6 @@ fun LockScreenPreview() {
 @Composable
 fun LockScreenPreviewLight() {
     LightTheme(colors = LightThemeColors.Light) {
-        LightLockscreen { }
+        LightLockscreen(previewSession("music", playing = true), {}, {}) { }
     }
 }
