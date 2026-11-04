@@ -48,6 +48,7 @@ Using the Dashboard, developers are able to queue up a build of your tool on our
 
 1. Review the [Tool Guidelines](TOOL_GUIDELINES.md) to get a sense of the kind of tools we're hoping to showcase.
 2. Ensure your tool is built with the latest Light SDK version and is accessible via a public Github repo.
+  - Keep the [files the build server requires](docs/repo/README.md#required-files) when trimming the repo down to your tool.
 3. Enable developer mode on the [dashboard](https://dashboard.thelightphone.com/): Settings -> Account -> Developer Account.
 4. From there, you can create your tool: Settings -> Account -> Developer Account -> Manage Custom Tools -> Submit New Tool:
   - The package name is unique for all tools and can't be changed later. It is pulled from the default branch of the Github repo submitted upon registering the tool.
