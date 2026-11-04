@@ -80,6 +80,29 @@ class ManifestGeneratorTest {
     }
 
     @Test
+    fun `alert receiver is omitted by default`() {
+        assertFalse(render().contains("com.thelightphone.sdk.action.ALERT"))
+    }
+
+    @Test
+    fun `alert receiver is emitted when declared`() {
+        val xml = ManifestGenerator.render(
+            LightToolMetadata(
+                toolId = "com.example.mytool",
+                label = "My App",
+                versionCode = 1,
+                versionName = "1.0.0",
+                permissions = emptyList(),
+                serverPackage = "com.lightos",
+                alertReceiver = "com.example.mytool.AlarmReceiver",
+            )
+        )
+        assertTrue(xml.contains("android:name=\"com.example.mytool.AlarmReceiver\""))
+        assertTrue(xml.contains("<action android:name=\"com.thelightphone.sdk.action.ALERT\" />"))
+        assertTrue(xml.contains("android:exported=\"false\""))
+    }
+
+    @Test
     fun `camera permission emits a matching uses-feature`() {
         // Without this, lint trips PermissionImpliesUnsupportedChromeOsHardware.
         val xml = render(permissions = listOf("android.permission.CAMERA"))
