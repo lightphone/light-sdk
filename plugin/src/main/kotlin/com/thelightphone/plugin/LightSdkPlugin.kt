@@ -303,6 +303,15 @@ class LightSdkPlugin : Plugin<Project> {
             throw GradleException("Light SDK: ${e.message}")
         }
 
+        // A warning, not an error: the bundled examples and Light's core tools use these namespaces.
+        if (LightToolPolicy.isReservedToolId(metadata.toolId)) {
+            project.logger.warn(
+                "Light SDK: tool.id '${metadata.toolId}' is in a namespace reserved for Light " +
+                        "(${LightToolPolicy.RESERVED_TOOL_ID_NAMESPACES.joinToString { "*.$it.*" }}). " +
+                        "Change it in lighttool.toml (e.g. com.example.mytool) before registering your tool."
+            )
+        }
+
         metadata.capabilities
             .flatMap { LightToolPolicy.CAPABILITY_IMPLIED_DEPENDENCIES[it].orEmpty() }
             .forEach { project.dependencies.add("implementation", it) }
