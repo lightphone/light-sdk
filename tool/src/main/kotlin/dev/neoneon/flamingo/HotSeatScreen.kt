@@ -585,7 +585,7 @@ private fun PreviewHotSeatFresh(
     HotSeatContent(state = previewState(), colors = colors)
 }
 
-// After 1.e4, once the board has turned: black at the bottom, e2 and e4 shaded.
+// After 1.e4, once the board has turned: black at the bottom, e2 and e4 framed.
 @Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
 @Composable
 private fun PreviewHotSeatBlackToMove(

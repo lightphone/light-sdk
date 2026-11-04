@@ -87,7 +87,8 @@ private fun PromotionOption(piece: Piece, onSelect: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LightText(
-            // Same colour inversion ChessBoard uses, so the glyphs match the pieces on the board.
+            // Inverted so that, drawn in white on LightOS's black, the filled glyph is the white
+            // piece. The board doesn't need this: it draws in ink on newsprint whatever the theme.
             text = piece.copy(color = piece.color.opposite).graphic,
             variant = LightTextVariant.Heading,
         )

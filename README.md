@@ -4,8 +4,8 @@
 friend, and your move.
 
 <p>
-  <img src="docs/screenshots/games.png" width="260" alt="The Games list: games against Bob's LightIII, each with its status — checkmate, waiting for opponent, their turn, resigned, draw">
-  <img src="docs/screenshots/game.png" width="260" alt="A finished game: checkmate, white won, with the mated king marked and the last move shaded">
+  <img src="docs/screenshots/games.png" width="260" alt="The Games list: games against Cathryn, each with its status — their turn, checkmate, waiting for opponent">
+  <img src="docs/screenshots/game.png" width="260" alt="A finished game: checkmate, white won, with the mated king marked and the last move framed">
   <img src="docs/screenshots/remote.png" width="260" alt="Remote: New game and Join by code">
 </p>
 
@@ -34,7 +34,7 @@ Reset the board and play again.
   ellipsis.
 - Checkmate, stalemate, threefold repetition, the fifty-move rule and insufficient material are
   all recognized, and the game says how it ended.
-- A king in check is marked. The last move can be shaded on the board — every last move, only
+- A king in check is marked. The last move can be marked on the board — every last move, only
   your opponent's, or none (**Info → Board**).
 - You play under a name like `blueberry764`, so a game reads "blueberry764 vs orange489". Change
   yours under **Info → Account**.

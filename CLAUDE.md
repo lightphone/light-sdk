@@ -84,7 +84,7 @@ the SDK supplies the back button. Screens come in `LightScreen` / `LightViewMode
 | `GamesListScreen` / `GameListRow` | The tool's home: the player's games and what their status means |
 | `RemoteGameScreen` / `CreateGameScreen` / `JoinByPhraseScreen` / `LightCodeInput` | REMOTE in the Games bottom bar: invite-code create and join, OTP-style per-letter entry |
 | `SharePhrase` | Sharing the invite code from inside a game |
-| `GameView` / `ChessBoard` | The board, its ViewModel, and rendering (check highlight, last-move square shading) |
+| `GameView` / `ChessBoard` | The board, its ViewModel, and rendering (a newspaper diagram — hatched dark squares on newsprint — check highlight, last move framed (dashed from, solid to), selection framed in ink, targets dotted in light grey) |
 | `GameActions` / `GameOutcome` | Draw offer/answer/decline, resign, and how a game ended |
 | `GamePanes` | Promotion picker, action row and centered message, shared by `GameView` and `HotSeatScreen` |
 | `HotSeatScreen` / `HotSeatGameModel` | "Local": two players on one phone, offline — see Hot seat below |
@@ -171,6 +171,11 @@ the half-move the actor would have played next.
 
 ## Gotchas
 
+- **The board ignores the LightOS theme.** It is always an old newspaper diagram: black ink on
+  almost-white newsprint (`NEWSPRINT_INK` / `NEWSPRINT_PAPER` in `ChessBoard`), dark squares
+  hatched. Draw on it in those, never in `LightThemeTokens.colors.content` — that is white in the
+  dark theme. A piece on a hatched square is ringed in the square's own ground, so the hatching
+  stops short of its outline (iOS's `docs/design/newspaper-pieces` preview does the same).
 - **`fen` is the position a move was played *from*, not the one it produced.** That holds
   for the socket frame, the URL contract, and `MoveDTO.fenAfter` (a misnomer kept for wire
   compatibility). The receiver seeds from `fen` and replays `lan` on top.
