@@ -444,6 +444,25 @@ lightConnectivity.observeNetworkStatus().collect {
 }
 ```
 
+### Notifications
+
+`lightContext.notifications` posts and cancels a notification for the tool.
+
+Declare `POST_NOTIFICATIONS` in `lighttool.toml` and request it at runtime before posting (`checkPermission` / `rememberPermissionRequestLauncher`):
+
+```toml
+permissions = ["android.permission.POST_NOTIFICATIONS"]
+```
+
+```kotlin
+lightContext.notifications.post("Example", "Posted from light-sdk tool")
+lightContext.notifications.cancel()
+```
+
+Calling `post` again replaces the tool's previous notification, and`cancel` clears it.
+
+While the notification is active, LightOS displays an asterisk beside the tool in the toolbox and on the standby screen.
+
 ### Location
 
 Four `LightServiceMethod`s expose the device's location. Unlike Audio and NFC there's no dedicated wrapper class yet — call them directly with `callRemoteServiceMethod` (see [Talking to LightOS](#talking-to-lightos) below).

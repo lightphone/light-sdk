@@ -57,6 +57,7 @@ dependencies {
     api(libs.ktor.client.okhttp)
     api(libs.ktor.client.content.negotiation)
     api(libs.ktor.serialization.json)
+    implementation(libs.androidx.annotation)
     implementation(libs.unifiedpush.connector)
     implementation(libs.androidx.splashscreen)
     api(libs.androidx.room.runtime)

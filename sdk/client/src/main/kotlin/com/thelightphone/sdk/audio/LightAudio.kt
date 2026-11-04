@@ -4,6 +4,11 @@ import android.content.Context
 import android.media.AudioManager
 import com.thelightphone.sdk.SealedLightActivity
 
+/**
+ * @property usage how items without their own [LightAudioItem.usage] play.
+ *   Part of a detached session's identity: a later player must request the
+ *   same one, even while the current item plays with a different usage.
+ */
 data class LightPlayerSpec(
     val usage: LightAudioUsage = LightAudioUsage.Music,
     val playback: LightAudioPlayback = LightAudioPlayback.Attached,

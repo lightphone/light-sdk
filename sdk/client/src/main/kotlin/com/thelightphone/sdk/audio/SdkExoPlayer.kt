@@ -2,6 +2,9 @@ package com.thelightphone.sdk.audio
 
 import android.content.Context
 import androidx.annotation.OptIn
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.DatabaseProvider
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -21,12 +24,17 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * A requested cache wraps HTTP only; [DefaultDataSource] wraps it so local
  * files are not copied into the cache.
+ *
+ * [usage] applies to items without their own [LightAudioItem.usage]. The
+ * player re-applies audio attributes as the current item's usage changes and
+ * reports each change to [onUsageChanged].
  */
 @OptIn(UnstableApi::class)
 internal fun buildSdkExoPlayer(
     context: Context,
     usage: LightAudioUsage,
     cache: LightMediaCache?,
+    onUsageChanged: (LightAudioUsage) -> Unit = {},
 ): ExoPlayer {
     val builder = ExoPlayer.Builder(context)
     if (cache != null) {
@@ -38,8 +46,34 @@ internal fun buildSdkExoPlayer(
             DefaultMediaSourceFactory(DefaultDataSource.Factory(context, network))
         )
     }
+    builder.setSeekBackIncrementMs(SEEK_INCREMENT_MS).setSeekForwardIncrementMs(SEEK_INCREMENT_MS)
     return builder.build().apply {
         setAudioAttributes(usage.toMedia3AudioAttributes(), true)
+        addListener(ItemUsageFollower(this, usage, onUsageChanged))
+    }
+}
+
+/**
+ * Keeps the player's audio attributes on the current item's usage. A timeline
+ * change covers replacing the current item, which is not a transition.
+ */
+private class ItemUsageFollower(
+    private val player: ExoPlayer,
+    private val playerUsage: LightAudioUsage,
+    private val onUsageChanged: (LightAudioUsage) -> Unit,
+) : Player.Listener {
+    private var applied = playerUsage
+
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = follow()
+
+    override fun onTimelineChanged(timeline: Timeline, reason: Int) = follow()
+
+    private fun follow() {
+        val usage = effectiveUsage(player.currentMediaItem?.itemUsage(), playerUsage)
+        if (usage == applied) return
+        applied = usage
+        player.setAudioAttributes(usage.toMedia3AudioAttributes(), true)
+        onUsageChanged(usage)
     }
 }
 

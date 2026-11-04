@@ -47,22 +47,81 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Full-screen QR scanner: live camera preview, dimmed overlay with viewfinder,
- * top-bar back, and [onScanned] with the decoded string.
+ * Barcode format constants for [LightCodeScanner]'s `formats` parameter.
+ * Mirrors ML Kit's `Barcode.FORMAT_*` values (stable public constants, inlined
+ * at compile time) so callers can name formats without the ML Kit artifact on
+ * their compile classpath.
+ */
+object LightBarcodeFormats {
+    const val CODE_128 = Barcode.FORMAT_CODE_128
+    const val CODE_39 = Barcode.FORMAT_CODE_39
+    const val CODE_93 = Barcode.FORMAT_CODE_93
+    const val CODABAR = Barcode.FORMAT_CODABAR
+    const val DATA_MATRIX = Barcode.FORMAT_DATA_MATRIX
+    const val EAN_13 = Barcode.FORMAT_EAN_13
+    const val EAN_8 = Barcode.FORMAT_EAN_8
+    const val ITF = Barcode.FORMAT_ITF
+    const val QR = Barcode.FORMAT_QR_CODE
+    const val UPC_A = Barcode.FORMAT_UPC_A
+    const val UPC_E = Barcode.FORMAT_UPC_E
+    const val PDF417 = Barcode.FORMAT_PDF417
+    const val AZTEC = Barcode.FORMAT_AZTEC
+
+    /** QR only — the default for the QR-specific client wrapper. */
+    val QR_ONLY: List<Int> = listOf(QR)
+
+    /** The symbologies a code-wallet/ticketing flow scans. */
+    val COMMON: List<Int> = listOf(
+        QR, AZTEC, PDF417, DATA_MATRIX, CODE_128, CODE_39, CODE_93,
+        CODABAR, EAN_13, EAN_8, UPC_A, UPC_E, ITF,
+    )
+}
+
+/**
+ * A barcode decoded by the scanner: the decoded text value, the format as an
+ * ML Kit `Barcode.FORMAT_*` constant (compare against [LightBarcodeFormats]),
+ * and the raw payload bytes (present when the payload is binary rather than
+ * text, e.g. an Aztec ticketing code).
+ */
+data class LightScannedBarcode(
+    val value: String,
+    val format: Int,
+    val rawBytes: ByteArray? = null,
+) {
+    // ByteArray in a data class: compare by content.
+    override fun equals(other: Any?): Boolean =
+        other is LightScannedBarcode &&
+            value == other.value &&
+            format == other.format &&
+            rawBytes.contentEquals(other.rawBytes)
+
+    override fun hashCode(): Int =
+        31 * (31 * value.hashCode() + format) + rawBytes.contentHashCode()
+}
+
+/**
+ * Full-screen code scanner: live camera preview, dimmed overlay with viewfinder,
+ * top-bar back, and [onScannedBarcode] with the decoded result (format +
+ * raw payload bytes). The client library's `LightQrCodeScanner` is a
+ * QR-specific wrapper around this that handles the camera permission RPC.
+ *
+ * The decoder scans the symbologies listed in [formats] (e.g. [LightBarcodeFormats].
+ * constants).
  *
  * Host apps must declare [Manifest.permission.CAMERA].
  *
- * When handling [onScanned], defer navigation to a [LaunchedEffect] (or similar)
+ * When handling [onScannedBarcode], defer navigation to a [LaunchedEffect] (or similar)
  * and pop the scanner before pushing the next screen, e.g. `goBack()` then `navigateTo(...)`.
  */
 @Composable
-fun LightQrCodeScanner(
-    onScanned: (String) -> Unit,
+fun LightCodeScanner(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    title: String = "Scan QR Code",
+    title: String,
     checkCameraPermission: suspend () -> Result<Boolean>,
     launchCameraPermissionRequest: suspend () -> Unit,
+    formats: List<Int>,
+    onScannedBarcode: (LightScannedBarcode) -> Unit,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val colors = LightThemeTokens.colors
@@ -88,7 +147,7 @@ fun LightQrCodeScanner(
     }
 
     val scannedOnce = remember { AtomicBoolean(false) }
-    val onScannedState = rememberUpdatedState(onScanned)
+    val onScannedBarcodeState = rememberUpdatedState(onScannedBarcode)
     val onBackState = rememberUpdatedState(onBack)
 
     Box(
@@ -98,9 +157,10 @@ fun LightQrCodeScanner(
     ) {
         if (uiState == LightQrUiState.Active) {
             QrCameraPreview(
-                onQrCode = { value ->
+                formats = formats,
+                onBarcode = { scanned ->
                     if (scannedOnce.compareAndSet(false, true)) {
-                        onScannedState.value(value)
+                        onScannedBarcodeState.value(scanned)
                     }
                 },
                 lifecycleOwner = lifecycleOwner,
@@ -159,18 +219,20 @@ fun LightQrCodeScanner(
 
 @Composable
 private fun QrCameraPreview(
-    onQrCode: (String) -> Unit,
+    onBarcode: (LightScannedBarcode) -> Unit,
+    formats: List<Int>,
     lifecycleOwner: LifecycleOwner,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val mainExecutor = remember { ContextCompat.getMainExecutor(context) }
-    val onQrCodeState = rememberUpdatedState(onQrCode)
+    val onBarcodeState = rememberUpdatedState(onBarcode)
 
-    val barcodeScanner = remember {
+    val barcodeScanner = remember(formats) {
+        val first = formats.firstOrNull() ?: Barcode.FORMAT_QR_CODE
         BarcodeScanning.getClient(
             BarcodeScannerOptions.Builder()
-                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .setBarcodeFormats(first, *formats.drop(1).toIntArray())
                 .build(),
         )
     }
@@ -197,13 +259,16 @@ private fun QrCameraPreview(
                 return@MlKitAnalyzer
             }
 
-            val value = barcodes
-                .asSequence()
-                .mapNotNull { it.rawValue ?: it.displayValue }
-                .firstOrNull { it.isNotBlank() }
+            val scanned = barcodes.firstOrNull { !(it.rawValue ?: it.displayValue).isNullOrBlank() }
 
-            if (value != null) {
-                onQrCodeState.value(value)
+            if (scanned != null) {
+                onBarcodeState.value(
+                    LightScannedBarcode(
+                        value = scanned.rawValue ?: scanned.displayValue!!,
+                        format = scanned.format,
+                        rawBytes = scanned.rawBytes,
+                    ),
+                )
             }
         }
         cameraController.setImageAnalysisAnalyzer(mainExecutor, analyzer)
