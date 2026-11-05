@@ -6,6 +6,7 @@
         android:name="android.hardware.usb.host"
         android:required="false" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application>
         <service
             android:name="com.thelightphone.sdk.LightPushService"
@@ -14,6 +15,16 @@
                 <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
             </intent-filter>
         </service>
+
+        <receiver
+            android:name="com.thelightphone.sdk.LightAlertAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="com.thelightphone.sdk.action.FIRE_ALERT" />
+            </intent-filter>
+        </receiver>
         <!-- LightAudioService is not declared here. The Gradle plugin emits it
              into the manifests of tools that declare the detached-audio
              capability, so no other tool carries a mediaPlayback claim. -->

@@ -81,6 +81,20 @@ object ManifestGenerator {
             )
         )
 
+        val alertReceiver = marginBlock(
+            metadata.alertReceiver?.let { name ->
+                listOf(
+                    """        <receiver""",
+                    """            android:name="${xmlAttr(name)}"""",
+                    """            android:exported="false">""",
+                    """            <intent-filter>""",
+                    """                <action android:name="com.thelightphone.sdk.action.ALERT" />""",
+                    """            </intent-filter>""",
+                    """        </receiver>""",
+                )
+            }.orEmpty()
+        )
+
         val cleartext = marginBlock(
             if (LightToolPolicy.CLEARTEXT_HTTP !in metadata.capabilities) emptyList() else listOf(
                 """        android:usesCleartextTraffic="true"""",
@@ -116,7 +130,7 @@ object ManifestGenerator {
             |            <meta-data
             |                android:name="com.thelightphone.sdk.SDK_VERSION"
             |                android:value="${'$'}{sdkVersion}" />
-            |        </receiver>$detachedAudioService$toolManagerProvider
+            |        </receiver>$alertReceiver$detachedAudioService$toolManagerProvider
             |    </application>
             |    <queries>
             |        <intent>

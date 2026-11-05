@@ -39,6 +39,41 @@ class LightToolMetadataTest {
         assertEquals(listOf("detached-audio"), meta.capabilities)
         assertEquals("com.lightos", meta.serverPackage)
         assertEquals("portrait", meta.orientation)
+        assertEquals(null, meta.alertReceiver)
+    }
+
+    @Test
+    fun `alertReceiver parses a class name`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "My Tool"
+            versionCode = 1
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
+            alertReceiver = "com.example.mytool.AlarmReceiver"
+        """.trimIndent())
+
+        assertEquals(
+            "com.example.mytool.AlarmReceiver",
+            LightToolMetadata.parse(file).alertReceiver,
+        )
+    }
+
+    @Test
+    fun `alertReceiver rejects a bare class name`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "My Tool"
+            versionCode = 1
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
+            alertReceiver = "AlarmReceiver"
+        """.trimIndent())
+
+        val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+        assert(ex.message!!.contains("alertReceiver"))
     }
 
     @Test
