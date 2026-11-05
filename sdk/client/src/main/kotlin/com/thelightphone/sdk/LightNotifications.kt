@@ -90,6 +90,7 @@ class LightNotifications(private val context: Context) {
             .cancel(FULL_SCREEN_ALERT_NOTIFICATION_ID)
     }
 
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private fun postFullScreenAlert(context: Context, launch: Intent, title: String, text: String) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
@@ -121,8 +122,11 @@ class LightNotifications(private val context: Context) {
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()
-        runCatching { manager.notify(FULL_SCREEN_ALERT_NOTIFICATION_ID, notification) }
-            .onFailure { Log.e(TAG, "Could not post the full-screen alert", it) }
+        try {
+            manager.notify(FULL_SCREEN_ALERT_NOTIFICATION_ID, notification)
+        } catch (error: SecurityException) {
+            Log.e(TAG, "Could not post the full-screen alert", error)
+        }
     }
 }
 
