@@ -193,6 +193,19 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
         override val responseSerializer = serializer<Unit>()
     }
 
+    // Gets the package of the app that handles full-screen text entry, see
+    // com.thelightphone.lp3Keyboard.textentry.TextEntryProtocol. null if there isn't one.
+    object GetKeyboardPackage : LightServiceMethod<Unit, GetKeyboardPackage.Response> {
+        override val id = "GetKeyboardPackage"
+        override val requestSerializer = serializer<Unit>()
+        override val responseSerializer = serializer<Response>()
+
+        @Serializable
+        data class Response(
+            val packageName: String? = null,
+        )
+    }
+
     /**
      * Base type for tool-defined methods that are not part of [allMethods].
      * The server routes these through [com.thelightphone.sdk.server.LightSdkServer.customServiceMethodResolver].
@@ -214,4 +227,5 @@ val allMethods: Map<String, LightServiceMethod<*, *>> = listOf(
     LightServiceMethod.GetDefaultLocation,
     LightServiceMethod.RequestLocationUpdates,
     LightServiceMethod.ReleaseLocationUpdates,
+    LightServiceMethod.GetKeyboardPackage,
 ).associateBy { it.id }

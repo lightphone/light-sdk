@@ -32,6 +32,7 @@ import com.thelightphone.sdk.server.toolmanager.getApkInboxSignaturesDirectory
 import com.thelightphone.sdk.server.toolmanager.readSigningKeyHash
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
+import com.thelightphone.lp3Keyboard.textentry.TextEntryProtocol
 import com.thelightphone.sdk.ui.LightModalManager
 import com.thelightphone.toolmanager.DiscoveredToolsBranchProvider
 import com.thelightphone.toolmanager.Logger
@@ -136,6 +137,7 @@ class EmulatorApplication : Application(), Configuration.Provider {
             provideSdkSettings = { settings }
             permissionActivity = LightSdkPermissionActivity::class.java
             onDeviceKeyEvent = { _, request -> handleDeviceKeyEvent(request) }
+            getKeyboardPackage = ::installedLp3Keyboard
             // emulator is running on local device, automatically approve network
             isNetworkApprovedForToolManager = { true }
             foregroundToolManagerUi = { activity, path ->
@@ -193,6 +195,14 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 )
             )
             .build()
+
+    // text entry goes to the stock LP3 keyboard, if it's been installed on the emulator
+    private fun installedLp3Keyboard(): String? = try {
+        packageManager.getPackageInfo(TextEntryProtocol.LP3_KEYBOARD_PACKAGE, 0)
+        TextEntryProtocol.LP3_KEYBOARD_PACKAGE
+    } catch (e: PackageManager.NameNotFoundException) {
+        null
+    }
 
     // For the emulator, any apk built with LIGHTSDK_DEV_CERT_SHA256 is considered signed by Light
     // also include user uploaded signatures

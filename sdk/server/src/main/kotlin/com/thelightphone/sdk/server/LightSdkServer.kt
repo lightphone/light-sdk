@@ -269,6 +269,14 @@ object LightSdkServer {
             )
         }
 
+    /**
+     * Returns the package of the app that handles full-screen text entry, or null if there isn't
+     * one. Tools ask for it through GetKeyboardPackage.
+     *
+     * Settable from enclosing application!! May be run on any thread
+     */
+    var getKeyboardPackage: () -> String? = { null }
+
     var foregroundSelfWithCallback: (componentToReturnTo: ComponentName) -> Unit = {
         Log.e(TAG, "Server wants to foreground itself but does not know how!")
     }
