@@ -6,7 +6,6 @@
         android:name="android.hardware.usb.host"
         android:required="false" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application>
         <service
             android:name="com.thelightphone.sdk.LightPushService"
@@ -16,15 +15,6 @@
             </intent-filter>
         </service>
 
-        <receiver
-            android:name="com.thelightphone.sdk.LightAlertAlarmReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="com.thelightphone.sdk.action.FIRE_ALERT" />
-            </intent-filter>
-        </receiver>
         <!-- Shares text with the keyboard app, see com.thelightphone.sdk.textentry.LightTextEntry
              and com.thelightphone.lp3Keyboard.textentry.TextEntryClient -->
         <provider
@@ -35,8 +25,8 @@
         <receiver
             android:name="com.thelightphone.lp3Keyboard.textentry.TextEntryClientReplyReceiver"
             android:exported="false" />
-        <!-- LightAudioService is not declared here. The Gradle plugin emits it
-             into the manifests of tools that declare the detached-audio
-             capability, so no other tool carries a mediaPlayback claim. -->
+        <!-- Some components are not declared directly here. See ManifestGenerator
+             in the Gradle plugin (plugin/src/main/kotlin/com/thelightphone/plugin/)
+             for the ones added at build time based on the tool's declared capabilities. -->
     </application>
 </manifest>
