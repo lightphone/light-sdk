@@ -13,6 +13,7 @@ import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.os.Process
 import android.os.UserHandle
+import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.thelightphone.sdk.server.backup.BackupCapableTool
 import com.thelightphone.sdk.server.backup.SmsBackupExclusion
@@ -269,6 +270,20 @@ object LightSdkServer {
             )
         }
 
+    /**
+     * Whether [LightNotificationListenerService] may bring this tool forward for an alert it
+     * posted. Only asked for allowed tools that declare the alerts capability. The enclosing app
+     * can override this for do-not-disturb, per-tool mutes or rate limits.
+     */
+    var allowAlertForeground: (packageName: String) -> Boolean = { true }
+
+    /**
+     * Called with every app's active notifications when the notification listener connects, and
+     * again whenever a notification is posted, updated or removed. Runs on the main thread.
+     * Settable from enclosing application, e.g. to show which tools have notifications.
+     */
+    var onActiveNotificationsChanged: (active: List<StatusBarNotification>) -> Unit = {}
+
     var foregroundSelfWithCallback: (componentToReturnTo: ComponentName) -> Unit = {
         Log.e(TAG, "Server wants to foreground itself but does not know how!")
     }
@@ -292,7 +307,6 @@ object LightSdkServer {
             setOf(
                 Manifest.permission.CAMERA,
                 Manifest.permission.POST_NOTIFICATIONS,
-                Manifest.permission.USE_FULL_SCREEN_INTENT,
                 Manifest.permission.READ_MEDIA_AUDIO,
                 Manifest.permission.RECORD_AUDIO,
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -409,6 +423,15 @@ object LightSdkServer {
                 )
             }
         }
+
+    /**
+     * Grants [LightNotificationListenerService] notification listener access and asks the system
+     * to bind it, so tools' alerts can bring them forward and [onActiveNotificationsChanged] is
+     * called. Needs MANAGE_NOTIFICATION_LISTENERS, which the system uid has.
+     */
+    fun Context.enableNotificationListener() {
+        LightNotificationListenerService.ensureEnabled(this)
+    }
 
     /**
      * A receiver that will bring the rootActivity (MainActivity in both emulator and real LightOS)

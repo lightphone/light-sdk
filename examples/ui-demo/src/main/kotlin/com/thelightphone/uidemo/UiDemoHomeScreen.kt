@@ -136,6 +136,13 @@ class UiDemoHomeScreen(sealedActivity: SealedLightActivity) :
                                 .lightClickable { navigateTo(::UiDemoLocationScreen) }
                                 .padding(vertical = 0.75f.gridUnitsAsDp()),
                         )
+                        LightText(
+                            text = "ALERTS",
+                            variant = LightTextVariant.Copy,
+                            modifier = Modifier
+                                .lightClickable { navigateTo(::UiDemoAlertsScreen) }
+                                .padding(vertical = 0.75f.gridUnitsAsDp()),
+                        )
                     }
                 }
 
@@ -145,6 +152,8 @@ class UiDemoHomeScreen(sealedActivity: SealedLightActivity) :
                         onClose = { showModal = false },
                     )
                 }
+
+                UiDemoAlertModal(lightContext.notifications)
             }
         }
     }

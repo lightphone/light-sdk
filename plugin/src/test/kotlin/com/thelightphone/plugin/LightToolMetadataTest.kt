@@ -39,41 +39,40 @@ class LightToolMetadataTest {
         assertEquals(listOf("detached-audio"), meta.capabilities)
         assertEquals("com.lightos", meta.serverPackage)
         assertEquals("portrait", meta.orientation)
-        assertEquals(null, meta.alertReceiver)
     }
 
     @Test
-    fun `alertReceiver parses a class name`(@TempDir dir: Path) {
+    fun `alert permissions come from the alerts capability`(@TempDir dir: Path) {
         val file = writeToml(dir, """
             [tool]
             id = "com.example.mytool"
-            label = "My Tool"
+            label = "X"
             versionCode = 1
             versionName = "1.0.0"
             serverPackage = "com.lightos"
-            alertReceiver = "com.example.mytool.AlarmReceiver"
-        """.trimIndent())
-
-        assertEquals(
-            "com.example.mytool.AlarmReceiver",
-            LightToolMetadata.parse(file).alertReceiver,
-        )
-    }
-
-    @Test
-    fun `alertReceiver rejects a bare class name`(@TempDir dir: Path) {
-        val file = writeToml(dir, """
-            [tool]
-            id = "com.example.mytool"
-            label = "My Tool"
-            versionCode = 1
-            versionName = "1.0.0"
-            serverPackage = "com.lightos"
-            alertReceiver = "AlarmReceiver"
+            permissions = ["android.permission.USE_EXACT_ALARM"]
         """.trimIndent())
 
         val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
-        assert(ex.message!!.contains("alertReceiver"))
+        assert(ex.message!!.contains("alerts")) { ex.message ?: "" }
+    }
+
+    @Test
+    fun `an allowlisted permission the alerts capability also generates stays declarable`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "X"
+            versionCode = 1
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
+            permissions = ["android.permission.POST_NOTIFICATIONS"]
+            capabilities = ["alerts"]
+        """.trimIndent())
+
+        val meta = LightToolMetadata.parse(file)
+        assertEquals(listOf("android.permission.POST_NOTIFICATIONS"), meta.permissions)
+        assertEquals(listOf("alerts"), meta.capabilities)
     }
 
     @Test

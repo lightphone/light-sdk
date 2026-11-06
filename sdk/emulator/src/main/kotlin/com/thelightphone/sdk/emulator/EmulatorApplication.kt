@@ -117,6 +117,7 @@ class EmulatorApplication : Application(), Configuration.Provider {
         val mollySocketUriString = BuildConfig.MOLLYSOCKET_URI
         with(LightSdkServer) {
             registerLockReceiver(MainActivity::class.java, settings)
+            enableNotificationListener()
             customServiceMethodResolver = { _, methodId, _ ->
                 if (methodId == "GetMollySocketUri" && mollySocketUriString.isNotEmpty()) {
                     val json = "{\"mollySocketUri\":\"$mollySocketUriString\"}"

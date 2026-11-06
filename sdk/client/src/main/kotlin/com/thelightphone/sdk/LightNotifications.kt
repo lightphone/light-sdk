@@ -8,9 +8,12 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
 import androidx.annotation.RequiresPermission
+import com.thelightphone.sdk.shared.LightConstants
+import kotlinx.coroutines.flow.StateFlow
 import java.lang.ref.WeakReference
 
 class LightNotifications(private val context: Context) {
@@ -19,13 +22,6 @@ class LightNotifications(private val context: Context) {
 
     fun canPostNotifications(): Boolean =
         context.getSystemService(NotificationManager::class.java).areNotificationsEnabled()
-
-    /**
-     * Waking the device from a background alert needs `USE_FULL_SCREEN_INTENT`.
-     * This is an app op - a runtime grant check does not report it, so we provide canUseFullScreenIntent
-     */
-    fun canUseFullScreenIntent(): Boolean =
-        context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
 
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     fun post(title: String, text: String) {
@@ -50,14 +46,22 @@ class LightNotifications(private val context: Context) {
     }
 
     /**
-     * Delivers [title] and [text] to the tool's [LightAlertReceiver] when [triggerAtMillis] arrives.
-     * The same [id] replaces an alert that was already scheduled. A time that has already passed
-     * is delivered immediately. The alert stays scheduled until [cancel].
+     * Brings the tool forward with [title] and [text] when [triggerAtMillis] arrives, then calls
+     * [LightEntryPoint.onAlert]. The same [id] replaces an alert that was already scheduled.
+     * A time that has already passed is delivered immediately. The alert stays scheduled until
+     * [cancel]. Requires `capabilities = ["alerts"]` in `lighttool.toml`.
      */
     fun schedule(id: String, triggerAtMillis: Long, title: String, text: String) {
         require(id.isNotBlank()) { "alert id must not be blank" }
         LightAlertScheduler.schedule(context, id, triggerAtMillis, title, text)
     }
+
+    /**
+     * Ids of the alerts that are scheduled and not yet dropped. An alert leaves the set when
+     * [cancel] drops it, or when it is delivered and [LightEntryPoint.onAlert] returns true.
+     */
+    val scheduledAlertIds: StateFlow<Set<String>>
+        get() = LightAlertStore.ids(context)
 
     /** Drops an alert so it does not fire, and so a reboot does not deliver it again. */
     fun cancel(id: String) {
@@ -65,34 +69,27 @@ class LightNotifications(private val context: Context) {
     }
 
     /**
-     * Brings the tool forward and keeps the screen on.
-     * Call this from [LightAlertReceiver.onAlert] when the alert should be visible
-     * even if the tool is not open. Posts a full-screen intent so the screen turns on
-     * while the tool is in the background. [releaseScreen] lets the screen sleep again
-     * and clears that notification.
-     *
-     * Declare `POST_NOTIFICATIONS` and `USE_FULL_SCREEN_INTENT` permission in `lighttool.toml`, and request both before scheduling an alert
+     * Lets the screen sleep again after an alert brought the tool forward, and clears the
+     * alert's notification. Call it once the user has dealt with the alert.
      */
-    @RequiresPermission(allOf = [Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.USE_FULL_SCREEN_INTENT])
-    fun bringForward(title: String = "", text: String = "") {
-        val appContext = context.applicationContext
-        val launch = Intent(appContext, LightActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            putExtra(EXTRA_BRING_FORWARD, true)
-        }
-        postFullScreenAlert(appContext, launch, title, text)
-        appContext.startActivity(launch)
-    }
-
     fun releaseScreen() {
         LightAlertPresentation.release()
         context.getSystemService(NotificationManager::class.java)
-            .cancel(FULL_SCREEN_ALERT_NOTIFICATION_ID)
+            .cancel(ALERT_NOTIFICATION_ID)
     }
+}
 
+/**
+ * Posts the notification for an alert that has arrived. LightOS sees it and opens its content
+ * intent, so [LightActivity] opens with [EXTRA_BRING_FORWARD], turns the screen on, and keeps it
+ * on until [LightNotifications.releaseScreen].
+ */
+internal object LightAlertNotification {
+    // Without a runtime grant the post fails, which is logged.
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
-    private fun postFullScreenAlert(context: Context, launch: Intent, title: String, text: String) {
-        val manager = context.getSystemService(NotificationManager::class.java)
+    fun post(context: Context, record: LightAlertRecord) {
+        val appContext = context.applicationContext
+        val manager = appContext.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(
                 LightAlertChannel.ID,
@@ -103,30 +100,32 @@ class LightNotifications(private val context: Context) {
                 enableVibration(false)
             },
         )
+        val launch = Intent(appContext, LightActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra(EXTRA_BRING_FORWARD, true)
+            putExtra(LightConstants.EXTRA_ALERT_ID, record.id)
+        }
         val pending = PendingIntent.getActivity(
-            context,
+            appContext,
             0,
             launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val shownTitle = title.ifBlank {
-            context.applicationInfo.loadLabel(context.packageManager).toString()
+        val shownTitle = record.title.ifBlank {
+            appContext.applicationInfo.loadLabel(appContext.packageManager).toString()
         }
-        val notification = Notification.Builder(context, LightAlertChannel.ID)
+        val notification = Notification.Builder(appContext, LightAlertChannel.ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(shownTitle)
-            .setContentText(text)
+            .setContentText(record.text)
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setFullScreenIntent(pending, true)
             .setContentIntent(pending)
             .setAutoCancel(true)
+            .addExtras(Bundle().apply { putString(LightConstants.EXTRA_ALERT_ID, record.id) })
             .build()
-        try {
-            manager.notify(FULL_SCREEN_ALERT_NOTIFICATION_ID, notification)
-        } catch (error: SecurityException) {
-            Log.e(TAG, "Could not post the full-screen alert", error)
-        }
+        runCatching { manager.notify(ALERT_NOTIFICATION_ID, notification) }
+            .onFailure { Log.e(TAG, "Could not post the alert notification", it) }
     }
 }
 
@@ -157,5 +156,5 @@ internal object LightAlertChannel {
     const val NAME = "sdk alert"
 }
 
-private const val FULL_SCREEN_ALERT_NOTIFICATION_ID = 2
+private const val ALERT_NOTIFICATION_ID = 2
 private const val TAG = "LightNotifications"

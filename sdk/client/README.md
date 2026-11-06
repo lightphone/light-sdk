@@ -446,7 +446,7 @@ lightConnectivity.observeNetworkStatus().collect {
 
 ### Notifications
 
-`lightContext.notifications` posts and cancels a notification for the tool.
+`lightContext.notifications` posts and cancels a notification for the tool, and schedules alerts that bring the tool forward at a set time.
 
 Declare `POST_NOTIFICATIONS` in `lighttool.toml` and request it at runtime before posting (`checkPermission` / `rememberPermissionRequestLauncher`):
 
@@ -461,23 +461,18 @@ lightContext.notifications.cancel()
 
 Calling `post` again replaces the tool's previous notification, and `cancel` clears it.
 
-`schedule` delivers the alert to a `LightAlertReceiver` when `triggerAtMillis` arrives. The receiver runs even if the tool is not open. `cancel(id)` drops the alert. Scheduling the same id again replaces the previous alert.
+`schedule` brings the tool forward when `triggerAtMillis` arrives, even if the tool is not open. This needs a LightOS version that supports tool alerts; on older versions the alert's notification is posted but the tool isn't opened. `cancel(id)` drops the alert. Scheduling the same id again replaces the previous alert.
 
-Name the subclass with `alertReceiver` in `lighttool.toml`.
+Enable alerts in `lighttool.toml`:
 
 ```toml
-alertReceiver = "com.example.mytool.ExampleAlertReceiver"
+[tool]
+capabilities = ["alerts"]
 ```
 
-```kotlin
-class ExampleAlertReceiver : LightAlertReceiver() {
-    override fun onAlert(context: android.content.Context, alert: LightAlert, dismiss: () -> Unit) {
-        // bringForward() opens the tool and acquires wake lock 
-        LightNotifications(context).bringForward()
-        // dismiss() drops the alert
-    }
-}
+The capability generates the `USE_EXACT_ALARM`, `POST_NOTIFICATIONS` and `RECEIVE_BOOT_COMPLETED` permissions and the SDK's alert receiver, so you don't need to list them. `schedule` throws if the capability is missing.
 
+```kotlin
 lightContext.notifications.schedule(
     id = "dose-1",
     triggerAtMillis = System.currentTimeMillis() + 60_000,
@@ -487,13 +482,25 @@ lightContext.notifications.schedule(
 lightContext.notifications.cancel("dose-1")
 ```
 
-Call `dismiss` when the alert is finished; until then a reboot delivers it again.
+`scheduledAlertIds` is a `StateFlow` of the ids that are still scheduled, e.g. to show whether an alert is pending.
 
-`bringForward` posts a notification with a full-screen intent, then starts the tool. Android launches that intent when the screen is off, and the tool turns the screen on.
+When the alert arrives, the SDK posts a notification with the alert's title and text and calls your entry point's `onAlert`. LightOS sees the notification and opens the tool, which turns the screen on if it was off and keeps it on until you call `releaseScreen`. Opening the tool happens separately from `onAlert`, so `onAlert` may run before the tool's screen is showing:
 
-Declare `SCHEDULE_EXACT_ALARM`, `POST_NOTIFICATIONS` and `USE_FULL_SCREEN_INTENT` as needed in `lighttool.toml`, and request permissions before your schedule alerts. You can use `canScheduleExactAlerts`, `canPostNotifications` and `canUseFullScreenIntent` to check that that appropriate permissions have been granted - `USE_FULL_SCREEN_INTENT` and `SCHEDULE_EXACT_ALARM` are app ops, so a runtime permission check doesn't report it.
+```kotlin
+@EntryPoint
+object MyToolEntryPoint : LightEntryPoint {
+    override suspend fun onAlert(alert: LightAlert): Boolean {
+        // show the alert in the tool's UI
+        return false // keep it until the user dismisses it
+    }
+}
+```
 
-`releaseScreen` clears the notification and lets the screen sleep.
+Return `true` to drop the alert once `onAlert` returns, which is what happens if you don't override it. Return `false` to keep it; a reboot then delivers it again until you call `cancel(alert.id)`. Scheduling the same id again from `onAlert` (e.g. a repeating alert) is kept either way.
+
+Request `POST_NOTIFICATIONS` at runtime before you schedule alerts; without it the alert can't bring the tool forward. `USE_EXACT_ALARM` is granted at install. Use `canPostNotifications` and `canScheduleExactAlerts` to check what has been granted.
+
+When the user is done with the alert, call `releaseScreen` to clear the notification and let the screen sleep.
 
 ### Location
 
