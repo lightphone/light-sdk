@@ -1,22 +1,22 @@
 package dev.neoneon.flamingo
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SimpleLightScreen
 import com.thelightphone.sdk.ui.LightBarButton
-import com.thelightphone.sdk.ui.LightIcon
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightScrollView
 import com.thelightphone.sdk.ui.LightText
@@ -74,22 +74,24 @@ class SettingsScreen(sealedActivity: SealedLightActivity) : SimpleLightScreen<Un
     }
 }
 
+/**
+ * One option of a single-choice setting. The chosen one is underlined rather than ticked;
+ * `selectable` carries the choice to accessibility services now that no icon describes it.
+ */
 @Composable
 private fun SettingsRow(title: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
             .padding(vertical = 0.75f.gridUnitsAsDp()),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LightText(
             text = title,
             variant = LightTextVariant.Copy,
+            underline = selected,
             modifier = Modifier.weight(1f),
         )
-        if (selected) {
-            LightIcon(icon = LightIcons.ACCEPT, contentDescription = "Selected")
-        }
     }
 }
