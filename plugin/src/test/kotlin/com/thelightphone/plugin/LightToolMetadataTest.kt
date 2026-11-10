@@ -56,6 +56,45 @@ class LightToolMetadataTest {
     }
 
     @Test
+    fun `largeHeap defaults to false and parses when set`(@TempDir dir: Path) {
+        val off = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "My Tool"
+            versionCode = 1
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
+        """.trimIndent())
+        assertEquals(false, LightToolMetadata.parse(off).largeHeap)
+
+        val on = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "My Tool"
+            versionCode = 1
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
+            largeHeap = true
+        """.trimIndent())
+        assertEquals(true, LightToolMetadata.parse(on).largeHeap)
+    }
+
+    @Test
+    fun `non-boolean largeHeap fails`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "My Tool"
+            versionCode = 1
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
+            largeHeap = "yes"
+        """.trimIndent())
+
+        assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+    }
+
+    @Test
     fun `unsupported orientation fails`(@TempDir dir: Path) {
         val file = writeToml(dir, """
             [tool]

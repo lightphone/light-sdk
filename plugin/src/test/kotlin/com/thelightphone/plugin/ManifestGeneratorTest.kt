@@ -12,6 +12,7 @@ class ManifestGeneratorTest {
         capabilities: List<String> = emptyList(),
         serverPackage: String = "com.lightos",
         orientation: String? = null,
+        largeHeap: Boolean = false,
     ): String = ManifestGenerator.render(
         LightToolMetadata(
             toolId = "com.example.mytool",
@@ -22,6 +23,7 @@ class ManifestGeneratorTest {
             capabilities = capabilities,
             serverPackage = serverPackage,
             orientation = orientation,
+            largeHeap = largeHeap,
         )
     )
 
@@ -213,5 +215,17 @@ class ManifestGeneratorTest {
 
         assertFalse(xml.contains("<provider"))
         assertFalse(xml.contains("TOOL_MANAGER_PROVIDER"))
+    }
+
+    @Test
+    fun `largeHeap opt-in sets the largeHeap attribute on the application`() {
+        val xml = render(largeHeap = true)
+        assertTrue(xml.contains("""android:largeHeap="true""""))
+    }
+
+    @Test
+    fun `without largeHeap the manifest never mentions largeHeap`() {
+        val xml = render()
+        assertFalse(xml.contains("largeHeap"))
     }
 }
