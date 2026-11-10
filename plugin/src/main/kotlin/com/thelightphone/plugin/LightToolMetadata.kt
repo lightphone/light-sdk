@@ -23,6 +23,7 @@ data class LightToolMetadata(
     val capabilities: List<String> = emptyList(),
     val serverPackage: String,
     val orientation: String? = null,
+    val alertReceiver: String? = null,
 ) {
     companion object {
         const val FILE_NAME: String = "lighttool.toml"
@@ -62,6 +63,7 @@ data class LightToolMetadata(
                 capabilities = validateCapabilities(tool.tomlStringList("capabilities")),
                 serverPackage = validateServerPackage(tool.tomlString("serverPackage"), allowAltServerPackage),
                 orientation = validateOrientation(tool.tomlString("orientation")),
+                alertReceiver = validateAlertReceiver(tool.tomlString("alertReceiver")),
             )
         }
 
@@ -126,6 +128,15 @@ data class LightToolMetadata(
             return value
         }
 
+        private fun validateAlertReceiver(value: String?): String? {
+            if (value == null) return null
+            require(LightToolPolicy.CLASS_NAME_PATTERN.matches(value)) {
+                "tool.alertReceiver must be a fully qualified class name " +
+                    "(e.g. com.example.mytool.AlarmReceiver); got '$value'"
+            }
+            return value
+        }
+
         private fun validatePermissions(values: List<String>?): List<String> {
             val list = values ?: emptyList()
             val seen = mutableSetOf<String>()
@@ -176,6 +187,7 @@ class LightToolMetadataException(message: String) : RuntimeException(message)
 /** Policy values lifted into one object so tests and the validator share them. */
 object LightToolPolicy {
     val TOOL_ID_PATTERN: Regex = Regex("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$")
+    val CLASS_NAME_PATTERN: Regex = Regex("^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$")
     val VERSION_NAME_PATTERN: Regex =
         Regex("""^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$""")
     val TOOL_LABEL_PATTERN: Regex = Regex("^[^\\x00-\\x1f<>]{1,50}$")
@@ -189,6 +201,8 @@ object LightToolPolicy {
         "android.permission.WAKE_LOCK",
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_FULL_SCREEN_INTENT",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_MEDIA_AUDIO",

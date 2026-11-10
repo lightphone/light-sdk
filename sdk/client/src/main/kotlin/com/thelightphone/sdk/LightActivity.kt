@@ -1,6 +1,7 @@
 package com.thelightphone.sdk
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
@@ -92,6 +93,7 @@ class LightActivity internal constructor() : ComponentActivity() {
             !contentReady || android.os.SystemClock.elapsedRealtime() - createdAt < 1000
         }
         super.onCreate(savedInstanceState)
+        presentIfRequested(intent)
 
         // Avoids a stale-content flash when resuming from a stopped task (if false)
         setRecentsScreenshotEnabled(LightSdkRegistry.entryPoint?.enableRecentsScreenshots == true)
@@ -224,6 +226,20 @@ class LightActivity internal constructor() : ComponentActivity() {
         super.onResume()
         currentScreen.value?.screen?.notifyWillShow()
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        presentIfRequested(intent)
+    }
+
+    private fun presentIfRequested(intent: Intent) {
+        if (!intent.getBooleanExtra(EXTRA_BRING_FORWARD, false)) return
+        intent.removeExtra(EXTRA_BRING_FORWARD)
+        setIntent(intent)
+        LightAlertPresentation.hold(this)
+    }
+
 }
 
 class SealedLightContext(internal val androidContext: Context) {

@@ -459,9 +459,41 @@ lightContext.notifications.post("Example", "Posted from light-sdk tool")
 lightContext.notifications.cancel()
 ```
 
-Calling `post` again replaces the tool's previous notification, and`cancel` clears it.
+Calling `post` again replaces the tool's previous notification, and `cancel` clears it.
 
-While the notification is active, LightOS displays an asterisk beside the tool in the toolbox and on the standby screen.
+`schedule` delivers the alert to a `LightAlertReceiver` when `triggerAtMillis` arrives. The receiver runs even if the tool is not open. `cancel(id)` drops the alert. Scheduling the same id again replaces the previous alert.
+
+Name the subclass with `alertReceiver` in `lighttool.toml`.
+
+```toml
+alertReceiver = "com.example.mytool.ExampleAlertReceiver"
+```
+
+```kotlin
+class ExampleAlertReceiver : LightAlertReceiver() {
+    override fun onAlert(context: android.content.Context, alert: LightAlert, dismiss: () -> Unit) {
+        // bringForward() opens the tool and acquires wake lock 
+        LightNotifications(context).bringForward()
+        // dismiss() drops the alert
+    }
+}
+
+lightContext.notifications.schedule(
+    id = "dose-1",
+    triggerAtMillis = System.currentTimeMillis() + 60_000,
+    title = "Dose 1",
+    text = "scheduled dose",
+)
+lightContext.notifications.cancel("dose-1")
+```
+
+Call `dismiss` when the alert is finished; until then a reboot delivers it again.
+
+`bringForward` posts a notification with a full-screen intent, then starts the tool. Android launches that intent when the screen is off, and the tool turns the screen on.
+
+Declare `SCHEDULE_EXACT_ALARM`, `POST_NOTIFICATIONS` and `USE_FULL_SCREEN_INTENT` as needed in `lighttool.toml`, and request permissions before your schedule alerts. You can use `canScheduleExactAlerts`, `canPostNotifications` and `canUseFullScreenIntent` to check that that appropriate permissions have been granted - `USE_FULL_SCREEN_INTENT` and `SCHEDULE_EXACT_ALARM` are app ops, so a runtime permission check doesn't report it.
+
+`releaseScreen` clears the notification and lets the screen sleep.
 
 ### Location
 
