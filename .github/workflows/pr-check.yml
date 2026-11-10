@@ -22,6 +22,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
+      - name: Release script tests
+        run: .github/scripts/tests/run.sh
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:

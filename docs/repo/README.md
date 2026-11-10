@@ -54,3 +54,18 @@ n4@{ shape: rounded}
 n5@{ shape: rounded}
 
 ```
+
+## Required files
+
+If you trim this repository down to your tool, keep these files. The build server reads them from your commit:
+
+| Path | Why |
+| --- | --- |
+| `gradle.properties` (repository root) | Its `sdkVersion` selects the SDK builder image. |
+| `tool/lighttool.toml` | Tool metadata: `[tool]` table with `id` and `versionCode`. See [tool metadata](../tool_metadata). |
+| `tool/build.gradle.kts` | Your tool module's build script. |
+| `tool/src/main/` | Your tool's source and resources. |
+
+If your tool lives at the repository root instead of `tool/`, the last three go at the root too.
+The build server ignores everything else, including `settings.gradle.kts`, the Gradle wrapper and the other modules: your `tool` is built against a pinned copy of the SDK. You'll still need them to build locally.
+If any of these files is missing, the build fails before compiling and lists the missing ones.

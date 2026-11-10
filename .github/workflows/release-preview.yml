@@ -1,0 +1,67 @@
+name: Release Preview
+
+# Shows in the job summary which version merging this PR would release.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    # Keep in sync with .github/scripts/release-labels.sh and release.yml.
+    paths:
+      - sdk/**
+      - plugin/**
+      - tool/**
+      - builder/**
+      - lint-rules/**
+      - signer/**
+      - trust-format/**
+      - gradle.properties
+      - gradle/libs.versions.toml
+      - build.gradle.kts
+      - settings.gradle.kts
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: Release preview
+    runs-on: ubuntu-latest
+
+    steps:
+      # The default merge ref: gradle.properties as it would be on main, with
+      # main (first parent) and its tags in the history.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          tag="$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          current="$(awk -F= '/^[[:space:]]*sdkVersion[[:space:]]*=/ {
+              value = $2; gsub(/^[[:space:]]+|[[:space:]\r]+$/, "", value); print value; exit
+          }' gradle.properties)"
+
+          bump="$({
+              .github/scripts/release-labels.sh "$tag" HEAD^1
+              jq -r '[.pull_request.labels[].name] | join(",")' "$GITHUB_EVENT_PATH"
+          } | .github/scripts/release-bump.sh)"
+          version="$(.github/scripts/next-version.sh "${tag#v}" "$current" "$bump")"
+
+          if [[ "$version" == skip ]]; then
+              result="Merging this PR does not release (no-release)."
+          else
+              result="Merging this PR releases \`v$version\` (bump: \`$bump\`, latest tag: \`${tag:-none}\`)."
+          fi
+          echo "::notice::$result"
+          echo "$result" >> "$GITHUB_STEP_SUMMARY"

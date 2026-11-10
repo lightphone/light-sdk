@@ -1,0 +1,222 @@
+name: Release
+
+# Releases the tip of main: bumps sdkVersion, tags vX.Y.Z, publishes to GitHub
+# Packages and creates a GitHub Release. CircleCI builds the builder image
+# from the tag. See CONTRIBUTING.md#releases.
+#
+# Publishing and the GitHub Release are separate jobs so that "Re-run failed
+# jobs" retries them for the already pushed tag.
+
+on:
+  push:
+    branches: [main]
+    # Keep in sync with .github/scripts/release-labels.sh and release-preview.yml.
+    paths:
+      - sdk/**
+      - plugin/**
+      - tool/**
+      - builder/**
+      - lint-rules/**
+      - signer/**
+      - trust-format/**
+      - gradle.properties
+      - gradle/libs.versions.toml
+      - build.gradle.kts
+      - settings.gradle.kts
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Minimum bump; auto uses PR labels only
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+      dry_run:
+        description: Compute and check only; no push, publish or release
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      previous-tag: ${{ steps.version.outputs.previous-tag }}
+      released: ${{ steps.push.outputs.released }}
+
+    steps:
+      - name: Create app token
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-actions: write
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Compute version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_BUMP: ${{ inputs.bump || 'auto' }}
+        run: |
+          set -euo pipefail
+
+          tag="$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          current="$(awk -F= '/^[[:space:]]*sdkVersion[[:space:]]*=/ {
+              value = $2; gsub(/^[[:space:]]+|[[:space:]\r]+$/, "", value); print value; exit
+          }' gradle.properties)"
+
+          bump="$(.github/scripts/release-labels.sh "$tag" | .github/scripts/release-bump.sh)"
+          declare -A rank=([none]=0 [patch]=1 [minor]=2 [major]=3 [auto]=0)
+          if (( rank[$INPUT_BUMP] > rank[$bump] )); then
+              bump="$INPUT_BUMP"
+          fi
+
+          version="$(.github/scripts/next-version.sh "${tag#v}" "$current" "$bump")"
+          if [[ "$version" != skip ]] && git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+              echo "::error::tag v$version already exists"
+              exit 1
+          fi
+
+          {
+              echo "previous-tag=$tag"
+              echo "current=$current"
+              echo "version=$version"
+              echo "base=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+          {
+              echo "### Release"
+              echo "- latest tag: \`${tag:-none}\`, sdkVersion: \`$current\`, bump: \`$bump\`"
+              echo "- result: \`$version\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up JDK 17
+        if: steps.version.outputs.version != 'skip'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        if: steps.version.outputs.version != 'skip'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - name: Set up Gradle
+        if: steps.version.outputs.version != 'skip'
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run check
+        if: steps.version.outputs.version != 'skip'
+        run: ./gradlew check --stacktrace
+
+      - name: Commit, tag and push
+        id: push
+        if: steps.version.outputs.version != 'skip' && !inputs.dry_run
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CURRENT: ${{ steps.version.outputs.current }}
+          BASE: ${{ steps.version.outputs.base }}
+          INPUT_BUMP: ${{ inputs.bump || 'auto' }}
+        run: |
+          set -euo pipefail
+
+          bot="${APP_SLUG}[bot]"
+          git config user.name "$bot"
+          git config user.email "$(gh api "/users/$bot" --jq .id)+$bot@users.noreply.github.com"
+
+          if [[ "$CURRENT" != "$VERSION" ]]; then
+              sed -i -E "s/^([[:space:]]*sdkVersion[[:space:]]*=).*/\1$VERSION/" gradle.properties
+              grep -Eq "^[[:space:]]*sdkVersion[[:space:]]*=${VERSION//./\\.}$" gradle.properties
+              git commit -qam "chore: release $VERSION"
+          fi
+          git tag "v$VERSION"
+
+          if git push --atomic origin HEAD:main "v$VERSION"; then
+              echo "released=true" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+
+          git tag -d "v$VERSION"
+          git fetch -q origin main
+          if [[ "$(git rev-parse origin/main)" == "$BASE" ]]; then
+              echo "::error::push failed and main did not move"
+              exit 1
+          fi
+          # A later run releases the newer tip, including this change. Pushes
+          # outside the release paths start no run, so queue one.
+          echo "::notice::main moved during the release; queued a new run"
+          gh workflow run release.yml --ref main -f bump="$INPUT_BUMP"
+
+  publish:
+    name: Publish
+    needs: tag
+    if: needs.tag.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.tag.outputs.version }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Publish to GitHub Packages
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./gradlew publish --stacktrace
+
+  github-release:
+    name: GitHub Release
+    needs: [tag, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.tag.outputs.version }}
+          PREVIOUS_TAG: ${{ needs.tag.outputs.previous-tag }}
+        run: |
+          set -euo pipefail
+          args=(--verify-tag --title "v$VERSION" --generate-notes)
+          [[ -n "$PREVIOUS_TAG" ]] && args+=(--notes-start-tag "$PREVIOUS_TAG")
+          gh release create "v$VERSION" "${args[@]}"
