@@ -29,6 +29,7 @@ import com.thelightphone.sdk.audio.LightAudioPlayback
 import com.thelightphone.sdk.audio.LightAudioPlayer
 import com.thelightphone.sdk.audio.LightAudioPlayerAvailability
 import com.thelightphone.sdk.audio.LightAudioSource
+import com.thelightphone.sdk.audio.LightAudioUsage
 import com.thelightphone.sdk.audio.LightMediaCache
 import com.thelightphone.sdk.audio.LightMediaMetadata
 import com.thelightphone.sdk.audio.LightPlayerSpec
@@ -358,6 +359,7 @@ internal fun AudioClip.toLightAudioItem() =
                         },
                 metadata = toLightMediaMetadata(),
                 id = id,
+                usage = usage,
         )
 
 private fun AudioClip.toLightMediaMetadata() =
@@ -511,6 +513,10 @@ class PlayerScreen(private val sealedActivity: SealedLightActivity) :
 internal fun playbackErrorMessage(error: LightAudioError): String =
         "${error.kind}: ${error.diagnostic}. Select another item to continue."
 
+// Items without their own usage follow the player's, which the demo leaves at Music.
+internal fun queueItemDetail(item: LightQueueItem): String =
+        "${(item.usage ?: LightAudioUsage.Music).name.uppercase()} · id: ${item.id.take(24)}"
+
 @Composable
 private fun QueueItemRow(
         index: Int,
@@ -529,7 +535,7 @@ private fun QueueItemRow(
         )
         Row(Modifier.fillMaxWidth()) {
             LightText(
-                    text = "ID: ${item.id.take(24)}",
+                    text = queueItemDetail(item),
                     variant = LightTextVariant.Superfine,
                     modifier = Modifier.weight(1f),
             )

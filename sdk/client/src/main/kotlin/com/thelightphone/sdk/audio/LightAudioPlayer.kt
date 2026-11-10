@@ -3,6 +3,8 @@ package com.thelightphone.sdk.audio
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.Bundle
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -415,12 +417,22 @@ internal suspend fun awaitPlayerReady(
     LightAudioPlayerAvailability.Ready
 
 @OptIn(UnstableApi::class)
-internal fun LightAudioItem.toMediaItem(): MediaItem = MediaItem.Builder()
-    .setUri(Uri.parse(source.uriString()))
-    .setMediaId(stableId())
-    .setCustomCacheKey(stableId())
-    .setMediaMetadata(metadata.toMedia3Metadata())
-    .build()
+internal fun LightAudioItem.toMediaItem(): MediaItem {
+    val itemUsage = usage?.takeIf { it.isItemUsage() }
+    if (usage != null && itemUsage == null) {
+        Log.w(TAG, "Ignoring item usage $usage; queue items may only use Music or Speech")
+    }
+    return MediaItem.Builder()
+        .setUri(Uri.parse(source.uriString()))
+        .setMediaId(stableId())
+        .setCustomCacheKey(stableId())
+        .setMediaMetadata(metadata.toMedia3Metadata(itemUsage))
+        .build()
+}
+
+/** The usage this item set for itself, carried in its metadata extras. */
+internal fun MediaItem.itemUsage(): LightAudioUsage? =
+    itemUsageFromExtra(mediaMetadata.extras?.getString(ITEM_USAGE_EXTRA))
 
 /** This item's [LightAudioItem.id], or its location when identity is location. */
 internal fun LightAudioItem.stableId(): String = id ?: source.uriString()
@@ -431,12 +443,13 @@ internal fun LightAudioSource.uriString(): String = when (this) {
     is LightAudioSource.UrlSource -> url
 }
 
-private fun LightMediaMetadata.toMedia3Metadata(): MediaMetadata {
+private fun LightMediaMetadata.toMedia3Metadata(usage: LightAudioUsage?): MediaMetadata {
     return MediaMetadata.Builder()
         .setTitle(title)
         .setArtist(artist)
         .setAlbumTitle(album)
         .setDurationMs(durationMs)
+        .setExtras(usage?.let { Bundle().apply { putString(ITEM_USAGE_EXTRA, it.name) } })
         .build()
 }
 
@@ -456,7 +469,16 @@ internal fun Player.snapshotState(): ConnectedPlayerState = ConnectedPlayerState
     isPlaying = isPlaying,
 )
 
-data class LightQueueItem(val id: String, val metadata: LightMediaMetadata)
+/**
+ * A queue entry as the player holds it.
+ *
+ * @property usage the item's own [LightAudioItem.usage], or null when it follows the player
+ */
+data class LightQueueItem(
+    val id: String,
+    val metadata: LightMediaMetadata,
+    val usage: LightAudioUsage? = null,
+)
 
 internal fun MediaItem.toLightQueueItem(): LightQueueItem = LightQueueItem(
     id = mediaId,
@@ -466,10 +488,12 @@ internal fun MediaItem.toLightQueueItem(): LightQueueItem = LightQueueItem(
         album = mediaMetadata.albumTitle?.toString(),
         durationMs = mediaMetadata.durationMs,
     ),
+    usage = itemUsage(),
 )
 
 private fun Long.validDuration(): Long = takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
 
+private const val TAG = "LightAudioPlayer"
 private const val POSITION_POLL_MS = 250L
 private const val MIN_SPEED = 0.1f
 /** Queue index reported when a player has no media item. */

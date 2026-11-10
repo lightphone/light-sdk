@@ -61,10 +61,7 @@ class LightSdkPermissionActivity : ComponentActivity() {
             Log.w(TAG, "requested permission: $permission is not grantable by this server")
         }
 
-        val toolName = packageManager
-            .getApplicationInfo(requester, 0)
-            .loadLabel(packageManager)
-            .toString()
+        val toolName = LightSdkServer.getToolLabel(requester).toString()
 
         setContent {
             var loading by remember { mutableStateOf(true) }

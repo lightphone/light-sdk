@@ -63,7 +63,7 @@ object SampleAudioCatalog {
                     AudioClip(
                             source = AudioClipSource.AssetSource("audio/audrey-tang-interview.mp3"),
                             displayName = "Audrey Tang interview",
-                            usage = LightAudioUsage.Music,
+                            usage = LightAudioUsage.Speech,
                             kind = AudioContentKind.Speech,
                             durationMs = 20_036L,
                             formatLabel = "MP3",
@@ -93,7 +93,7 @@ object SampleAudioCatalog {
                     AudioClip(
                             source = AudioClipSource.UrlSource("http://127.0.0.1:1/missing.mp3"),
                             displayName = "(broken) The Dawn of Everything",
-                            usage = LightAudioUsage.Music,
+                            usage = LightAudioUsage.Speech,
                             kind = AudioContentKind.Speech,
                             durationMs = 0L,
                             formatLabel = "BROKEN URL",

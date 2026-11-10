@@ -60,7 +60,7 @@ class ToolManagerLifecycleWrapperService : Service() {
         // we want to make sure if the service is running, the user is looking at ToolManagerActivity
         override fun onActivityResumed(activity: Activity) {
             if (serviceRunning) {
-                LightSdkServer.foregroundToolManagerUi(activity)
+                LightSdkServer.foregroundToolManagerUi(activity, null)
             }
         }
 
@@ -128,7 +128,7 @@ class ToolManagerLifecycleWrapperService : Service() {
         Log.d(TAG, "onDestroy: tool manager stopped")
     }
 
-    fun getHttpsUrl(hostOverride: InetAddress? = null): String? = toolManagerService.getHttpsUrl(hostOverride)
+    fun getHttpsUrl(hostOverride: InetAddress? = null, path: String? = null): String? = toolManagerService.getHttpsUrl(hostOverride, path)
 
     val isRunning: Boolean get() = toolManagerService.isRunning
 }

@@ -6,7 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -84,6 +83,7 @@ fun LightText(
     monospace: Boolean = false,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    lineHeight: TextUnit = TextUnit.Unspecified,
     color: Color? = null,
 ) {
     val colors = LightThemeTokens.colors
@@ -109,7 +109,7 @@ fun LightText(
     val style = variantStyle(variant)
         .let { if (align != null) it.copy(textAlign = align) else it }
         .let { if (decoration != null) it.copy(textDecoration = decoration) else it }
-        .let { if (monospace) it.copy(fontFamily = FontFamily.Monospace) else it }
+        .let { if (monospace) it.copy(fontFeatureSettings = "tnum") else it }
 
     Text(
         text = text,
@@ -117,6 +117,7 @@ fun LightText(
         color = baseColor.takeUnless { it == Color.Unspecified } ?: LocalContentColor.current,
         style = style,
         maxLines = maxLines,
+        lineHeight = lineHeight,
         overflow = overflow,
     )
 }
