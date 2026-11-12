@@ -70,6 +70,7 @@ Every screen gets:
 - `dataStore: DataStore<Preferences>` — a shared Preferences DataStore (named `DEFAULT_DATASTORE`) for the whole tool.
 - `filesDir: File` — the standard app private files directory.
 - `fileShare: LightFileShare` — files written here can be read by LightOS via a content provider (e.g., ringtones, wallpapers).
+- `textEntry: LightTextEntry` — low-level access to the keyboard app; most tools want `editText` instead (see [Text entry](#text-entry)).
 
 ### Audio
 
@@ -462,6 +463,73 @@ lightContext.notifications.cancel()
 Calling `post` again replaces the tool's previous notification, and`cancel` clears it.
 
 While the notification is active, LightOS displays an asterisk beside the tool in the toolbox and on the standby screen.
+
+### Text entry
+
+Use `editText` for text entry. Call it from any screen, ideally right from the tap that starts the edit:
+
+```kotlin
+LightTextField(
+    label = "Name:",
+    value = name,
+    placeholder = "Your name",
+    onClick = {
+        editText(title = "Name", text = name, initialCaps = name.isBlank()) { result ->
+            if (result is LightTextEditResult.Submitted) viewModel.setName(result.text)
+        }
+    },
+)
+```
+
+It opens the keyboard app full screen when there is one, and otherwise shows `LightTextInputEditor` with the embedded keyboard on a screen of its own, so your tool doesn't need to handle either case. `onResult` gets one of:
+
+- `LightTextEditResult.Submitted(text)`: the user hit submit.
+- `LightTextEditResult.BottomBarItem(text, item)`: the user hit one of the `leftBottomBarItem` / `rightBottomBarItem` you passed (their `onClick` isn't called).
+- `LightTextEditResult.Cancelled`: the user went back.
+
+The options mirror `LightTextInputEditor`'s: `singleLine`, `initialCaps`, `submitLabel` or `submitIcon`, the two bottom bar items, and `showBackButton`. `onResult` runs on the main thread even if your screen left composition while the editor was open. Coming back from the editor shows your screen again, so `willShow` / `onScreenShow` fire as usual.
+
+`LightTextField` is the read-only field that pairs with it: it shows the current value and opens the editor when tapped.
+
+`LightTextInputEditor` is the composable behind `editText`. Only use it directly if the editor has to live inside your own screen's layout; `editText` keeps you from having to manage its state and keyboard yourself.
+
+#### Lower level: `LightTextEntry`
+
+`editText` is built on `textEntry: LightTextEntry`, which talks to the keyboard app directly (the server decides which app that is). Reach for it only when `editText` can't do what you need, e.g. editing large text as a file. Unlike `editText`, it doesn't fall back to the embedded keyboard: it throws `ActivityNotFoundException` when there's no keyboard app.
+
+Text is shared through files rather than intents, so it works for long text too.
+
+```kotlin
+// small text, with the default screen: back (cancel) at the top left, a check at the top right
+val name = lightContext.textEntry.enterText(initialText = currentName)?.text ?: return // null if the user cancelled
+
+// your own title, layout and actions
+val request = TextEntryRequest(
+    title = "Search",
+    mode = TextEntryMode.Simple, // one line; Multi scrolls and lets return insert newlines
+    actions = listOf(
+        TextEntryAction(TextEntryProtocol.ACTION_ID_CANCEL, TextEntryPosition.TopLeft, TextEntryAction.Content.Icon(TextEntryIcon.Back)),
+        TextEntryAction("search", TextEntryPosition.BottomCenter, TextEntryAction.Content.Text("SEARCH")),
+        TextEntryAction("here", TextEntryPosition.BottomRight, TextEntryAction.Content.CustomIcon(myIconUri)),
+    ),
+    returnActionId = "search", // what the return key does in Simple mode
+)
+val result = lightContext.textEntry.enterText(query, request) ?: return
+when (result.actionId) {
+    "search" -> search(result.text)
+    "here" -> searchNearby(result.text)
+}
+
+// large text: the keyboard reads `draft` and you get the result back as a file
+val edited = lightContext.textEntry.editFile(source = draft) ?: return
+edited.file.renameTo(draft) // you own the returned file
+```
+
+Each action sits in one of five positions (`TopLeft`, `TopRight`, `BottomLeft`, `BottomCenter`, `BottomRight`) and shows a built-in icon, a custom icon or text. A custom icon is an `android.resource://` URI (e.g. one of your drawables) or a `content://` image URI, which is granted to the keyboard for the length of the entry. An action with the id `TextEntryProtocol.ACTION_ID_CANCEL` cancels instead of returning.
+
+These are suspend functions that return once the user hits an action or cancels. Only one entry is open at a time per tool; starting another cancels the previous one (it returns `null`).
+
+The keyboard only gets access to the two files (and any `content://` icons) of the open entry, and loses it as soon as the entry ends.
 
 ### Location
 

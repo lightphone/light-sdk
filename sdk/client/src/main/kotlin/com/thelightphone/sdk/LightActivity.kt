@@ -1,5 +1,6 @@
 package com.thelightphone.sdk
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.os.Bundle
 import android.view.KeyEvent
@@ -29,8 +30,18 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.thelightphone.lp3Keyboard.ui.LightDeviceKeys
 import com.thelightphone.sdk.shared.LightServiceMethod
+import com.thelightphone.lp3Keyboard.textentry.TextEntryRequest
+import com.thelightphone.sdk.textentry.LightTextEditResult
+import com.thelightphone.sdk.textentry.LightTextEntry
+import com.thelightphone.sdk.textentry.TextEditOptions
+import com.thelightphone.sdk.textentry.TextEditorScreen
+import com.thelightphone.sdk.ui.LightExternalTextEntry
 import com.thelightphone.sdk.ui.LightModalManager
+import com.thelightphone.sdk.ui.LightTextEntryActionIds
+import com.thelightphone.sdk.ui.lightTextEntryRequest
+import com.thelightphone.sdk.ui.LocalExternalTextEntry
 import com.thelightphone.sdk.ui.LocalHapticsEnabled
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -58,9 +69,63 @@ private class BackStackEntry<T>(
 class LightActivity internal constructor() : ComponentActivity() {
 
     private val backStack = mutableListOf<BackStackEntry<*>>()
+
+    // lets LightTextInputEditor use the external keyboard app
+    private val externalTextEntry = object : LightExternalTextEntry {
+        private val textEntry by lazy { LightTextEntry(this@LightActivity) }
+
+        override val isAvailable get() = textEntry.isKeyboardAvailable
+
+        override suspend fun enterText(initialText: String, request: TextEntryRequest) = try {
+            textEntry.enterText(initialText, request)
+                ?.let { LightExternalTextEntry.Result.Saved(it.actionId, it.text) }
+                ?: LightExternalTextEntry.Result.Cancelled
+        } catch (_: ActivityNotFoundException) {
+            LightExternalTextEntry.Result.Unavailable
+        }
+    }
+
     private val currentScreen = mutableStateOf<BackStackEntry<*>?>(null)
     private var contentReady = false
     private val createdAt = android.os.SystemClock.elapsedRealtime()
+
+    /**
+     * [SimpleLightScreen.editText]: straight into the keyboard app when there is one
+     * otherwise navigate to fallback [TextEditorScreen]
+     */
+    internal suspend fun editText(options: TextEditOptions): LightTextEditResult {
+        val request = lightTextEntryRequest(
+            this,
+            options.title,
+            options.singleLine,
+            options.showBackButton,
+            options.submitLabel,
+            options.submitIcon,
+            options.leftBottomBarItem,
+            options.rightBottomBarItem,
+        )
+        if (request != null && externalTextEntry.isAvailable != false) {
+            when (val result = externalTextEntry.enterText(options.text, request)) {
+                is LightExternalTextEntry.Result.Saved -> {
+                    val text = if (options.singleLine) result.text.lines().joinToString(" ") else result.text
+                    return when (result.actionId) {
+                        LightTextEntryActionIds.SUBMIT -> LightTextEditResult.Submitted(text)
+                        LightTextEntryActionIds.LEFT -> options.leftBottomBarItem
+                            ?.let { LightTextEditResult.BottomBarItem(text, it) }
+                        LightTextEntryActionIds.RIGHT -> options.rightBottomBarItem
+                            ?.let { LightTextEditResult.BottomBarItem(text, it) }
+                        else -> null
+                    } ?: LightTextEditResult.Cancelled
+                }
+                LightExternalTextEntry.Result.Cancelled -> return LightTextEditResult.Cancelled
+                // no keyboard app after all, use the embedded keyboard
+                LightExternalTextEntry.Result.Unavailable -> Unit
+            }
+        }
+        val result = CompletableDeferred<LightTextEditResult>()
+        navigateTo(TextEditorScreen(SealedLightActivity(this), options, result))
+        return result.await()
+    }
 
     internal fun <T> navigateTo(screen: SimpleLightScreen<T>, resultCallback: ((T) -> Unit)? = null) {
         currentScreen.value?.screen?.notifyWillHide()
@@ -125,6 +190,7 @@ class LightActivity internal constructor() : ComponentActivity() {
                             CompositionLocalProvider(
                                 LocalViewModelStoreOwner provides entry.viewModelStoreOwner,
                                 LocalHapticsEnabled provides hapticsEnabled,
+                                LocalExternalTextEntry provides externalTextEntry,
                                 content = { entry.screen.Content() },
                             )
                         }
@@ -220,6 +286,11 @@ class LightActivity internal constructor() : ComponentActivity() {
         currentScreen.value?.screen?.notifyAppPause()
     }
 
+    override fun onStart() {
+        super.onStart()
+        lifecycleScope.launch { LightTextEntry.refreshKeyboardPackage(this@LightActivity) }
+    }
+
     override fun onResume() {
         super.onResume()
         currentScreen.value?.screen?.notifyWillShow()
@@ -232,6 +303,7 @@ class SealedLightContext(internal val androidContext: Context) {
     val fileShare: LightFileShare by lazy { LightFileShare(androidContext) }
     val notifications: LightNotifications by lazy { LightNotifications(androidContext) }
     val connectivity: LightConnectivity by lazy { LightConnectivity(androidContext) }
+    val textEntry: LightTextEntry by lazy { LightTextEntry(androidContext) }
     fun readAsset(path: String): ByteArray = androidContext.assets.open(path).use { it.readBytes() }
 }
 /**
