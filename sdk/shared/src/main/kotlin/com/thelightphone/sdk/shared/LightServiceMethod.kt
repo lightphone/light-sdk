@@ -193,6 +193,24 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
         override val responseSerializer = serializer<Unit>()
     }
 
+    // Puts text on the system clipboard. LightOS hides the system's copy popup for it,
+    // which tools can't do when they copy through the ClipboardManager themselves
+    object SetClipboardText : LightServiceMethod<SetClipboardText.Request, Unit> {
+        // longer text is rejected with InvalidParameters
+        const val MAX_TEXT_LENGTH = 100_000
+
+        override val id = "SetClipboardText"
+        override val requestSerializer = serializer<Request>()
+        override val responseSerializer = serializer<Unit>()
+
+        @Serializable
+        data class Request(
+            val text: String,
+            // the clip's user-visible description, see ClipData.newPlainText
+            val label: String? = null,
+        )
+    }
+
     /**
      * Base type for tool-defined methods that are not part of [allMethods].
      * The server routes these through [com.thelightphone.sdk.server.LightSdkServer.customServiceMethodResolver].
@@ -214,4 +232,5 @@ val allMethods: Map<String, LightServiceMethod<*, *>> = listOf(
     LightServiceMethod.GetDefaultLocation,
     LightServiceMethod.RequestLocationUpdates,
     LightServiceMethod.ReleaseLocationUpdates,
+    LightServiceMethod.SetClipboardText,
 ).associateBy { it.id }
