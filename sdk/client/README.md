@@ -516,7 +516,10 @@ Declare `READ_CONTACTS` in `lighttool.toml` and request it at runtime before loa
 permissions = ["android.permission.READ_CONTACTS"]
 ```
 
+Both `load()` and `loadDetails()` are `suspend` functions that run on `Dispatchers.IO`, so call them from a coroutine (e.g. `LaunchedEffect` or a view model scope). `load()` returns at most 100 contacts by default; pass a `limit` to change that (a negative value returns all of them), and check `directory.truncated` to see whether more exist.
+
 ```kotlin
+// inside a coroutine
 val directory = lightContext.contacts.load()
 directory.contacts.forEach { contact ->
     // contact.id, contact.name
