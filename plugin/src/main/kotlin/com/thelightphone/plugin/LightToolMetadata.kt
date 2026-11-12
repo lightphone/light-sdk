@@ -181,6 +181,11 @@ class LightToolMetadataException(message: String) : RuntimeException(message)
 /** Policy values lifted into one object so tests and the validator share them. */
 object LightToolPolicy {
     val TOOL_ID_PATTERN: Regex = Regex("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$")
+
+    /** Second id segment of Light's own namespaces, under any first segment; the build server rejects them. */
+    val RESERVED_TOOL_ID_NAMESPACES: Set<String> = setOf("thelightphone", "lightphone")
+
+    fun isReservedToolId(id: String): Boolean = id.split(".").getOrNull(1) in RESERVED_TOOL_ID_NAMESPACES
     val VERSION_NAME_PATTERN: Regex =
         Regex("""^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$""")
     val TOOL_LABEL_PATTERN: Regex = Regex("^[^\\x00-\\x1f<>]{1,50}$")

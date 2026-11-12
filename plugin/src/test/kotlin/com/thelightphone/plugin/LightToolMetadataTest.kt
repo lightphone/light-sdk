@@ -16,6 +16,22 @@ class LightToolMetadataTest {
     }
 
     @Test
+    fun `reserved namespaces match the second id segment under any first segment`() {
+        listOf(
+            "com.thelightphone", "com.thelightphone.app", "com.lightphone.app",
+            "org.lightphone.app", "io.thelightphone.a.b",
+        ).forEach {
+            assertEquals(true, LightToolPolicy.isReservedToolId(it), it)
+        }
+        listOf(
+            "com.lightphonex.app", "com.thelightphone2.app", "com.example.lightphone",
+            "com.example.thelightphone.app", "lightphone.app",
+        ).forEach {
+            assertEquals(false, LightToolPolicy.isReservedToolId(it), it)
+        }
+    }
+
+    @Test
     fun `happy path parses all fields`(@TempDir dir: Path) {
         val file = writeToml(dir, """
             [tool]
