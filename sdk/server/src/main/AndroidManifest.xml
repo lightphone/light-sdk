@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" >
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools" >
 
     <protected-broadcast android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
     <protected-broadcast android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
@@ -8,7 +9,11 @@
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_SMS" />
-    <uses-permission android:name="android.permission.SET_CLIP_SOURCE" />
+    <!-- Only granted to system apps. The server is only hosted by system apps (LightOS and the
+         emulator), and LightClipboard checks the grant before using it. -->
+    <uses-permission
+        android:name="android.permission.SET_CLIP_SOURCE"
+        tools:ignore="ProtectedPermissions" />
     <application>
         <receiver
             android:name=".LightPushDistributor"
