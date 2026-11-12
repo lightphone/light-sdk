@@ -12,9 +12,21 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.runningFold
+import kotlinx.coroutines.flow.stateIn
 
 /**
  * The platform media session the lock screen shows.
@@ -42,53 +54,30 @@ data class PlatformMediaSession(
  * changes when a session becomes active or inactive, not when one starts
  * playing, so every active session's playback state is watched.
  *
- * Everything runs on the main looper, so no state needs synchronization.
+ * Observation starts at construction and stops when [scope] is cancelled.
+ * Platform callbacks are delivered on the main looper; the flows themselves
+ * hold no mutable state, so [scope] can use any dispatcher.
  */
-class PlatformMediaSessionObserver(private val context: Context) {
-
-    companion object {
-        private const val TAG = "PlatformMediaSessions"
-        // Session extra shared with light-sdk's LightAudioService and LightOS
-        private const val USAGE_EXTRA = "com.thelightphone.audio.USAGE"
-    }
+@OptIn(ExperimentalCoroutinesApi::class)
+class PlatformMediaSessionObserver(
+    private val context: Context,
+    scope: CoroutineScope,
+) {
 
     private val manager = context.getSystemService(MediaSessionManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
 
-    private val _state = MutableStateFlow<PlatformMediaSession?>(null)
-    val state: StateFlow<PlatformMediaSession?> = _state.asStateFlow()
+    private val selectedController: StateFlow<MediaController?> =
+        manager.activeSessions(handler)
+            .flatMapLatest { controllers -> controllers.withPlaybackStates(handler) }
+            .runningFold(null as MediaController?) { previous, sessions -> select(sessions, previous) }
+            .distinctUntilChangedBy { it?.sessionToken }
+            .stateIn(scope, SharingStarted.Eagerly, null)
 
-    private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
-        watchPlaybackOf(controllers.orEmpty())
-        refreshSessionSelection()
-    }
-    private val playbackCallback = object : MediaController.Callback() {
-        override fun onPlaybackStateChanged(state: PlaybackState?) = refreshSessionSelection()
-    }
-    private val controllerCallback = object : MediaController.Callback() {
-        override fun onMetadataChanged(metadata: MediaMetadata?) = publish()
-        override fun onExtrasChanged(extras: Bundle?) = publish()
-        override fun onSessionDestroyed() {
-            setSelectedController(null)
-            publish()
-        }
-    }
-    private val watchedControllers = mutableListOf<MediaController>()
-    private var selectedController: MediaController? = null
-    private var observing = false
-
-    fun subscribe() {
-        if (observing) return
-        try {
-            manager.addOnActiveSessionsChangedListener(sessionsListener, null, handler)
-        } catch (e: SecurityException) {
-            Log.w(TAG, "Media sessions denied — the emulator must run as a system app", e)
-            return
-        }
-        observing = true
-        watchPlaybackOf(manager.getActiveSessions(null))
-        refreshSessionSelection()
-    }
+    val state: StateFlow<PlatformMediaSession?> =
+        selectedController
+            .flatMapLatest { it?.sessionUpdates(handler) ?: flowOf(null) }
+            .stateIn(scope, SharingStarted.Eagerly, null)
 
     fun play() = sendTransportCommand(PlaybackState.ACTION_PLAY) { play() }
     fun pause() = sendTransportCommand(PlaybackState.ACTION_PAUSE) { pause() }
@@ -99,7 +88,7 @@ class PlatformMediaSessionObserver(private val context: Context) {
 
     /** Opens the session's own activity, else launches its app. */
     fun open() {
-        val controller = selectedController ?: return
+        val controller = selectedController.value ?: return
         val sessionActivity = controller.sessionActivity
         if (sessionActivity != null) {
             try {
@@ -119,65 +108,109 @@ class PlatformMediaSessionObserver(private val context: Context) {
         .setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
         .toBundle()
 
-    private fun watchPlaybackOf(controllers: List<MediaController>) {
-        watchedControllers.forEach { it.unregisterCallback(playbackCallback) }
-        watchedControllers.clear()
-        controllers.forEach { it.registerCallback(playbackCallback, handler) }
-        watchedControllers.addAll(controllers)
-    }
-
-    private fun refreshSessionSelection() {
-        if (!observing) return
-        val controllers = manager.getActiveSessions(null)
-        val sessions = controllers.map {
-            val state = it.playbackState
-            SelectableMediaSession(
-                id = it.sessionId,
-                playing = state?.state == PlaybackState.STATE_PLAYING,
-                displayable = state.isDisplayable(),
-            )
-        }
-        val selectedId = selectPlatformMediaSession(sessions, selectedController?.sessionId)
-        setSelectedController(controllers.firstOrNull { it.sessionId == selectedId })
-        publish()
-    }
-
-    private fun setSelectedController(next: MediaController?) {
-        if (selectedController?.sessionToken == next?.sessionToken) return
-        selectedController?.unregisterCallback(controllerCallback)
-        selectedController = next
-        next?.registerCallback(controllerCallback, handler)
-    }
-
-    private fun publish() {
-        _state.value = selectedController?.let { controller ->
-            val metadata = controller.metadata
-            val playback = controller.playbackState
-            PlatformMediaSession(
-                packageName = controller.packageName,
-                title = metadata?.getText(MediaMetadata.METADATA_KEY_TITLE)?.toString(),
-                artist = metadata?.getText(MediaMetadata.METADATA_KEY_ARTIST)?.toString(),
-                playbackState = playback?.state ?: PlaybackState.STATE_NONE,
-                actions = playback?.actions ?: 0L,
-                usage = controller.extras?.getString(USAGE_EXTRA),
-            )
-        }
-    }
-
     private inline fun sendTransportCommand(
         action: Long,
         command: MediaController.TransportControls.() -> Unit,
     ) {
-        val controller = selectedController ?: return
+        val controller = selectedController.value ?: return
         val actions = controller.playbackState?.actions ?: return
         if ((actions and action) != 0L) controller.transportControls.command()
     }
 
-    private val MediaController.sessionId: String
-        get() = "$packageName:${sessionToken.hashCode()}"
-
-    private fun PlaybackState?.isDisplayable(): Boolean = when (this?.state) {
-        null, PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR -> false
-        else -> true
+    private fun select(
+        sessions: List<Pair<MediaController, PlaybackState?>>,
+        previous: MediaController?,
+    ): MediaController? {
+        val selectable = sessions.map { (controller, state) ->
+            SelectableMediaSession(
+                id = controller.sessionId,
+                playing = state?.state == PlaybackState.STATE_PLAYING,
+                displayable = state.isDisplayable(),
+            )
+        }
+        val selectedId = selectPlatformMediaSession(selectable, previous?.sessionId)
+        return sessions.firstOrNull { (controller, _) -> controller.sessionId == selectedId }?.first
     }
+}
+
+
+
+// Session extra shared with light-sdk's LightAudioService and LightOS
+private const val USAGE_EXTRA = "com.thelightphone.audio.USAGE"
+
+/** The active sessions, now and on every change; empty if access is denied. */
+private fun MediaSessionManager.activeSessions(handler: Handler): Flow<List<MediaController>> =
+    callbackFlow {
+        val listener = MediaSessionManager.OnActiveSessionsChangedListener { trySend(it.orEmpty()) }
+        try {
+            addOnActiveSessionsChangedListener(listener, null, handler)
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Media sessions denied — the emulator must run as a system app", e)
+            close()
+            return@callbackFlow
+        }
+        trySend(getActiveSessions(null))
+        awaitClose { removeOnActiveSessionsChangedListener(listener) }
+    }.conflate()
+
+/** Each controller paired with its latest playback state, re-emitted when any of them changes. */
+private fun List<MediaController>.withPlaybackStates(
+    handler: Handler,
+): Flow<List<Pair<MediaController, PlaybackState?>>> =
+    if (isEmpty()) {
+        flowOf(emptyList())
+    } else {
+        combine(map { controller -> controller.playbackStates(handler).map { controller to it } }) {
+            it.toList()
+        }
+    }
+
+private fun MediaController.playbackStates(handler: Handler): Flow<PlaybackState?> = callbackFlow {
+    val callback = object : MediaController.Callback() {
+        override fun onPlaybackStateChanged(state: PlaybackState?) {
+            trySend(state)
+        }
+    }
+    registerCallback(callback, handler)
+    trySend(playbackState)
+    awaitClose { unregisterCallback(callback) }
+}.conflate()
+
+/** A snapshot of this session on every change, then null once it is destroyed. */
+private fun MediaController.sessionUpdates(handler: Handler): Flow<PlatformMediaSession?> = callbackFlow {
+    fun snapshot() = trySend(toPlatformMediaSession())
+
+    val callback = object : MediaController.Callback() {
+        override fun onPlaybackStateChanged(state: PlaybackState?) { snapshot() }
+        override fun onMetadataChanged(metadata: MediaMetadata?) { snapshot() }
+        override fun onExtrasChanged(extras: Bundle?) { snapshot() }
+        override fun onSessionDestroyed() {
+            trySend(null)
+            close()
+        }
+    }
+    registerCallback(callback, handler)
+    snapshot()
+    awaitClose { unregisterCallback(callback) }
+}.conflate()
+
+private fun MediaController.toPlatformMediaSession(): PlatformMediaSession {
+    val metadata = metadata
+    val playback = playbackState
+    return PlatformMediaSession(
+        packageName = packageName,
+        title = metadata?.getText(MediaMetadata.METADATA_KEY_TITLE)?.toString(),
+        artist = metadata?.getText(MediaMetadata.METADATA_KEY_ARTIST)?.toString(),
+        playbackState = playback?.state ?: PlaybackState.STATE_NONE,
+        actions = playback?.actions ?: 0L,
+        usage = extras?.getString(USAGE_EXTRA),
+    )
+}
+
+private val MediaController.sessionId: String
+    get() = "$packageName:${sessionToken.hashCode()}"
+
+private fun PlaybackState?.isDisplayable(): Boolean = when (this?.state) {
+    null, PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR -> false
+    else -> true
 }
