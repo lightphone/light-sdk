@@ -12,6 +12,10 @@ android {
     namespace = "com.thelightphone.sdk.ui"
     compileSdk = rootProject.ext["compileSdk"] as Int
 
+    publishing {
+        singleVariant("release") {}
+    }
+
     defaultConfig {
         minSdk = rootProject.ext["minSdk"] as Int
         consumerProguardFiles("consumer-rules.pro")
