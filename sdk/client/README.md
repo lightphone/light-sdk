@@ -506,6 +506,29 @@ val bytes = lightContext.media.readItem(imageItem) { input ->
 `Video` plays a video inside the `modifier` frame.
 `readItem` opens an image or a video as an `InputStream` so a tool can upload it or process the bytes. The stream is only valid inside the block, and a file that has been removed returns null.
 
+### Contacts
+
+`lightContext.contacts` is a `LightContacts` instance that allows tools to list and read contacts.
+
+Declare `READ_CONTACTS` in `lighttool.toml` and request it at runtime before loading (`checkPermission` / `rememberPermissionRequestLauncher`):
+
+```toml
+permissions = ["android.permission.READ_CONTACTS"]
+```
+
+Both `load()` and `loadDetails()` are `suspend` functions that run on `Dispatchers.IO`, so call them from a coroutine (e.g. `LaunchedEffect` or a view model scope). `load()` returns at most 100 contacts by default; pass a `limit` to change that (a negative value returns all of them), and check `directory.truncated` to see whether more exist.
+
+```kotlin
+// inside a coroutine
+val directory = lightContext.contacts.load()
+directory.contacts.forEach { contact ->
+    // contact.id, contact.name
+}
+
+val details = lightContext.contacts.loadDetails(contact.id)
+// details?.phones, emails, addresses, websites, events, organization, note
+```
+
 ### Location
 
 Four `LightServiceMethod`s expose the device's location. Unlike Audio and NFC there's no dedicated wrapper class yet — call them directly with `callRemoteServiceMethod` (see [Talking to LightOS](#talking-to-lightos) below).
