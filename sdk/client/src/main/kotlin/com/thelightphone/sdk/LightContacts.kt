@@ -4,8 +4,15 @@ import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.provider.ContactsContract
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-class LightContacts internal constructor(private val context: Context) {
+class LightContacts internal constructor(
+    private val context: Context,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+) {
     data class Contact(
         val id: Long,
         val name: String,
@@ -33,7 +40,15 @@ class LightContacts internal constructor(private val context: Context) {
         val note: String?,
     )
 
-    fun load(limit: Int = MAX_LISTED): Directory {
+    /**
+     * load contacts using standard Android ContentResolver
+     *
+     * will return a [Directory] with a maximum of [limit] entries
+     * passing a negative [limit] will return all possible contacts
+     *
+     * runs on [Dispatchers.IO] by default
+     */
+    suspend fun load(limit: Int = MAX_LISTED): Directory = withContext(ioDispatcher) {
         val contacts = mutableListOf<Contact>()
         var truncated = false
         context.contentResolver.query(
@@ -48,7 +63,10 @@ class LightContacts internal constructor(private val context: Context) {
         )?.use { cursor ->
             val idIndex = cursor.getColumnIndex(ContactsContract.Contacts._ID)
             val nameIndex = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY)
-            if (idIndex < 0 || nameIndex < 0) return Directory(emptyList(), truncated = false)
+            if (idIndex < 0 || nameIndex < 0) return@withContext Directory(
+                emptyList(),
+                truncated = false
+            )
             while (cursor.moveToNext()) {
                 if (contacts.size == limit) {
                     truncated = true
@@ -58,11 +76,11 @@ class LightContacts internal constructor(private val context: Context) {
                 if (name.isBlank()) continue
                 contacts += Contact(cursor.getLong(idIndex), name)
             }
-        } ?: return Directory(emptyList(), truncated = false)
-        return Directory(contacts, truncated)
+        } ?: return@withContext Directory(emptyList(), truncated = false)
+        Directory(contacts, truncated)
     }
 
-    fun loadDetails(id: Long): Details? {
+    suspend fun loadDetails(id: Long): Details? = withContext(ioDispatcher) {
         val name = queryString(
             ContactsContract.Contacts.CONTENT_URI,
             arrayOf(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY),
@@ -70,9 +88,9 @@ class LightContacts internal constructor(private val context: Context) {
             arrayOf(id.toString()),
         ) { cursor ->
             cursor.getString(0).orEmpty()
-        } ?: return null
+        } ?: return@withContext null
 
-        return Details(
+        Details(
             id = id,
             name = name,
             phones = labeledValues(
