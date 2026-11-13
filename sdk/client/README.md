@@ -131,6 +131,7 @@ player.play()
 - Edit the queue in place with `addMediaItem`, `removeMediaItem`, `moveMediaItem`, and `replaceMediaItem`. `queue.value` exposes item IDs and metadata; `queue.value.size` reports its length.
 - Set `speed` to change playback rate; values at or below zero clamp to the minimum supported rate.
 - Use `setSource(File)` as a convenience for a one-item local-file queue.
+- Observe `streamMetadata` for titles reported by the stream itself, such as an Icecast/SHOUTcast `StreamTitle`. It is `null` until the current item reports one.
 - Playback requests audio focus automatically.
 - If focus is unavailable, `play()` does nothing.
 - Observe `isPlaying` for the actual state.
