@@ -85,7 +85,7 @@ the SDK supplies the back button. Screens come in `LightScreen` / `LightViewMode
 | `RemoteGameScreen` / `CreateGameScreen` / `JoinByPhraseScreen` / `LightCodeInput` | REMOTE in the Games bottom bar: invite-code create and join, OTP-style per-letter entry |
 | `SharePhrase` | Sharing the invite code from inside a game |
 | `GameView` / `ChessBoard` | The board, its ViewModel, and rendering (a newspaper diagram — hatched dark squares on newsprint — check highlight, last move framed (dashed from, solid to), selection framed in ink, targets dotted in light grey) |
-| `GameActions` / `GameOutcome` | Draw offer/answer/decline, resign, and how a game ended |
+| `GameActions` / `GameOutcome` | Draw offer/answer/decline, resign, the delete confirmation's text, and how a game ended |
 | `GamePanes` | Promotion picker, action row and centered message, shared by `GameView` and `HotSeatScreen` |
 | `HotSeatScreen` / `HotSeatGameModel` | "Local": two players on one phone, offline — see Hot seat below |
 | `HotSeatGame` / `HotSeatGameStore` (port) / `DataStoreHotSeatGameStore` (adapter) | The one stored hot seat game |
@@ -139,10 +139,19 @@ first, then local ones.
   lists it (the live list sends `archived=false`), `POST /flamingo/games/:id/archive` moves a game
   in or out (`FlamingoApi.setArchived`). The opponent's lists never change. Read our flag through
   `Game.isArchivedBy`, which compares with `samePlayer`.
-- **Archive** / **Unarchive** is the last row of the game's actions pane, behind the ellipsis at the
-  top right (`GameView`; the ellipsis replaced the alarm-clock icon). It is greyed while the game is
-  on, and a finished game keeps the ellipsis only while it can be archived. On success the screen
-  goes back to the list it came from, which reloads on show.
+- **Archive** / **Unarchive** sits in the game's actions pane, behind the ellipsis at the top right
+  (`GameView`; the ellipsis replaced the alarm-clock icon), with **Delete** below it. Both are
+  greyed while the game is on, and a finished game keeps the ellipsis only while it can be
+  archived. On success the screen goes back to the list it came from, which reloads on show.
+  `GameViewViewModel.ListUpdate` tracks either request, so one blocks the other.
+- **Deleting is per seat, signed, and hides rather than erases.** `DELETE /flamingo/games/:id`
+  (`FlamingoApi.deleteGame`) takes a finished game out of this seat's lists for good — the live
+  one and the archive — while the server keeps it and the opponent's lists don't change. Any game
+  that can be archived can be deleted, archived or not (`canDelete == canArchive`), so it works
+  from the archive too, and there is no undo. It asks first (`Notifications.ConfirmingDelete`),
+  and `deleteConfirmation(isArchived)` says which list the game leaves — from the archive, first
+  of all that deleting isn't unarchiving. After a delete the server refuses archive and unarchive
+  for this seat (409). Specified in `neoneon/docs/adr/ADR-004-per-seat-game-deletion.md`.
 - Offered only for endings the server holds as finished (`GameOutcome.isRecordedByServer`): mate,
   stalemate, resignation, agreed draw. Repetition, fifty-move and too-few-pieces draws are found by
   chesskit alone and stay `active` on the server, which refuses to archive them (409).
@@ -182,8 +191,9 @@ the half-move the actor would have played next.
 - **Compare player IDs case-insensitively** (`samePlayer`). This client mints lowercase
   `UUID.randomUUID()` strings; the server round-trips them through a Swift `UUID` and
   echoes them back uppercase. A plain `==` silently resolved every player to black.
-- **Editing the name is signed.** `PATCH /flamingo/players/:id` requires a P-256 signature
-  from a key generated in the **AndroidKeyStore** (`PlayerKeyStore`); reads are not signed.
+- **Editing the name and deleting a game are signed.** `PATCH /flamingo/players/:id` and
+  `DELETE /flamingo/games/:id` require a P-256 signature from a key generated in the
+  **AndroidKeyStore** (`PlayerKeyStore`); reads are not signed.
   `SignedRequestPayload.canonical` must agree **byte for byte** with neoneon's
   `SignedRequest.swift` and iOS's — the shared fixture in `neoneon/docs/flamingo-api.md` is
   asserted in all three suites, because a mismatch shows up only as an opaque 401. Specified

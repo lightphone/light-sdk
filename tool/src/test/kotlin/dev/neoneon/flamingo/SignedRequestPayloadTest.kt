@@ -89,6 +89,37 @@ class SignedRequestPayloadTest {
         assertNotEquals(lowerPath, upperPath)
     }
 
+    /**
+     * Deleting a game sends no body, so it signs the hash of zero bytes — and sends zero bytes,
+     * since `FlamingoApi.deleteGame` never sets a body. The server hashes what it received the
+     * same way, so the two agree.
+     */
+    @Test
+    fun aDeleteSignsAnEmptyBody() {
+        val gameId = "c0ffee00-0000-4000-8000-000000000001"
+        val payload = SignedRequestPayload.canonical(
+            method = "DELETE",
+            path = "/flamingo/games/$gameId",
+            playerId = playerIdLower,
+            timestamp = 1758240000L,
+            nonce = "11111111-2222-3333-4444-555555555555",
+            body = "",
+        )
+
+        assertEquals(
+            listOf(
+                "flamingo-v1",
+                "DELETE",
+                "/flamingo/games/$gameId",
+                playerIdUpper,
+                "1758240000",
+                "11111111-2222-3333-4444-555555555555",
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            ).joinToString("\n"),
+            payload,
+        )
+    }
+
     @Test
     fun hashesAnEmptyBodyAsZeroBytes() {
         assertEquals(

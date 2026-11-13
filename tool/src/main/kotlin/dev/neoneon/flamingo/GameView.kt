@@ -125,23 +125,25 @@ class GameViewViewModel(
      * [GameOutcome] — so the ellipsis can show and hide the pane without disturbing the decisions
      * waiting inside it. Modelling the resign confirmation as a level of the pane rather than a
      * flag beside it makes "confirming while the pane is closed" unrepresentable, and gets it
-     * dismissed by every path that closes the pane.
+     * dismissed by every path that closes the pane. Deleting a finished game asks the same way.
      */
     sealed interface Notifications {
         data object Hidden : Notifications
         data object Shown : Notifications
         data object ConfirmingResign : Notifications
+        data object ConfirmingDelete : Notifications
     }
 
     /**
-     * Moving a finished game into this seat's archive or back out of it. [Done] sends the screen
-     * back to the list it came from, which the game has now left.
+     * Moving a finished game out of the list the screen came from: into this seat's archive, back
+     * out of it, or deleting it from both. One at a time — while one is [Sending], neither action
+     * can start. [Done] sends the screen back to that list, which the game has now left.
      */
-    sealed interface ArchiveUpdate {
-        data object Idle : ArchiveUpdate
-        data object Sending : ArchiveUpdate
-        data object Done : ArchiveUpdate
-        data class Failed(val message: String) : ArchiveUpdate
+    sealed interface ListUpdate {
+        data object Idle : ListUpdate
+        data object Sending : ListUpdate
+        data object Done : ListUpdate
+        data class Failed(val message: String) : ListUpdate
     }
 
     data class State(
@@ -179,7 +181,7 @@ class GameViewViewModel(
         val lastMoveVisibility: LastMoveVisibility = LastMoveVisibility.OpponentOnly,
         // Whether this seat has the game in its archive, from the server's record.
         val isArchived: Boolean = false,
-        val archiveUpdate: ArchiveUpdate = ArchiveUpdate.Idle,
+        val listUpdate: ListUpdate = ListUpdate.Idle,
     ) {
         /** A finished game with more than its opening position is worth stepping through. */
         val canReplay: Boolean get() = outcome != null && frameCount > 1
@@ -219,6 +221,13 @@ class GameViewViewModel(
         val canArchive: Boolean
             get() = !isLoading && outcome?.isRecordedByServer == true &&
                 colorOfPlayer(playerId, whitePlayerId, blackPlayerId) != null
+
+        /**
+         * Deleting takes the game out of this seat's lists for good — the live one or the archive,
+         * whichever it is in. Any game that can be archived can be deleted, archived or not: the
+         * server refuses the same games for both.
+         */
+        val canDelete: Boolean get() = canArchive
 
         /** Resigning is gated on terminality alone: you may concede on the opponent's clock. */
         val canResign: Boolean
@@ -278,11 +287,11 @@ class GameViewViewModel(
     /** Steps the finished-game board one position back or forward, stopping at either end. */
     fun onStepReplay(forward: Boolean) {
         if (!replay.step(forward)) return
-        // A failed archive's message shares the nav bar line that says where the player has
-        // stepped to, so stepping retires it.
+        // A failed archive's or delete's message shares the nav bar line that says where the
+        // player has stepped to, so stepping retires it.
         _state.update { current ->
             current.withCurrentBoard().let {
-                if (it.archiveUpdate is ArchiveUpdate.Failed) it.copy(archiveUpdate = ArchiveUpdate.Idle) else it
+                if (it.listUpdate is ListUpdate.Failed) it.copy(listUpdate = ListUpdate.Idle) else it
             }
         }
     }
@@ -764,21 +773,56 @@ class GameViewViewModel(
      */
     fun toggleArchived() {
         val current = _state.value
-        if (!current.canArchive || current.archiveUpdate is ArchiveUpdate.Sending) return
+        if (!current.canArchive || current.listUpdate is ListUpdate.Sending) return
         val playerId = current.playerId ?: return
         val archived = !current.isArchived
         // Back to the board: success leaves the screen, and a failure is told on the nav bar.
-        _state.update { it.copy(archiveUpdate = ArchiveUpdate.Sending, notifications = Notifications.Hidden) }
+        _state.update { it.copy(listUpdate = ListUpdate.Sending, notifications = Notifications.Hidden) }
         viewModelScope.launch(Dispatchers.IO) {
             api.setArchived(gameId, playerId, archived).fold(
                 onSuccess = { game ->
                     _state.update {
-                        it.copy(isArchived = game.isArchivedBy(playerId), archiveUpdate = ArchiveUpdate.Done)
+                        it.copy(isArchived = game.isArchivedBy(playerId), listUpdate = ListUpdate.Done)
                     }
                 },
                 onFailure = { error ->
                     val message = error.message ?: if (archived) "Couldn't archive" else "Couldn't unarchive"
-                    _state.update { it.copy(archiveUpdate = ArchiveUpdate.Failed(message)) }
+                    _state.update { it.copy(listUpdate = ListUpdate.Failed(message)) }
+                },
+            )
+        }
+    }
+
+    /** Unlike archiving, deleting can't be undone, so it asks first — as resigning does. */
+    fun requestDelete() {
+        val current = _state.value
+        if (!current.canDelete || current.listUpdate is ListUpdate.Sending) return
+        _state.update { it.copy(notifications = Notifications.ConfirmingDelete) }
+    }
+
+    fun cancelDelete() {
+        _state.update { it.copy(notifications = Notifications.Shown) }
+    }
+
+    /**
+     * Takes the finished game out of this seat's lists for good, archived or not. Nothing is
+     * erased — the server keeps the game — and the opponent's lists don't change.
+     */
+    fun confirmDelete() {
+        val current = _state.value
+        if (!current.canDelete || current.listUpdate is ListUpdate.Sending) return
+        val playerId = current.playerId ?: return
+        // Back to the board: success leaves the screen, and a failure is told on the nav bar.
+        _state.update { it.copy(listUpdate = ListUpdate.Sending, notifications = Notifications.Hidden) }
+        viewModelScope.launch(Dispatchers.IO) {
+            // The delete is signed, so the server must hold this install's key. The games list
+            // registers it on load; this covers a registration that failed there, and is a no-op
+            // once it has succeeded.
+            identityStore.ensureRegistered(api, playerId)
+            api.deleteGame(gameId, playerId).fold(
+                onSuccess = { _state.update { it.copy(listUpdate = ListUpdate.Done) } },
+                onFailure = { error ->
+                    _state.update { it.copy(listUpdate = ListUpdate.Failed(error.message ?: "Couldn't delete")) }
                 },
             )
         }
@@ -814,10 +858,10 @@ class GameView(
         val themeColors by LightThemeController.colors.collectAsState()
         val state by viewModel.state.collectAsState()
 
-        // Archiving moves the game to the other list, so the one behind this screen is where the
-        // player sees it worked — and it reloads on the way back.
-        LaunchedEffect(state.archiveUpdate) {
-            if (state.archiveUpdate is GameViewViewModel.ArchiveUpdate.Done) goBack()
+        // Archiving moves the game to the other list and deleting takes it out of both, so the one
+        // behind this screen is where the player sees it worked — and it reloads on the way back.
+        LaunchedEffect(state.listUpdate) {
+            if (state.listUpdate is GameViewViewModel.ListUpdate.Done) goBack()
         }
 
         GameScreen(
@@ -839,6 +883,9 @@ class GameView(
                 onConfirmResign = { viewModel.confirmResign() },
                 onStepReplay = { viewModel.onStepReplay(it) },
                 onToggleArchived = { viewModel.toggleArchived() },
+                onRequestDelete = { viewModel.requestDelete() },
+                onCancelDelete = { viewModel.cancelDelete() },
+                onConfirmDelete = { viewModel.confirmDelete() },
             ),
         )
     }
@@ -864,6 +911,9 @@ private data class GameActions(
     val onConfirmResign: () -> Unit = {},
     val onStepReplay: (Boolean) -> Unit = {},
     val onToggleArchived: () -> Unit = {},
+    val onRequestDelete: () -> Unit = {},
+    val onCancelDelete: () -> Unit = {},
+    val onConfirmDelete: () -> Unit = {},
 )
 
 // The whole screen, driven only by [state] and callbacks so every state it can be in — a pending
@@ -928,8 +978,8 @@ private fun ColumnScope.GameContent(
         // chesskit flips the side to move the instant the pawn lands, so the bar would read
         // "Waiting for opponent…" while it is really waiting for you.
         center = when {
-            outcome != null && state.archiveUpdate is GameViewViewModel.ArchiveUpdate.Failed ->
-                LightTopBarCenter.TwoLineDetail(line1 = "Game", line2 = state.archiveUpdate.message)
+            outcome != null && state.listUpdate is GameViewViewModel.ListUpdate.Failed ->
+                LightTopBarCenter.TwoLineDetail(line1 = "Game", line2 = state.listUpdate.message)
             // Once the player steps off the final position the outcome is no longer what the
             // board shows, so the line reports where they are instead of restating the result.
             outcome != null && state.canStepForward ->
@@ -944,8 +994,9 @@ private fun ColumnScope.GameContent(
             else -> LightTopBarCenter.Text("Game")
         },
         // The bar has one right slot and three claims on it. A finished game keeps the ellipsis
-        // only for archiving, so only while it can be archived; never the invite, since a game
-        // someone resigned out of can still have an empty seat but no one worth inviting into it.
+        // only for archiving and deleting, so only while it can be archived (deleting is offered
+        // for exactly the same games); never the invite, since a game someone resigned out of can
+        // still have an empty seat but no one worth inviting into it.
         // Otherwise the ellipsis and the invite are near enough mutually exclusive — a draw needs
         // an opponent, and the invite exists precisely because there isn't one yet. The exception
         // is worth spelling out: white can play, and promote, before anyone joins, and a pane you
@@ -1089,6 +1140,18 @@ private fun ColumnScope.NotificationsPane(
             )
         }
 
+        state.notifications is GameViewViewModel.Notifications.ConfirmingDelete -> {
+            // Says which list the game is leaving, since Delete sits beside Unarchive in the
+            // archive and the two are easy to mistake for each other.
+            CenteredMessage(deleteConfirmation(state.isArchived))
+            LightBottomBar(
+                items = listOf(
+                    LightBarButton.Text(text = "CANCEL", onClick = actions.onCancelDelete),
+                    LightBarButton.Text(text = "DELETE", onClick = actions.onConfirmDelete),
+                ),
+            )
+        }
+
         state.drawOffer is DrawOffer.Incoming -> {
             CenteredMessage("Your opponent offers a draw.")
             LightBottomBar(
@@ -1112,6 +1175,7 @@ private fun ColumnScope.NotificationsPane(
 private fun notificationsTitle(state: GameViewViewModel.State): String = when {
     state.promotion is GameViewViewModel.Promotion.Pending -> "Promote to"
     state.notifications is GameViewViewModel.Notifications.ConfirmingResign -> "Resign?"
+    state.notifications is GameViewViewModel.Notifications.ConfirmingDelete -> "Delete game?"
     state.drawOffer is DrawOffer.None -> "Game actions"
     else -> "Draw offer"
 }
@@ -1133,8 +1197,13 @@ private fun ColumnScope.ActionOptions(
         ActionRow(label = "Resign", enabled = state.canResign, onClick = actions.onRequestResign)
         ActionRow(
             label = if (state.isArchived) "Unarchive" else "Archive",
-            enabled = state.canArchive && state.archiveUpdate !is GameViewViewModel.ArchiveUpdate.Sending,
+            enabled = state.canArchive && state.listUpdate !is GameViewViewModel.ListUpdate.Sending,
             onClick = actions.onToggleArchived,
+        )
+        ActionRow(
+            label = "Delete",
+            enabled = state.canDelete && state.listUpdate !is GameViewViewModel.ListUpdate.Sending,
+            onClick = actions.onRequestDelete,
         )
     }
 }
@@ -1270,7 +1339,7 @@ private fun PreviewGameViewDrawOffered(
 }
 
 // The pane as the ellipsis opens it with nothing pending: the actions the player can start, with
-// archiving greyed until the game is over.
+// archiving and deleting greyed until the game is over.
 @Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
 @Composable
 private fun PreviewGameViewActions(
@@ -1330,7 +1399,7 @@ private fun PreviewGameViewCheckmated(
     GameScreen(state = matedState(), colors = colors)
 }
 
-// The ellipsis on a finished game: draw and resign are over, archiving is what is left.
+// The ellipsis on a finished game: draw and resign are over, archiving and deleting are what is left.
 @Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
 @Composable
 private fun PreviewGameViewCheckmatedActions(
@@ -1350,6 +1419,34 @@ private fun PreviewGameViewCheckmatedArchived(
 ) {
     GameScreen(
         state = matedState().copy(isArchived = true, notifications = GameViewViewModel.Notifications.Shown),
+        colors = colors,
+    )
+}
+
+// Deleting a finished game from the games list: it won't go to the archive either.
+@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
+@Composable
+private fun PreviewGameViewDeleteConfirm(
+    @PreviewParameter(LightColorsPreviewProvider::class) colors: LightColors,
+) {
+    GameScreen(
+        state = matedState().copy(notifications = GameViewViewModel.Notifications.ConfirmingDelete),
+        colors = colors,
+    )
+}
+
+// Deleting it from the archive instead, where Delete sits beside Unarchive: the message says first
+// that the two aren't the same.
+@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
+@Composable
+private fun PreviewGameViewDeleteConfirmArchived(
+    @PreviewParameter(LightColorsPreviewProvider::class) colors: LightColors,
+) {
+    GameScreen(
+        state = matedState().copy(
+            isArchived = true,
+            notifications = GameViewViewModel.Notifications.ConfirmingDelete,
+        ),
         colors = colors,
     )
 }

@@ -91,3 +91,21 @@ internal fun halfMoveNumber(fen: String): Int {
     val blackToMove = fields.getOrNull(1) == "b"
     return (fullmove - 1) * 2 + if (blackToMove) 2 else 1
 }
+
+/**
+ * The body of the confirmation before deleting a finished game, for the list it is in.
+ *
+ * The two say different things on purpose. In the archive, Delete sits beside Unarchive, and the
+ * one thing worth saying first is that deleting isn't that: the game won't go back to the games
+ * list. From the games list, it's the archive that deleting skips. Both end the same way — there
+ * is no undo, and only this seat's lists change; the opponent's don't, whatever they did with it.
+ *
+ * Hand-broken into short lines, like the other confirmations: at the copy style's size, about
+ * thirty characters fill the Light Phone's width.
+ */
+internal fun deleteConfirmation(isArchived: Boolean): String =
+    if (isArchived) {
+        "Deleting isn't unarchiving.\nThe game leaves your archive\nand can't be brought back.\nOnly your lists change."
+    } else {
+        "The game leaves your games\nand won't go to your archive.\nIt can't be brought back.\nOnly your lists change."
+    }

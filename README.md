@@ -45,6 +45,9 @@ Finished games go to **Info → Archive**: online games you archive from their g
 local games you save when they end. Step back through any finished game, move by move, with
 **PREV** and **NEXT**.
 
+Done with an online game for good? **Delete** it from its game actions, from your games or from
+the archive. It leaves your lists, and only yours: your opponent still has it.
+
 <p>
   <img src="docs/screenshots/archive.png" width="260" alt="The archive: online games first, then local games">
   <img src="docs/screenshots/local-replay.png" width="260" alt="A saved local game replayed from the archive: white won">

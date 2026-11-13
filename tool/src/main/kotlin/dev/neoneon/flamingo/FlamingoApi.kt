@@ -6,6 +6,7 @@ import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.delete
 import io.ktor.client.request.header
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
@@ -63,6 +64,25 @@ internal class FlamingoApi(private val keyStore: PlayerKeyStore = PlayerKeyStore
             throw IllegalStateException(archiveErrorMessage(response.status.value, archived))
         }
         response.body<ArchiveResponse>().game
+    }
+
+    /**
+     * Takes a finished game out of [playerId]'s lists for good: the live list and the archive,
+     * whichever it is in. Nothing is erased — the server keeps the game — and the opponent's lists
+     * don't change. The server refuses a game it doesn't hold as finished (409), as archiving does
+     * — see [GameOutcome.isRecordedByServer].
+     *
+     * Signed, unlike archiving: the opponent holds this player's id, and there is no undo. The
+     * request has no body, so the signature covers zero bytes; nothing is passed to `setBody`, so
+     * the bytes sent are those zero bytes too.
+     */
+    suspend fun deleteGame(gameId: String, playerId: String): Result<Unit> = runCatching {
+        val response = client.delete("$BASE_URL/games/$gameId") {
+            signed("DELETE", "$BASE_PATH/games/$gameId", playerId, body = "")
+        }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException(deleteErrorMessage(response.status.value))
+        }
     }
 
     suspend fun fetchGame(gameId: String): Result<GameDetail> = runCatching {
@@ -338,6 +358,16 @@ private fun archiveErrorMessage(status: Int, archived: Boolean): String = when (
     404 -> "Game not found"
     409 -> "Game isn't over yet"
     else -> if (archived) "Couldn't archive ($status)" else "Couldn't unarchive ($status)"
+}
+
+// Same nav-bar line as the archive messages. A 401 is the one this install can't fix by trying
+// again: its key isn't the one the server holds for this player (see [PlayerIdentityStore]).
+private fun deleteErrorMessage(status: Int): String = when (status) {
+    401 -> "Couldn't verify this device"
+    403 -> "Not your game"
+    404 -> "Game not found"
+    409 -> "Game isn't over yet"
+    else -> "Couldn't delete ($status)"
 }
 
 private fun joinErrorMessage(status: Int): String = when (status) {
