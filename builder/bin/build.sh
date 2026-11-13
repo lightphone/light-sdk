@@ -24,6 +24,7 @@
 # On exit, DIR holds:
 #   build/                  builder outputs (written by the untrusted build)
 #   proxy-access.log        every request the proxy served
+#   proxy-error.log         proxy (nginx) error log
 #   native-libraries.json   approved native libraries for this build
 # The build container only ever sees DIR/build, so it cannot plant files or
 # symlinks where the trusted outputs are written.
@@ -80,16 +81,18 @@ PROXY="light-proxy-$SUFFIX"
 
 # The access log is the proxy's stdout; its error log goes to stderr.
 capture_proxy_log() {
-    docker logs "$PROXY" > "$OUTPUT_DIR/proxy-access.log" 2>/dev/null
+    docker logs "$PROXY" > "$OUTPUT_DIR/proxy-access.log" 2> "$OUTPUT_DIR/proxy-error.log"
 }
 
 cleanup() {
     local status=$?
+    capture_proxy_log || true
     if (( status != 0 )); then
         docker inspect --format 'proxy exit status: {{.State.ExitCode}} ({{.State.Status}})' "$PROXY" >&2 || true
-        docker logs --tail 100 "$PROXY" >&2 || true
+        tail -n 100 "$OUTPUT_DIR/proxy-error.log" >&2 2>/dev/null || true
+        # 404s are routine repository probes; 5xx means an upstream failed.
+        awk '$4 ~ /^5/' "$OUTPUT_DIR/proxy-access.log" 2>/dev/null | tail -n 20 >&2 || true
     fi
-    capture_proxy_log || true
     docker rm -f "$PROXY" >/dev/null 2>&1 || true
     docker network rm "$NETWORK" >/dev/null 2>&1 || true
 }

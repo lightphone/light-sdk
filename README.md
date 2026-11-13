@@ -30,6 +30,7 @@ You can quickly [create an emulator](https://developer.android.com/studio/run/ma
 ### Start Building
 1. Fork and/or clone this repository into your local dev environment.
 2. Install Android Studio and open this project within it. (IntelliJ IDEA should also work)
+   - Set your tool's `id` in [`tool/lighttool.toml`](tool/lighttool.toml) to a package name you own (e.g. `com.yourname.mytool`). Ids in the `lightphone` and `thelightphone` namespaces (e.g. `com.lightphone.*`, `org.thelightphone.*`) are reserved for Light. See [tool metadata](docs/tool_metadata).
 
 3. Edit the code in `HomeScreen` and `HomeScreenViewModel` to get started. `Homescreen` surfaces a `@Composable` method named `Content`. This is the UI that is shown when the tool first boots. You'll notice this UI sources data from it's `viewModel` field, which is an instance of `HomeScreenViewModel`. Edit that class with your screen's logic and expose the data to the UI using either Compose `State` or Coroutine `Flow`s. If you want to create a new screen, create a new Screen/ViewModel pair: your screen should extend from `LightScreen` and your VM from `LightScreenViewModel`. Your screen implementation will need:
    1. A direct reference to your ViewModel's class type
@@ -48,6 +49,7 @@ Using the Dashboard, developers are able to queue up a build of your tool on our
 
 1. Review the [Tool Guidelines](TOOL_GUIDELINES.md) to get a sense of the kind of tools we're hoping to showcase.
 2. Ensure your tool is built with the latest Light SDK version and is accessible via a public Github repo.
+  - Keep the [files the build server requires](docs/repo/README.md#required-files) when trimming the repo down to your tool.
 3. Enable developer mode on the [dashboard](https://dashboard.thelightphone.com/): Settings -> Account -> Developer Account.
 4. From there, you can create your tool: Settings -> Account -> Developer Account -> Manage Custom Tools -> Submit New Tool:
   - The package name is unique for all tools and can't be changed later. It is pulled from the default branch of the Github repo submitted upon registering the tool.

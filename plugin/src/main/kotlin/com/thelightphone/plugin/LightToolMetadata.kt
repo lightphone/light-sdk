@@ -23,6 +23,7 @@ data class LightToolMetadata(
     val capabilities: List<String> = emptyList(),
     val serverPackage: String,
     val orientation: String? = null,
+    val largeHeap: Boolean = false,
 ) {
     companion object {
         const val FILE_NAME: String = "lighttool.toml"
@@ -62,6 +63,7 @@ data class LightToolMetadata(
                 capabilities = validateCapabilities(tool.tomlStringList("capabilities")),
                 serverPackage = validateServerPackage(tool.tomlString("serverPackage"), allowAltServerPackage),
                 orientation = validateOrientation(tool.tomlString("orientation")),
+                largeHeap = validateLargeHeap(tool.tomlBoolean(LightToolPolicy.LARGE_HEAP)),
             )
         }
 
@@ -126,6 +128,9 @@ data class LightToolMetadata(
             return value
         }
 
+        /** Absent = false; a non-boolean value is rejected by [tomlBoolean]. */
+        private fun validateLargeHeap(value: Boolean?): Boolean = value ?: false
+
         private fun validatePermissions(values: List<String>?): List<String> {
             val list = values ?: emptyList()
             val seen = mutableSetOf<String>()
@@ -176,12 +181,19 @@ class LightToolMetadataException(message: String) : RuntimeException(message)
 /** Policy values lifted into one object so tests and the validator share them. */
 object LightToolPolicy {
     val TOOL_ID_PATTERN: Regex = Regex("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$")
+
+    /** Second id segment of Light's own namespaces, under any first segment; the build server rejects them. */
+    val RESERVED_TOOL_ID_NAMESPACES: Set<String> = setOf("thelightphone", "lightphone")
+
+    fun isReservedToolId(id: String): Boolean = id.split(".").getOrNull(1) in RESERVED_TOOL_ID_NAMESPACES
     val VERSION_NAME_PATTERN: Regex =
         Regex("""^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$""")
     val TOOL_LABEL_PATTERN: Regex = Regex("^[^\\x00-\\x1f<>]{1,50}$")
     const val MAX_VERSION_CODE: Int = 2_100_000_000
     const val LIGHTOS_SERVER_PACKAGE: String = "com.lightos"
     val ALLOWED_ORIENTATIONS: Set<String> = setOf("portrait")
+
+    const val LARGE_HEAP: String = "largeHeap"
 
     val ALLOWED_PERMISSIONS: Set<String> = setOf(
         "android.permission.INTERNET",
@@ -192,6 +204,9 @@ object LightToolPolicy {
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_CONTACTS",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.NFC",
@@ -284,6 +299,12 @@ private fun org.tomlj.TomlTable.tomlLong(key: String): Long? = try {
     if (contains(key)) getLong(key) else null
 } catch (e: TomlInvalidTypeException) {
     throw LightToolMetadataException("tool.$key must be an integer")
+}
+
+private fun org.tomlj.TomlTable.tomlBoolean(key: String): Boolean? = try {
+    if (contains(key)) getBoolean(key) else null
+} catch (e: TomlInvalidTypeException) {
+    throw LightToolMetadataException("tool.$key must be a boolean")
 }
 
 private fun org.tomlj.TomlTable.tomlStringList(key: String): List<String>? {

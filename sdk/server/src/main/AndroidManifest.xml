@@ -7,6 +7,7 @@
     <protected-broadcast android:name="org.unifiedpush.android.connector.MESSAGE" />
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.READ_SMS" />
     <application>
         <receiver
             android:name=".LightPushDistributor"
@@ -20,6 +21,9 @@
 
         <receiver
             android:name=".installer.LightApkInstallResultReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".installer.LightApkUninstallResultReceiver"
             android:exported="false" />
         <service android:name=".toolmanager.ToolManagerLifecycleWrapperService"
             android:exported="false"/>

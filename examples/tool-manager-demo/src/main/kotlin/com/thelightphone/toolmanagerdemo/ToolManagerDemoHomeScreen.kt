@@ -163,7 +163,7 @@ object ToolEntryPoint : LightEntryPoint {
     override fun getToolManagerManifest(): ClientToolManifest {
         return ClientToolManifest(
             title = "Tool Manager Demo",
-            roots = directories.map { ClientLeafNode(it) } + exportJobSpec
+            roots = directories.map { ClientLeafNode(it, canBeBackedUp = true) } + exportJobSpec
         )
     }
 

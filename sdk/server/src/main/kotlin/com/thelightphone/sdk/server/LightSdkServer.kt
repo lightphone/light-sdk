@@ -14,7 +14,8 @@ import android.content.pm.Signature
 import android.os.Process
 import android.os.UserHandle
 import android.util.Log
-import com.thelightphone.sdk.server.toolmanager.getApkInboxAuthDirectory
+import com.thelightphone.sdk.server.backup.BackupCapableTool
+import com.thelightphone.sdk.server.backup.SmsBackupExclusion
 import com.thelightphone.toolmanager.AndroidKeystoreKeyCipher
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.DataView
@@ -26,8 +27,6 @@ import com.thelightphone.sdk.shared.LightConstants
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.toolmanager.LocalNetworkInfo
-import com.thelightphone.toolmanager.ToolManagerAuth
-import com.thelightphone.toolmanager.TotpToolManagerAuth
 import java.io.File
 import java.security.MessageDigest
 
@@ -50,6 +49,7 @@ enum class ClientCertType {
 object LightSdkServer {
     private const val TAG = "LightSdkServer"
     const val SCREEN_OFF_FLAG = "SCREEN_OFF"
+    const val TOOL_MANAGER_PATH_EXTRA = "TOOL_MANAGER_PATH"
 
     val Context.runningAsSystemApp: Boolean
         get() {
@@ -249,7 +249,10 @@ object LightSdkServer {
     var onRequestLocationUpdates: (callingUid: Int) -> LightResult<Unit> =
         { _ ->
             Log.e(TAG, "RequestLocationUpdates not configured by server")
-            LightResult.Error(LightResult.ErrorCode.Unknown, "RequestLocationUpdates not configured")
+            LightResult.Error(
+                LightResult.ErrorCode.Unknown,
+                "RequestLocationUpdates not configured"
+            )
         }
 
     /**
@@ -260,7 +263,10 @@ object LightSdkServer {
     var onReleaseLocationUpdates: (callingUid: Int) -> LightResult<Unit> =
         { _ ->
             Log.e(TAG, "ReleaseLocationUpdates not configured by server")
-            LightResult.Error(LightResult.ErrorCode.Unknown, "ReleaseLocationUpdates not configured")
+            LightResult.Error(
+                LightResult.ErrorCode.Unknown,
+                "ReleaseLocationUpdates not configured"
+            )
         }
 
     var foregroundSelfWithCallback: (componentToReturnTo: ComponentName) -> Unit = {
@@ -271,6 +277,8 @@ object LightSdkServer {
         { _, _ -> false }
     var isLightApproved: (callingPackage: String, signatureHash: String) -> Boolean =
         { _, _ -> false }
+
+    var canBeUninstalledByToolManager: (packageName: String) -> Boolean = { false }
 
     /**
      * Given an android permission id (android.manifest.CAMERA, for example), return whether
@@ -283,12 +291,54 @@ object LightSdkServer {
             // default grantable permissions; enclosing app may override
             setOf(
                 Manifest.permission.CAMERA,
+                Manifest.permission.POST_NOTIFICATIONS,
                 Manifest.permission.READ_MEDIA_AUDIO,
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO,
+                Manifest.permission.READ_CONTACTS,
                 Manifest.permission.RECORD_AUDIO,
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION,
             ).contains(permissionName)
         }
+
+    /**
+     * Returns the user-visible label for a tool. Overrideable in case we want users to be able to
+     * create custom labels for tools
+     */
+    var getToolLabel: (packageName: String) -> CharSequence = {
+        Log.w(TAG, "getToolLabel is unset in LightSdkServer, falling back to package name")
+        it
+    }
+
+    /**
+     * Returns whether or not ToolManager nodes for a given package should be backed up to remote storage
+     * Note that packages passed here have likely already been passed through the `isPackageAllowed` filter
+     */
+    var canBackUpFromPackage: (backupCapableTool: BackupCapableTool) -> Boolean = { true }
+
+    /**
+     * Directories whose photos should be included in album backups. Files are backed up from
+     * the top level of each directory (no recursion). Empty means photos aren't backed up.
+     */
+    var getAlbumPhotoBackupDirs: () -> List<File> = { emptyList() }
+
+    /**
+     * Directories whose videos should be included in album backups. Files are backed up from
+     * the top level of each directory (no recursion). Empty means videos aren't backed up.
+     */
+    var getAlbumVideoBackupDirs: () -> List<File> = { emptyList() }
+
+    /**
+     * SMS rows that should be left out of message backups (e.g. placeholder rows the enclosing
+     * app writes for its own bookkeeping). They're also ignored when working out how far back the
+     * first backup needs to go. Null means every SMS is backed up.
+     *
+     * Here because LightOS stores some metadata in the sms table using "impossible" timestamps,
+     * dont want to back those up
+     */
+    var getSmsBackupExclusion: () -> SmsBackupExclusion? = { null }
+
 
     /**
      * Called when the SDK server successfully installs a tool
@@ -302,10 +352,18 @@ object LightSdkServer {
     }
 
     /**
+     * Called when the SDK server successfully uninstalls a tool
+     */
+    var onApkUninstalled: (packageName: String) -> Unit = { packageName ->
+        Log.d(TAG, "Successfully uninstalled package: $packageName")
+    }
+
+    /**
      * SDK server should have a singleTask Activity to represent the ToolManager's UI
      * If the ToolManager is running and the server app is active, the ToolManager UI should always show
+     * [path] is an optional deep link into the ToolManager UI (e.g. a specific tool's page).
      */
-    var foregroundToolManagerUi: (activityToReplace: Activity) -> Unit = {
+    var foregroundToolManagerUi: (activityToReplace: Activity, path: String?) -> Unit = { _, _ ->
         // if activityToReplace is not the ToolManager UI already, relaunch the ToolManager UI
     }
 
@@ -314,9 +372,10 @@ object LightSdkServer {
         false
     }
 
-    var reportError: (tag: String, exception: Throwable?, message: String) -> Unit = { tag, e, msg ->
-        Log.e(tag, msg, e)
-    }
+    var reportError: (tag: String, exception: Throwable?, message: String) -> Unit =
+        { tag, e, msg ->
+            Log.e(tag, msg, e)
+        }
 
     var verboseLoggingEnabled = true
 

@@ -121,8 +121,19 @@ builder/bin/build.sh \
 
 The output dir must not exist; with Colima or Docker Desktop it must be under
 a directory shared with the VM (e.g. `$HOME`). It ends up holding `build/`
-(the container outputs below), `proxy-access.log` and
+(the container outputs below), `proxy-access.log`, `proxy-error.log` and
 `native-libraries.json`.
+
+On failure, the console shows the last 100 lines of the proxy error log and the
+last 20 access-log lines with a 5xx status. Routine 404 lookups stay off the
+console; the complete logs are in `proxy-access.log` and `proxy-error.log`.
+
+The isolated proxy header regression check requires a builder image with nginx,
+Python and OpenSSL. It uses local TLS repositories with external networking disabled:
+
+```sh
+LIGHT_BUILDER_TEST_IMAGE=<builder-image> python3 -m pytest builder/tests/test_proxy_headers.py
+```
 
 ## Build-time Maven proxy
 

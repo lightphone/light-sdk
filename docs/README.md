@@ -9,4 +9,5 @@ Topics:
 - [Using the LightOS Emulator](system_app)
 - [Installing tools locally](sideloading)
 - [Allowing users to transfer files using the Tool Manager](tool_manager)
+- [Letting users back up your tool's data](backups)
 - [Why parts of the SDK are built the way they are](design_decisions)

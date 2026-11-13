@@ -1,24 +1,41 @@
 package com.thelightphone.sdk.emulator
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.thelightphone.sdk.emulator.backup.BackupSettings
 import com.thelightphone.sdk.server.ClientFilterLevel
 import com.thelightphone.sdk.server.ForceFocusLevel
 import com.thelightphone.sdk.server.LightSdkServerSettings
+import com.thelightphone.sdk.server.backup.BackupSettingsViewModel
 import com.thelightphone.sdk.shared.LightServiceMethod
-import com.thelightphone.sdk.ui.*
+import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBarButton.LightIcon
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.thelightphone.sdk.ui.LightIcons
+import com.thelightphone.sdk.ui.LightText
+import com.thelightphone.sdk.ui.LightTextVariant
+import com.thelightphone.sdk.ui.LightTheme
+import com.thelightphone.sdk.ui.LightThemeController
+import com.thelightphone.sdk.ui.LightTopBar
+import com.thelightphone.sdk.ui.LightTopBarCenter
+import com.thelightphone.sdk.ui.LightTouchableProgressBar
+import com.thelightphone.sdk.ui.gridUnitsAsDp
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 enum class EmulatorSettingsNav {
-    Root, FilterLevel, Keyboard, ForceFocus, Notifications
+    Root, FilterLevel, Keyboard, ForceFocus, Notifications, Backups
 }
 
 val ClientFilterLevel.label: String
@@ -41,6 +58,7 @@ fun EmulatorSettings(
     settings: LightSdkServerSettings,
     emulatorSettingsAudio: EmulatorSettingsAudio,
     startingNav: Nav.Settings,
+    backupSettingsViewModel: BackupSettingsViewModel,
     onRootBackPressed: () -> Unit,
 ) {
     var nav by remember { mutableStateOf(startingNav.startingScreen) }
@@ -111,6 +129,16 @@ fun EmulatorSettings(
                             LightText("Notifications", variant = LightTextVariant.Copy)
                         }
                     }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { nav = EmulatorSettingsNav.Backups }
+                            .then(rowPadding)
+                    ) {
+                        Column {
+                            LightText("Backup", variant = LightTextVariant.Copy)
+                        }
+                    }
                 }
             }
 
@@ -123,6 +151,14 @@ fun EmulatorSettings(
                 settings,
                 subscreenBackPressed
             )
+
+            EmulatorSettingsNav.Backups -> {
+                BackupSettings(
+                    viewModel = backupSettingsViewModel,
+                    onBackClick = subscreenBackPressed,
+                    providerName = { name },
+                )
+            }
 
             EmulatorSettingsNav.Keyboard -> KeyboardSettings(settings, subscreenBackPressed)
 
@@ -279,32 +315,4 @@ fun KeyboardSettings(settings: LightSdkServerSettings, onBackPressed: () -> Unit
 interface EmulatorSettingsAudio {
     fun setRingerVolume(normalized: Float)
     val ringerVolume: StateFlow<Float>
-}
-
-@Preview(widthDp = 1080 / 3, heightDp = 1240 / 3, showBackground = true)
-@Composable
-fun EmulatorSettingsPreview() {
-    val settings = object : LightSdkServerSettings {
-        override var clientFilterLevel: ClientFilterLevel = ClientFilterLevel.AllowAllApks
-        override var keyboardOptions: LightServiceMethod.GetKeyboardOptions.Response =
-            LightServiceMethod.GetKeyboardOptions.Response(null,
-                displayVoice = true,
-                enableKeyAnimation = true,
-                swipeEnabled = true
-            )
-        override var userPreferences: LightServiceMethod.GetUserPreferences.Response =
-            LightServiceMethod.GetUserPreferences.Response(hapticsEnabled = true)
-        override var forceFocusLevel: ForceFocusLevel = ForceFocusLevel.Always
-    }
-    val emulatorAudioWrapper = object : EmulatorSettingsAudio {
-        private val currentVolume = MutableStateFlow(0.5f)
-        override fun setRingerVolume(normalized: Float) {
-            currentVolume.value = normalized
-        }
-
-        override val ringerVolume: StateFlow<Float> = currentVolume.asStateFlow()
-    }
-    LightTheme {
-        EmulatorSettings(settings, emulatorAudioWrapper, Nav.Settings()) { }
-    }
 }

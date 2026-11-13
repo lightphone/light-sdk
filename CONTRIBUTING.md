@@ -33,3 +33,32 @@ We like talking to _people_!
 - We find that code comments produced by LLMs tend to be overly verbose and/or specific to your dev session. Please delete them, or if you think they're genuinely useful, make sure they are brief and in your voice.
 - **You are responsible for any code or other communication that comes from your account**.
 - **We (the humans on the Light dev team) are responsible for any code that gets merged.**
+
+### Releases
+
+Merging a PR into `main` that touches SDK code (`sdk/`, `plugin/`, `tool/`, `builder/`, `lint-rules/`, `signer/`, `trust-format/`, `gradle.properties`, `gradle/libs.versions.toml` or the root `build.gradle.kts` / `settings.gradle.kts`) releases a new version automatically: the [release workflow](.github/workflows/release.yml) bumps `sdkVersion`, tags `vX.Y.Z`, publishes to GitHub Packages and creates a GitHub Release. CircleCI then builds the builder image from the tag.
+
+The bump defaults to patch. Pick another with a PR label:
+
+| Label | `0.2.4` becomes |
+|---|---|
+| none | `0.2.5` |
+| `release:minor` | `0.3.0` |
+| `release:major` | `1.0.0` |
+| `no-release` | no release; the change ships with the next one |
+
+When several PRs are merged before a release, the largest bump among them wins. The "Release Preview" check on each PR shows which version merging it would release.
+
+Don't edit `sdkVersion` in a PR unless you need a specific version: a value above the computed one is released as-is.
+
+To release without a PR, or to fix a missing label, run the workflow manually (Actions → Release → Run workflow) with a `bump`; `dry_run` computes the version and runs `./gradlew check` without releasing. If publishing or the GitHub Release fails after the tag is pushed, use "Re-run failed jobs" on that run.
+
+#### One-time setup
+
+The workflow pushes to `main` through a GitHub App, since the branch ruleset requires PRs:
+
+1. Create a GitHub App owned by the organization with repository permissions **Contents: Read and write** and **Actions: Read and write**, no webhook.
+2. Install it on `lightphone/light-sdk` only.
+3. Add the app to the bypass list of the `main` ruleset.
+4. Add the repository secrets `RELEASE_APP_CLIENT_ID` (the app's client ID) and `RELEASE_APP_PRIVATE_KEY` (a generated private key).
+5. Create the labels `release:minor`, `release:major` and `no-release`.
