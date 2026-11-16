@@ -454,7 +454,9 @@ object LightSdkServer {
     /**
      * A receiver that will bring the rootActivity (MainActivity in both emulator and real LightOS)
      * to the foreground with a new intent whenever the device's screen goes off
-     * (unless user has overridden the settings.forceFocusLevel)
+     * (unless user has overridden the settings.forceFocusLevel).
+     * If a tool has an alert the user hasn't cleared, that tool is brought forward instead, so the
+     * alert is what shows when the screen turns back on (unless forceFocusLevel is Never).
      */
     fun Context.registerLockReceiver(
         rootActivityClass: Class<out Activity>,
@@ -463,6 +465,14 @@ object LightSdkServer {
         val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
         val lockReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
+                val alertingTool = LightNotificationListenerService.latestAlertingTool()
+                if (alertingTool != null &&
+                    settings.forceFocusLevel != ForceFocusLevel.Never &&
+                    isPackageAllowed(settings.clientFilterLevel, context, alertingTool)
+                ) {
+                    LightNotificationListenerService.resurface(context, alertingTool)
+                    return
+                }
                 val allowForceFocus = when (settings.forceFocusLevel) {
                     ForceFocusLevel.Always -> true
                     ForceFocusLevel.AlertsOnly, ForceFocusLevel.Never -> false

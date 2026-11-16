@@ -91,7 +91,7 @@ internal object LightAlertScheduler {
     @SuppressLint("MissingPermission")
     private fun deliver(context: Context, record: LightAlertRecord) {
         LightAlertNotification.post(context, record)
-        val alert = LightAlert(id = record.id, title = record.title, text = record.text)
+        val alert = LightAlert(id = record.id, title = record.title, text = record.text, context = context)
         scope.launch {
             val drop = try {
                 LightSdkRegistry.entryPoint?.onAlert(alert) ?: true

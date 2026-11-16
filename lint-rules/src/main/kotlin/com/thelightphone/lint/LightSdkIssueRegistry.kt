@@ -12,6 +12,7 @@ class LightSdkIssueRegistry : IssueRegistry() {
         ActivityAccessDetector.ISSUE_ACTIVITY_CAST,
         LightJobDetector.ISSUE_LIGHT_JOB_INVALID,
         LightJobDetector.ISSUE_LIGHT_JOB_EMPTY_KEY,
+        LightAlertDismissDetector.ISSUE_ALERT_NEVER_DISMISSED,
     )
 
     override val api: Int = CURRENT_API

@@ -61,15 +61,15 @@ object UiDemoEntryPoint : LightEntryPoint {
     }
 }
 
-/** Shows the received alert over any screen; closing it lets the screen sleep again. */
+/** Shows the received alert over any screen; closing it dismisses the alert. */
 @Composable
-fun UiDemoAlertModal(notifications: LightNotifications) {
+fun UiDemoAlertModal() {
     val alert by UiDemoAlerts.received.collectAsState()
-    alert?.let {
+    alert?.let { shown ->
         LightFullscreenModal(
-            message = listOf(it.title, it.text).filter(String::isNotBlank).joinToString("\n"),
+            message = listOf(shown.title, shown.text).filter(String::isNotBlank).joinToString("\n"),
             onClose = {
-                notifications.releaseScreen()
+                shown.dismiss()
                 UiDemoAlerts.clear()
             },
         )
@@ -206,7 +206,7 @@ class UiDemoAlertsScreen(sealedActivity: SealedLightActivity) :
                     }
                 }
 
-                UiDemoAlertModal(notifications)
+                UiDemoAlertModal()
             }
         }
     }

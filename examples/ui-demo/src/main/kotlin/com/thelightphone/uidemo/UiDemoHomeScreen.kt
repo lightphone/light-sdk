@@ -160,7 +160,7 @@ class UiDemoHomeScreen(sealedActivity: SealedLightActivity) :
                     )
                 }
 
-                UiDemoAlertModal(lightContext.notifications)
+                UiDemoAlertModal()
             }
         }
     }

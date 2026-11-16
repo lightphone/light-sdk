@@ -11,7 +11,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import android.view.WindowManager
 import androidx.annotation.RequiresPermission
 import com.thelightphone.sdk.shared.LightConstants
 import kotlinx.coroutines.flow.StateFlow
@@ -64,26 +63,21 @@ class LightNotifications(private val context: Context) {
     val scheduledAlertIds: StateFlow<Set<String>>
         get() = LightAlertStore.ids(context)
 
-    /** Drops an alert so it does not fire, and so a reboot does not deliver it again. */
+    /**
+     * Drops an alert so it does not fire, and so a reboot does not deliver it again. If the alert
+     * is already showing, this also dismisses it, like [LightAlert.dismiss].
+     */
     fun cancel(id: String) {
         LightAlertScheduler.cancel(context, id)
-    }
-
-    /**
-     * Lets the screen sleep again after an alert brought the tool forward, and clears the
-     * alert's notification. Call it once the user has dealt with the alert.
-     */
-    fun releaseScreen() {
-        LightAlertPresentation.release()
-        context.getSystemService(NotificationManager::class.java)
-            .cancel(ALERT_NOTIFICATION_ID)
+        LightAlertNotification.dismiss(context, id)
     }
 }
 
 /**
- * Posts the notification for an alert that has arrived. LightOS sees it and opens its content
- * intent, so [LightActivity] opens with [EXTRA_BRING_FORWARD], turns the screen on, and keeps it
- * on until [LightNotifications.releaseScreen].
+ * Posts the notification for an alert that has arrived. LightOS sees it and opens [LightActivity]
+ * with [EXTRA_BRING_FORWARD] and turns the screen on. The screen then times out as usual, and
+ * LightOS brings the tool back whenever the screen turns off, until [LightAlert.dismiss] clears
+ * the notification.
  */
 internal object LightAlertNotification {
     // Without a runtime grant the post fails, which is logged.
@@ -125,25 +119,38 @@ internal object LightAlertNotification {
             .setAutoCancel(true)
             .addExtras(Bundle().apply { putString(LightConstants.EXTRA_ALERT_ID, record.id) })
             .build()
-        runCatching { manager.notify(ALERT_NOTIFICATION_ID, notification) }
+        // Tagged with the alert id, so dismissing one alert leaves any other alone.
+        runCatching { manager.notify(record.id, ALERT_NOTIFICATION_ID, notification) }
             .onFailure { Log.e(TAG, "Could not post the alert notification", it) }
+    }
+
+    /** Clears the alert's notification if it is showing, and lets the tool's screen go. */
+    fun dismiss(context: Context, id: String) {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val showing = manager.activeNotifications.any { it.tag == id && it.id == ALERT_NOTIFICATION_ID }
+        if (!showing) return
+        manager.cancel(id, ALERT_NOTIFICATION_ID)
+        LightAlertPresentation.release()
     }
 }
 
-internal const val EXTRA_BRING_FORWARD = "com.thelightphone.sdk.extra.BRING_FORWARD"
+internal const val EXTRA_BRING_FORWARD = LightConstants.EXTRA_BRING_FORWARD
 
 internal object LightAlertPresentation {
     private var activity: WeakReference<android.app.Activity>? = null
 
+    // LightOS wakes the screen for the alert itself. The activity must not turn the screen on,
+    // or LightOS bringing it back as the screen turns off would wake the screen straight away.
     fun hold(activity: android.app.Activity) {
         this.activity = WeakReference(activity)
         activity.setShowWhenLocked(true)
-        activity.setTurnScreenOn(true)
-        activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     fun release() {
-        activity?.get()?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val held = activity?.get() ?: return
+        activity = null
+        // Undo hold(), or every later resume would show over the lock screen.
+        held.setShowWhenLocked(false)
     }
 }
 

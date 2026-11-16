@@ -29,4 +29,10 @@ object LightConstants {
      * The server foregrounds the posting tool when it sees one.
      */
     const val EXTRA_ALERT_ID = "com.thelightphone.sdk.extra.ALERT_ID"
+
+    /** Intent extra telling LightActivity to come forward and hold the screen on for an alert. */
+    const val EXTRA_BRING_FORWARD = "com.thelightphone.sdk.extra.BRING_FORWARD"
+
+    /** Every tool's single activity, declared by the Light Gradle plugin's generated manifest. */
+    const val LIGHT_ACTIVITY_CLASS = "com.thelightphone.sdk.LightActivity"
 }

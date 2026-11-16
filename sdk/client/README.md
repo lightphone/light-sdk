@@ -462,7 +462,7 @@ lightContext.notifications.cancel()
 
 Calling `post` again replaces the tool's previous notification, and `cancel` clears it.
 
-`schedule` brings the tool forward when `triggerAtMillis` arrives, even if the tool is not open. This needs a LightOS version that supports tool alerts; on older versions the alert's notification is posted but the tool isn't opened. `cancel(id)` drops the alert. Scheduling the same id again replaces the previous alert.
+`schedule` brings the tool forward when `triggerAtMillis` arrives, even if the tool is not open. This needs a LightOS version that supports tool alerts; on older versions the alert's notification is posted but the tool isn't opened. `cancel(id)` drops the alert, and dismisses it if it's already showing. Scheduling the same id again replaces the previous alert.
 
 Enable alerts in `lighttool.toml`:
 
@@ -485,13 +485,13 @@ lightContext.notifications.cancel("dose-1")
 
 `scheduledAlertIds` is a `StateFlow` of the ids that are still scheduled, e.g. to show whether an alert is pending.
 
-When the alert arrives, the SDK posts a notification with the alert's title and text and calls your entry point's `onAlert`. LightOS sees the notification and opens the tool, which turns the screen on if it was off and keeps it on until you call `releaseScreen`. Opening the tool happens separately from `onAlert`, so `onAlert` may run before the tool's screen is showing:
+When the alert arrives, the SDK posts a notification with the alert's title and text and calls your entry point's `onAlert`. LightOS sees the notification and opens the tool, which turns the screen on if it was off. The screen then times out as usual, but LightOS brings the tool back each time the screen turns off, so the alert is what the user sees when they next turn it on. This continues until you call `alert.dismiss()`. Opening the tool happens separately from `onAlert`, so `onAlert` may run before the tool's screen is showing:
 
 ```kotlin
 @EntryPoint
 object MyToolEntryPoint : LightEntryPoint {
     override suspend fun onAlert(alert: LightAlert): Boolean {
-        // show the alert in the tool's UI
+        // show the alert in the tool's UI, and call alert.dismiss() when the user closes it
         return false // keep it until the user dismisses it
     }
 }
@@ -501,7 +501,7 @@ Return `true` to drop the alert once `onAlert` returns, which is what happens if
 
 Request `POST_NOTIFICATIONS` at runtime before you schedule alerts; without it the alert can't bring the tool forward. `USE_EXACT_ALARM` is granted at install. Use `canPostNotifications` and `canScheduleExactAlerts` to check what has been granted.
 
-When the user is done with the alert, call `releaseScreen` to clear the notification and let the screen sleep.
+When the user is done with the alert, call `alert.dismiss()` to clear its notification, so LightOS stops bringing the tool back. If you never call it, the tool keeps coming back every time the screen turns off. If you no longer have the `LightAlert` (e.g. the tool's process was restarted), `cancel(alert.id)` dismisses it too, and also stops it from being delivered again.
 
 ### Images and video
 
