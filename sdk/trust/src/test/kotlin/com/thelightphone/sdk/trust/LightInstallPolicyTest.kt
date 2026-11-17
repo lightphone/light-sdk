@@ -220,13 +220,14 @@ class LightInstallPolicyTest {
         assertEquals(Allow, decide(apkSha256 = hash, bundle = both))
         assertEquals(0, hashed)
 
-        // The same for blocks: a free match is found however late it sits in the list.
+        // A hash purge must be checked even when a cheaper identity block matches.
         val mixedBlocks = bundle(block = listOf(
             TrustBlock(BlockMatch.ApkSha256(apkHash), BlockAction.Purge, "hashed"),
             TrustBlock(BlockMatch.SignerSha256(appKey), BlockAction.Block, "compromised"),
         ))
-        assertEquals(Kill(BlockAction.Block, "compromised"), decide(apkSha256 = hash, bundle = mixedBlocks))
-        assertEquals(0, hashed)
+        assertEquals(Kill(BlockAction.Purge, "hashed"), decide(apkSha256 = hash, bundle = mixedBlocks))
+        assertEquals(1, hashed)
+        hashed = 0
 
         // Only an apkSha256 entry left to try.
         val byHash = listOf(ApprovedArtifact.BuildId("build_other"), ApprovedArtifact.ApkSha256(apkHash))
@@ -253,6 +254,40 @@ class LightInstallPolicyTest {
         )
         assertEquals(Allow, decide(apkSha256 = hash, bundle = hashBlock))
         assertEquals(1, hashed)
+    }
+
+
+    @Test
+    fun `purge and deterministic reason win across all match forms and bundle permutations`() {
+        val blocks = listOf(
+            TrustBlock(BlockMatch.SignerSha256(appKey), BlockAction.Block, "a-block"),
+            TrustBlock(BlockMatch.ToolId(toolId), BlockAction.Purge, "z-purge"),
+            TrustBlock(BlockMatch.ToolVersion(toolId, 7), BlockAction.Block, "b-block"),
+            TrustBlock(BlockMatch.ApkSha256(apkHash), BlockAction.Purge, "a-purge"),
+        )
+        fun permutations(entries: List<TrustBlock>): List<List<TrustBlock>> =
+            if (entries.isEmpty()) listOf(emptyList())
+            else entries.flatMap { chosen -> permutations(entries - chosen).map { listOf(chosen) + it } }
+        for (order in permutations(blocks)) {
+            for (level in LightTrustFilterLevel.entries) {
+                val expected = if (level == AllowAllApks) Allow else Kill(BlockAction.Purge, "a-purge")
+                assertEquals(expected, decide(bundle = bundle(block = order), level = level,
+                    apkSha256 = { apkHash }, stamp = StampResult.NotVerified))
+            }
+        }
+    }
+
+    @Test
+    fun `block reason is stable when there is no matching purge`() {
+        val blocks = listOf(
+            TrustBlock(BlockMatch.ToolId(toolId), BlockAction.Block, "z-block"),
+            TrustBlock(BlockMatch.ApkSha256(apkHash), BlockAction.Block, "a-block"),
+            TrustBlock(BlockMatch.ApkSha256(otherApkHash), BlockAction.Purge, "nonmatching"),
+        )
+        for (order in listOf(blocks, blocks.reversed())) {
+            assertEquals(Kill(BlockAction.Block, "a-block"), decide(
+                bundle = bundle(block = order), apkSha256 = { apkHash }))
+        }
     }
 
     @Test
