@@ -22,6 +22,11 @@ enum class LightTrustFilterLevel {
 
 /** Closed so callers assert on *why* an APK was refused and render a stable UI key. */
 enum class DenyReason {
+    UntrustedStampCert,
+    MalformedStatement,
+    TrustUnavailable,
+    ArtifactUnavailable,
+    AdmissionUnavailable,
     /** No Light stamp, or no trust statement: not something the SDK produced. */
     NotLightBuilt,
 
@@ -170,27 +175,14 @@ object LightInstallPolicy {
         val toolId = statement?.tool?.id
         val versionCode = statement?.tool?.versionCode
 
-        val matchedOnIdentity =
-                blocks.firstOrNull {
-                    when (val match = it.match) {
-                        // block all apks signed by a given key
-                        is BlockMatch.SignerSha256 -> match.value == signerSha256
-                        // block all versions of a tool
-                        is BlockMatch.ToolId -> match.value == toolId
-                        // block a specific version of a tool
-                        is BlockMatch.ToolVersion ->
-                                match.toolId == toolId && match.versionCode == versionCode
-                        // match apk hash in a separate loop to avoid unnecessary hash computation
-                        is BlockMatch.ApkSha256 -> false
-                    }
-                }
-        if (matchedOnIdentity != null) {
-            return matchedOnIdentity
-        }
-
-        // after all metadata matches are exhausted, try to match by apk hash
-        return blocks.firstOrNull {
-            it.match is BlockMatch.ApkSha256 && it.match.value == apkSha256.value
-        }
+        return blocks.asSequence().filter {
+            when (val match = it.match) {
+                is BlockMatch.SignerSha256 -> match.value == signerSha256
+                is BlockMatch.ToolId -> match.value == toolId
+                is BlockMatch.ToolVersion -> match.toolId == toolId && match.versionCode == versionCode
+                is BlockMatch.ApkSha256 -> match.value == apkSha256.value
+            }
+        }.minWithOrNull(compareBy<TrustBlock> { if (it.action == BlockAction.Purge) 0 else 1 }
+            .thenBy { it.reason })
     }
 }

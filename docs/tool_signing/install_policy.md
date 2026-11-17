@@ -65,6 +65,9 @@ a `minVersionCode` at or below its `versionCode`, and an approved artifact match
 | `SignerNotApprovedForTool` | the tool is approved under a different signing certificate     |
 
 `Kill` applies a matching bundle block, with its `block` or `purge` action and the bundle's reason.
+Every matching entry participates: purge overrides block, regardless of entry
+order or identity/hash match type. Among matches with the winning action, the
+lexicographically smallest reason is selected.
 
 ## Why blocks come first
 
@@ -76,4 +79,7 @@ but approval is read after the stamp check, so it can never buy an install.
 ## APK hash
 
 Hashing the APK is the most expensive step, so it is computed lazily and at most once.
-Blocks and approvals match on everything else first, and hash the APK only when an `apkSha256` rule is left to check.
+Approval prefers build-ID matches before hashing. Block evaluation checks every
+matching entry, including hash entries after an identity match, so a stronger
+purge or a winning equal-severity reason cannot be missed. No hash is needed
+when no applicable rule refers to it; block and approval share the lazy result.
