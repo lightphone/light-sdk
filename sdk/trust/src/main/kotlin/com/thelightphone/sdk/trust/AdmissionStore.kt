@@ -92,7 +92,7 @@ class AdmissionStore(persistence: AdmissionPersistence) {
     @Synchronized fun recordSuccessfulInstall(evaluation: AdmissionEvaluation): AdmissionOutcome {
         if (!available) return AdmissionOutcome.PersistenceFailed
         if (evaluation.decision != LightInstallDecision.Allow) return AdmissionOutcome.Refused(evaluation.decision)
-        val record = requireNotNull(evaluation.record)
+        val record = evaluation.record ?: return AdmissionOutcome.EvaluationFailed
         if (record.installationFingerprint == null) return AdmissionOutcome.EvaluationFailed
         val replacement = records + (record.packageName to record)
         try {
