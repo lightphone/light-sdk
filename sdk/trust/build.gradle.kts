@@ -51,11 +51,8 @@ dependencies {
     implementation(libs.bouncycastle.provider)
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.kotlin.test)
-    testImplementation(libs.apksig)
 }
 
 tasks.test {
     useJUnitPlatform()
-    System.getProperty("lightStampedApk")?.let { systemProperty("lightStampedApk", it) }
-    System.getProperty("lightStampCertSha256")?.let { systemProperty("lightStampCertSha256", it) }
 }
