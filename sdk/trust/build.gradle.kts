@@ -52,6 +52,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.apksig)
+    testImplementation(project(":sdk:trust-apksig"))
 }
 
 tasks.test {
