@@ -29,6 +29,7 @@ import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.toolmanager.LocalNetworkInfo
 import java.io.File
 import java.security.MessageDigest
+import com.thelightphone.sdk.trust.*
 
 
 data class InstalledClient(
@@ -47,6 +48,18 @@ enum class ClientCertType {
 }
 
 object LightSdkServer {
+    var toolTrustRuntime: ToolTrustRuntime? = null
+
+    fun evaluateTool(level: ClientFilterLevel, meta: ApkMetadata): ToolEvaluation =
+        toolTrustRuntime?.evaluate(meta, level) ?: ToolTrustRuntime.unavailable().let {
+            if (level == ClientFilterLevel.AllowAllApks) it.copy(
+                decision = LightInstallDecision.Allow, exception = AdmissionException.AllowAll) else it
+        }
+
+    fun evaluateTool(level: ClientFilterLevel, context: Context, packageName: String): ToolEvaluation = try {
+        evaluateTool(level, readApkMetadata(context.packageManager.getPackageInfo(
+            packageName, PackageManager.GET_SIGNING_CERTIFICATES)))
+    } catch (_: Exception) { ToolTrustRuntime.unavailable(DenyReason.ArtifactUnavailable) }
     private const val TAG = "LightSdkServer"
     const val SCREEN_OFF_FLAG = "SCREEN_OFF"
     const val TOOL_MANAGER_PATH_EXTRA = "TOOL_MANAGER_PATH"
@@ -77,7 +90,7 @@ object LightSdkServer {
         clientFilterLevel: ClientFilterLevel,
         packageMeta: ApkMetadata
     ): Boolean {
-        return isPackageAllowed(clientFilterLevel) { checkCert(packageMeta) }
+        return evaluateTool(clientFilterLevel, packageMeta).decision == LightInstallDecision.Allow
     }
 
     fun isPackageAllowed(
@@ -85,7 +98,7 @@ object LightSdkServer {
         context: Context,
         callingPackage: String
     ): Boolean {
-        return isPackageAllowed(clientFilterLevel) { checkCert(context, callingPackage) }
+        return evaluateTool(clientFilterLevel, context, callingPackage).decision == LightInstallDecision.Allow
     }
 
     fun isPackageInstallable(
@@ -93,9 +106,11 @@ object LightSdkServer {
         context: Context,
         apkFile: File
     ): Boolean {
-        return isPackageAllowed(clientFilterLevel) { checkCertUninstalled(context, apkFile) }
+        val meta = context.readApkMetadata(apkFile) ?: return false
+        return evaluateTool(clientFilterLevel, meta).decision == LightInstallDecision.Allow
     }
 
+    @Deprecated("Use artifact-based detailed evaluation for enforcement")
     inline fun isPackageAllowed(
         clientFilterLevel: ClientFilterLevel,
         checkCert: () -> ClientCertType
@@ -444,17 +459,17 @@ object LightSdkServer {
         val packageName: String,
         val versionName: String?,
         val versionCode: Long,
-        val signingCertSha256: List<String>
+        val signingCertSha256: List<String>,
+        val apkPaths: List<String> = emptyList(),
+        val lastUpdateTime: Long = 0,
+        val isInstalled: Boolean = true,
+        val firstInstallTime: Long = 0,
     )
 
     fun readApkMetadata(info: PackageInfo): ApkMetadata {
         val signingInfo = info.signingInfo
         val signatures: Array<Signature> = if (signingInfo != null) {
-            if (signingInfo.hasMultipleSigners()) {
-                signingInfo.apkContentsSigners
-            } else {
-                signingInfo.signingCertificateHistory
-            }
+            signingInfo.apkContentsSigners
         } else emptyArray()
 
         val sha256Hashes = signatures.map { sig ->
@@ -467,7 +482,10 @@ object LightSdkServer {
             packageName = info.packageName,
             versionName = info.versionName,
             versionCode = info.longVersionCode,
-            signingCertSha256 = sha256Hashes
+            signingCertSha256 = sha256Hashes,
+            apkPaths = info.applicationInfo?.let { listOf(it.sourceDir) + it.splitSourceDirs.orEmpty() }.orEmpty(),
+            lastUpdateTime = info.lastUpdateTime,
+            firstInstallTime = info.firstInstallTime,
         )
     }
 
@@ -482,7 +500,7 @@ object LightSdkServer {
         // not strictly needed just for package name/signatures, but harmless to set.
         info.applicationInfo?.sourceDir = apkFile.absolutePath
         info.applicationInfo?.publicSourceDir = apkFile.absolutePath
-        return readApkMetadata(info)
+        return readApkMetadata(info).copy(isInstalled = false)
     }
 
     fun checkCertUninstalled(context: Context, apkFile: File): ClientCertType {
@@ -504,18 +522,13 @@ object LightSdkServer {
     }
 
     fun checkCert(packageMeta: ApkMetadata): ClientCertType {
-        val lightSignedMatches = packageMeta.signingCertSha256.filter {
-            isLightSigned(packageMeta.packageName, it)
+        val result = evaluateTool(ClientFilterLevel.AllowLightSignedApks, packageMeta)
+        return when {
+            result.block != null -> ClientCertType.Unknown
+            result.currentlyApproved -> ClientCertType.LightSdkApproved
+            result.provenance == ToolProvenance.LightStamped ||
+                result.exception == AdmissionException.EmulatorDevelopmentKey -> ClientCertType.LightSdkSignedUnverified
+            else -> ClientCertType.Unknown
         }
-
-        if (lightSignedMatches.isEmpty()) {
-            return ClientCertType.Unknown
-        }
-
-        val lightApprovedMatches = lightSignedMatches.filter {
-            isLightApproved(packageMeta.packageName, it)
-        }
-
-        return if (lightApprovedMatches.isEmpty()) ClientCertType.LightSdkSignedUnverified else ClientCertType.LightSdkApproved
     }
 }
