@@ -175,14 +175,39 @@ object LightInstallPolicy {
         val toolId = statement?.tool?.id
         val versionCode = statement?.tool?.versionCode
 
-        return blocks.asSequence().filter {
+        // purge outranks block; equal action ties break on reason, lexicographically
+        val severity = compareBy<TrustBlock> { if (it.action == BlockAction.Purge) 0 else 1 }
+            .thenBy { it.reason }
+
+        // Strongest match among the identity (non-hash) forms — never needs the hash.
+        val strongestIdentityMatchingBlock = blocks.asSequence().filter {
             when (val match = it.match) {
                 is BlockMatch.SignerSha256 -> match.value == signerSha256
                 is BlockMatch.ToolId -> match.value == toolId
                 is BlockMatch.ToolVersion -> match.toolId == toolId && match.versionCode == versionCode
-                is BlockMatch.ApkSha256 -> match.value == apkSha256.value
+                is BlockMatch.ApkSha256 -> false
             }
-        }.minWithOrNull(compareBy<TrustBlock> { if (it.action == BlockAction.Purge) 0 else 1 }
-            .thenBy { it.reason })
+        }.minWithOrNull(severity)
+
+        // A hash entry can only win if even its strongest possible (action, reason)
+        // beats the identity winner. Otherwise the hash is never needed.
+        val hashBlocks = blocks.filter { it.match is BlockMatch.ApkSha256 }
+        val strongestHashCandidate = hashBlocks.minWithOrNull(severity)
+        if (strongestIdentityMatchingBlock != null &&
+            (strongestHashCandidate == null ||
+             severity.compare(strongestHashCandidate, strongestIdentityMatchingBlock) >= 0)) {
+            return strongestIdentityMatchingBlock
+        }
+
+        // Only now is the hash worth paying for. A matching hash entry can still win.
+        var winner = strongestIdentityMatchingBlock
+        for (block in hashBlocks) {
+            val hashBlock = block.match as BlockMatch.ApkSha256
+            if (hashBlock.value == apkSha256.value &&
+                (winner == null || severity.compare(block, winner) < 0)) {
+                winner = block
+            }
+        }
+        return winner
     }
 }
