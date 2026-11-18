@@ -22,11 +22,21 @@ enum class LightTrustFilterLevel {
 
 /** Closed so callers assert on *why* an APK was refused and render a stable UI key. */
 enum class DenyReason {
+    /** The stamp verifies, but its certificate is not a trusted Light stamp cert (untrusted or revoked). */
     UntrustedStampCert,
+
+    /** The trust statement is present but malformed and could not be parsed. */
     MalformedStatement,
+
+    /** Trust inputs (bundle or stamp verifier) are unavailable, so the APK could not be evaluated. */
     TrustUnavailable,
+
+    /** The APK artifact could not be read or hashed. */
     ArtifactUnavailable,
+
+    /** The admission record could not be read or confirmed. */
     AdmissionUnavailable,
+
     /** No Light stamp, or no trust statement: not something the SDK produced. */
     NotLightBuilt,
 
