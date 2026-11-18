@@ -169,7 +169,7 @@ class ToolManagerLifecycleWrapperService : Service() {
                     EXTRA_RETETHER_CHECK_DELAY_MS,
                     DEFAULT_RETETHER_CHECK_DELAY_MS
                 ) ?: DEFAULT_RETETHER_CHECK_DELAY_MS
-                tethering.start()
+                scope.launch { tethering.start() }
                 scope.launch {
                     // collectLatest: a newer link cancels a pending re-tether wait.
                     tethering.link.collectLatest { link ->
@@ -179,7 +179,7 @@ class ToolManagerLifecycleWrapperService : Service() {
                         if (link.usbHostConnected && !link.tetherInterfaceUp && !link.computerJoined && link.error == null) {
                             delay(retetherCheckDelayMs)
                             Log.i(TAG, "USB reconnected without tethering; requesting it again")
-                            tethering.start()
+                            scope.launch { tethering.start() }
                         }
                     }
                 }

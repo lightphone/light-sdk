@@ -15,9 +15,10 @@ interface UsbTethering {
 
     /**
      * Requests USB tethering if it isn't already up (no-op if it is). Without a cable connected it
-     * may only come up once one is.
+     * may only come up once one is. Suspends while getting ready to make the request; returns once
+     * it's made, not once tethering is up (follow [link] for that).
      */
-    fun start()
+    suspend fun start()
 
     fun stop()
 
