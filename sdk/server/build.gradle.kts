@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.kotlinx.coroutines)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
     ksp(libs.androidx.room.compiler)

@@ -5,9 +5,11 @@ The main reasons to do this are:
 - You are a developer and you want to test out builds of your tool from your own development environment.
 - You want to try out a tool from a trusted third-party developer that is not signed by Light.
 
-**Note that as of August 25, 2026, this functionality has not yet been rolled out to LightOS production builds. Coming soon!**
-
 ## Process
+
+> [!IMPORTANT]
+> This describes the process of sideloading using the Tool Manager via Wi-Fi. This flow will remain active for the emulator, but we are moving towards a USB-tethered flow for real Light hardware.
+> As of LightOS version 592 (typing this on November 18, 2026) the Wi-Fi flow is still the only one available for production hardware. Will update this when the USB flow rolls out!
 
 Suppose you have an APK that you want to install on your computer.
 

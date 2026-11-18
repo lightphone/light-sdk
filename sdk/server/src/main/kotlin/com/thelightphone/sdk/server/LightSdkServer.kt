@@ -16,6 +16,7 @@ import android.os.UserHandle
 import android.util.Log
 import com.thelightphone.sdk.server.backup.BackupCapableTool
 import com.thelightphone.sdk.server.backup.SmsBackupExclusion
+import com.thelightphone.sdk.server.toolmanager.UsbTethering
 import com.thelightphone.toolmanager.AndroidKeystoreKeyCipher
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.DataView
@@ -366,6 +367,12 @@ object LightSdkServer {
     var foregroundToolManagerUi: (activityToReplace: Activity, path: String?) -> Unit = { _, _ ->
         // if activityToReplace is not the ToolManager UI already, relaunch the ToolManager UI
     }
+
+    /**
+     * USB tethering for the tool manager (see [UsbTethering]). Needs platform APIs, so the host app
+     * provides it. Null means no USB available, and the tool manager runs over Wi-Fi.
+     */
+    var provideUsbTethering: (Context) -> UsbTethering? = { null }
 
     var isNetworkApprovedForToolManager: (LocalNetworkInfo) -> Boolean = {
         // by default don't trust any network. This MUST be overridden
