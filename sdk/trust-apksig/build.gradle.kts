@@ -14,4 +14,9 @@ kotlin {
 dependencies {
     api(project(":sdk:trust"))
     implementation(libs.apksig)
+    testImplementation(libs.kotlin.test)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
