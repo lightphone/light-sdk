@@ -31,8 +31,24 @@ import java.time.Instant
  * resolves silently, last-value-wins, rather than rejecting) could therefore only come
  * from a bug in [AdmissionRecord.toJson] itself, not from tampering - not worth adding
  * duplicate-key detection against an adversary the checksum already stops earlier.
+ *
+ * Only one instance may ever open a given path within this process - two live instances
+ * over the same file would each hold an independently stale in-memory cache, since
+ * [AdmissionStore] only reads at construction. This doesn't catch two *different* paths
+ * being used where one was intended (that failure mode needs agreement on the path
+ * itself, not a file-level guard); it only catches the same path opened twice.
  */
 class FileAdmissionPersistence(private val path: Path) : AdmissionPersistence {
+    init {
+        val canonical = path.toAbsolutePath().normalize()
+        synchronized(openPaths) {
+            require(openPaths.add(canonical)) {
+                "FileAdmissionPersistence is already open for $canonical in this process - " +
+                    "only one owner per backend is safe"
+            }
+        }
+    }
+
     override fun read(): List<AdmissionRecord> {
         val bytes = try { Files.readAllBytes(path) } catch (_: java.nio.file.NoSuchFileException) {
             return emptyList()
@@ -76,6 +92,10 @@ class FileAdmissionPersistence(private val path: Path) : AdmissionPersistence {
         } finally {
             Files.deleteIfExists(temporary)
         }
+    }
+
+    companion object {
+        private val openPaths = mutableSetOf<Path>()
     }
 }
 
