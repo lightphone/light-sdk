@@ -22,21 +22,11 @@ import java.security.MessageDigest
 import java.time.Instant
 
 /**
- * Dedicated private file; never point this backend at a stamp cache or bundle file.
+ * Persists [AdmissionRecord]s to a dedicated private file, one record per package.
  *
- * JSON payload, wrapped in the same checksum + atomic-write pattern as before. No prior
- * format to migrate from - nothing using LAD1/LAD2 was ever deployed. The checksum is
- * computed over the exact bytes before they are parsed, so a tampered file is rejected
- * before JSON parsing ever runs; a duplicate object key (which kotlinx.serialization
- * resolves silently, last-value-wins, rather than rejecting) could therefore only come
- * from a bug in [AdmissionRecord.toJson] itself, not from tampering - not worth adding
- * duplicate-key detection against an adversary the checksum already stops earlier.
- *
- * Only one instance may ever open a given path within this process - two live instances
- * over the same file would each hold an independently stale in-memory cache, since
- * [AdmissionStore] only reads at construction. This doesn't catch two *different* paths
- * being used where one was intended (that failure mode needs agreement on the path
- * itself, not a file-level guard); it only catches the same path opened twice.
+ * File format is a JSON document `{"records": [...]}` prefixed by the 32-byte SHA-256
+ * checksum of the JSON bytes. Records are written sorted by package
+ * name, so a given snapshot always serializes to the same bytes.
  */
 class FileAdmissionPersistence(private val path: Path) : AdmissionPersistence {
     init {
@@ -55,6 +45,7 @@ class FileAdmissionPersistence(private val path: Path) : AdmissionPersistence {
         }
         require(bytes.size >= 32) { "Truncated admission data" }
         val payload = bytes.copyOfRange(32, bytes.size)
+        // the checksum is unkeyed and meant to detect accidental corruption, not tampering.
         require(MessageDigest.isEqual(bytes.copyOfRange(0, 32), MessageDigest.getInstance("SHA-256").digest(payload))) {
             "Corrupt admission data"
         }
@@ -90,6 +81,7 @@ class FileAdmissionPersistence(private val path: Path) : AdmissionPersistence {
                 directory.force(true)
             }
         } finally {
+            // only delete after the whole operation is done, so that the previous snapshot can be used for recovery
             Files.deleteIfExists(temporary)
         }
     }
