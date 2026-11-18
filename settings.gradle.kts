@@ -30,6 +30,8 @@ include(":tool")
 // :tool needs.
 if (providers.systemProperty("lightSdk.toolOnly").orNull != "true") {
     include(":sdk:trust")
+    include(":sdk:trust-apksig")
+    include(":sdk:trust-android-validation")
     include(":sdk:server")
     include(":sdk:emulator")
     include(":examples:ui-demo")
