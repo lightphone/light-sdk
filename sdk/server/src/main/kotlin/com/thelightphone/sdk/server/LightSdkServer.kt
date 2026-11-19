@@ -37,17 +37,13 @@ data class InstalledClient(
     val sdkVersion: String,
 )
 
-enum class ClientCertType {
-    Unknown,
-
-    // for tools built with SDK and signed by Light, but not part of curated community list
-    LightSdkSignedUnverified,
-
-    // for tools built with SDK, signed by Light, and part of community list
-    LightSdkApproved
-}
-
 object LightSdkServer {
+    /**
+     * No concrete host constructs and assigns this yet: it stays `null` until a follow-up track
+     * wires a real [ToolTrustRuntime] (verifier, trust state source, admission store) into it.
+     * Until then every evaluation here falls through to the `null`-runtime branch below, which
+     * denies everything except [ClientFilterLevel.AllowAllApks].
+     */
     var toolTrustRuntime: ToolTrustRuntime? = null
 
     fun evaluateTool(level: ClientFilterLevel, meta: ApkMetadata): ToolEvaluation =
@@ -108,25 +104,6 @@ object LightSdkServer {
     ): Boolean {
         val meta = context.readApkMetadata(apkFile) ?: return false
         return evaluateTool(clientFilterLevel, meta).decision == LightInstallDecision.Allow
-    }
-
-    @Deprecated("Use artifact-based detailed evaluation for enforcement")
-    inline fun isPackageAllowed(
-        clientFilterLevel: ClientFilterLevel,
-        checkCert: () -> ClientCertType
-    ): Boolean {
-        return when (clientFilterLevel) {
-            ClientFilterLevel.ExcludeAllApks -> false
-            ClientFilterLevel.AllowAllApks -> true
-            ClientFilterLevel.AllowLightApprovedApks -> {
-                checkCert() == ClientCertType.LightSdkApproved
-            }
-
-            ClientFilterLevel.AllowLightSignedApks -> when (checkCert()) {
-                ClientCertType.Unknown -> false
-                ClientCertType.LightSdkSignedUnverified, ClientCertType.LightSdkApproved -> true
-            }
-        }
     }
 
     fun Context.queryInstalledClients(): List<InstalledClient> {
@@ -287,11 +264,6 @@ object LightSdkServer {
     var foregroundSelfWithCallback: (componentToReturnTo: ComponentName) -> Unit = {
         Log.e(TAG, "Server wants to foreground itself but does not know how!")
     }
-
-    var isLightSigned: (callingPackage: String, signatureHash: String) -> Boolean =
-        { _, _ -> false }
-    var isLightApproved: (callingPackage: String, signatureHash: String) -> Boolean =
-        { _, _ -> false }
 
     var canBeUninstalledByToolManager: (packageName: String) -> Boolean = { false }
 
@@ -503,32 +475,4 @@ object LightSdkServer {
         return readApkMetadata(info).copy(isInstalled = false)
     }
 
-    fun checkCertUninstalled(context: Context, apkFile: File): ClientCertType {
-        val packageMeta = context.readApkMetadata(apkFile) ?: return ClientCertType.Unknown
-        return checkCert(packageMeta)
-    }
-
-    fun checkCert(context: Context, callingPackage: String): ClientCertType {
-        val info = try {
-            context.packageManager.getPackageInfo(
-                callingPackage,
-                PackageManager.GET_SIGNING_CERTIFICATES
-            )
-        } catch (_: PackageManager.NameNotFoundException) {
-            return ClientCertType.Unknown
-        }
-        val packageMeta = readApkMetadata(info)
-        return checkCert(packageMeta)
-    }
-
-    fun checkCert(packageMeta: ApkMetadata): ClientCertType {
-        val result = evaluateTool(ClientFilterLevel.AllowLightSignedApks, packageMeta)
-        return when {
-            result.block != null -> ClientCertType.Unknown
-            result.currentlyApproved -> ClientCertType.LightSdkApproved
-            result.provenance == ToolProvenance.LightStamped ||
-                result.exception == AdmissionException.EmulatorDevelopmentKey -> ClientCertType.LightSdkSignedUnverified
-            else -> ClientCertType.Unknown
-        }
-    }
 }
