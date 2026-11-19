@@ -279,6 +279,20 @@ class LightSdkService : Service() {
                 }
             }
 
+            LightServiceMethod.SetClipboardText -> {
+                val request = LightServiceMethod.SetClipboardText.decodeRequest(payload!!)
+                if (request.text.length > LightServiceMethod.SetClipboardText.MAX_TEXT_LENGTH) {
+                    return@runCatching LightResult.Error(
+                        LightResult.ErrorCode.InvalidParameters,
+                        "text longer than ${LightServiceMethod.SetClipboardText.MAX_TEXT_LENGTH} chars",
+                    )
+                }
+                setClipboardTextQuietly(request.text, request.label)
+                LightResult.Success(
+                    LightServiceMethod.SetClipboardText.encodeResponse(Unit)
+                )
+            }
+
             null, is LightServiceMethod.CustomServiceMethod<*, *> -> {
                 // The app that wraps this server may be able to handle custom methods
                 LightSdkServer.customServiceMethodResolver.invoke(callingUid, methodId, payload)
