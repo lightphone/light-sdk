@@ -53,6 +53,7 @@ afterEvaluate {
 
 dependencies {
     api(project(":sdk:shared"))
+    api(project(":sdk:trust"))
     api(libs.light.toolmanager.server)
     api(libs.light.backup)
     implementation(libs.androidx.room.runtime)
