@@ -1,0 +1,72 @@
+package com.thelightphone.sdk.trust
+
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption.ATOMIC_MOVE
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import java.nio.file.StandardOpenOption.READ
+import java.nio.file.StandardOpenOption.WRITE
+import java.security.MessageDigest
+
+/**
+ * Dedicated private file; never point this backend at an admission or stamp cache file.
+ * [LightTrustStore] treats any read/write failure here (including a thrown exception from
+ * corrupt data, surfaced below rather than silently dropped) as trust-unavailable, not as
+ * first boot or an empty bundle.
+ */
+class FileTrustPersistence(private val path: Path) : TrustPersistence {
+    override fun read(): SignedTrustBundle? {
+        val bytes = try { Files.readAllBytes(path) } catch (_: java.nio.file.NoSuchFileException) {
+            return null
+        }
+        require(bytes.size >= 40) { "Truncated trust bundle data" }
+        val payload = bytes.copyOfRange(32, bytes.size)
+        require(MessageDigest.isEqual(bytes.copyOfRange(0, 32), MessageDigest.getInstance("SHA-256").digest(payload))) {
+            "Corrupt trust bundle data"
+        }
+        return DataInputStream(ByteArrayInputStream(payload)).use { input ->
+            require(input.readInt() == 0x4c414433) { "Unsupported trust bundle format" }
+            val bundleBytes = ByteArray(input.readInt().also { require(it in 0..100_000_000) })
+            input.readFully(bundleBytes)
+            val signature = ByteArray(input.readInt().also { require(it in 0..100_000) })
+            input.readFully(signature)
+            require(input.read() == -1) { "Trailing trust bundle data" }
+            SignedTrustBundle(bundleBytes, signature)
+        }
+    }
+
+    override fun write(bundle: SignedTrustBundle) {
+        val bytes = ByteArrayOutputStream().also { buffer ->
+            DataOutputStream(buffer).use { output ->
+                output.writeInt(0x4c414433)
+                output.writeInt(bundle.bytes.size)
+                output.write(bundle.bytes)
+                output.writeInt(bundle.signature.size)
+                output.write(bundle.signature)
+            }
+        }.toByteArray().let { payload -> MessageDigest.getInstance("SHA-256").digest(payload) + payload }
+        val parent = path.toAbsolutePath().parent
+        Files.createDirectories(parent)
+        val temporary = Files.createTempFile(parent, ".trust-bundle-", ".tmp")
+        try {
+            FileChannel.open(temporary, WRITE).use { file ->
+                val buffer = ByteBuffer.wrap(bytes)
+                while (buffer.hasRemaining()) file.write(buffer)
+                file.force(true)
+            }
+            // Do not fall back to a non-atomic replacement on unsupported filesystems.
+            FileChannel.open(parent, READ).use { directory ->
+                Files.move(temporary, path, ATOMIC_MOVE, REPLACE_EXISTING)
+                directory.force(true)
+            }
+        } finally {
+            Files.deleteIfExists(temporary)
+        }
+    }
+}

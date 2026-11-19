@@ -180,6 +180,59 @@ object LightSdkServer {
         File(it.applicationContext.filesDir, "apkInbox")
     }
 
+    var provideTrustPersistence: (Context) -> TrustPersistence = {
+        FileTrustPersistence(File(it.applicationContext.filesDir, "trust/bundle.dat").toPath())
+    }
+
+    var provideTrustBundleCandidateStaging: (Context) -> TrustBundleCandidateStaging = {
+        TrustBundleCandidateStaging(
+            FileTrustPersistence(File(it.applicationContext.filesDir, "trust/bundle-candidate.dat").toPath())
+        )
+    }
+
+    /**
+     * No pins configured: every bundle fails closed (`TrustFailure.InvalidKey`) rather than
+     * crashing, until the host injects the real pinned bundle-signing key(s). Unlike the
+     * stamp cert pin below, this key has not been generated yet — it is still an open
+     * decision, not merely an unwired one.
+     */
+    var provideTrustBundleVerifier: (Context) -> LightTrustBundleVerifier = {
+        LightTrustBundleVerifier(emptyList())
+    }
+
+    // SHA-256 of the production tool stamp-signing certificate (the same key
+    // `apksigner --stamp-signer` already uses to stamp third-party tools).
+    private const val PRODUCTION_STAMP_CERT_SHA256 =
+        "854fa7c053d7038cca62873d8e103a00f93f0961fa25e3004b9d04a1a1330089"
+
+    var provideImagePins: (Context) -> Set<String> = { setOf(PRODUCTION_STAMP_CERT_SHA256) }
+
+    var provideImageBundle: (Context) -> SignedTrustBundle? = { null }
+
+    /**
+     * Call this exactly once per process and cache the result (e.g. behind `by lazy`).
+     * [LightTrustStore] tracks the last accepted version in memory; two instances opened
+     * against the same persistence backend could each accept a bundle the other doesn't
+     * know about, and a version check against stale in-memory state would then wrongly
+     * allow a replay. This factory shape only exists so a host can override the verifier/
+     * pins/image-bundle inputs; it is not safe to invoke repeatedly as a lookup.
+     */
+    var provideLightTrustStore: (Context) -> TrustResult<LightTrustStore> = {
+        LightTrustStore.open(
+            provideTrustBundleVerifier(it),
+            provideTrustPersistence(it),
+            provideImagePins(it),
+            provideImageBundle(it),
+        )
+    }
+
+    /**
+     * The host's single opened [LightTrustStore], if [provideLightTrustStore] succeeded.
+     * Set once at startup by whoever calls [provideLightTrustStore]; consumers (dev reload,
+     * HTTP routes) that need the store read this rather than opening their own.
+     */
+    var currentTrustStore: LightTrustStore? = null
+
     var getToolManagerKeyCipher: () -> KeyCipher = {
         AndroidKeystoreKeyCipher()
     }
