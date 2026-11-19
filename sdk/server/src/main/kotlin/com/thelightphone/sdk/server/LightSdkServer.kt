@@ -39,6 +39,8 @@ data class InstalledClient(
 
 object LightSdkServer {
     /**
+     * TO BE ASSIGNED ON FOLLOW-UP PR
+     *
      * No concrete host constructs and assigns this yet: it stays `null` until a follow-up track
      * wires a real [ToolTrustRuntime] (verifier, trust state source, admission store) into it.
      * Until then every evaluation here falls through to the `null`-runtime branch below, which
@@ -46,19 +48,30 @@ object LightSdkServer {
      */
     var toolTrustRuntime: ToolTrustRuntime? = null
 
+    /**
+     * evaluates [meta] at [level] through [toolTrustRuntime]
+     * 
+     * ealls back to [unavailableOrAllowAll] until [toolTrustRuntime] is wired up
+     */
     fun evaluateTool(level: ClientFilterLevel, meta: ApkMetadata): ToolEvaluation =
         toolTrustRuntime?.evaluate(meta, level) ?: unavailableOrAllowAll(level)
 
+    /**
+     * Looks up [packageName]'s current [PackageInfo] and evaluates it at [level].
+     * 
+     * failed lookups (i.e: package was just uninstalled) fallback to
+     * [unavailableOrAllowAll], so that [ClientFilterLevel.AllowAllApks] applies.
+     */
     fun evaluateTool(level: ClientFilterLevel, context: Context, packageName: String): ToolEvaluation = try {
         evaluateTool(level, readApkMetadata(context.packageManager.getPackageInfo(
             packageName, PackageManager.GET_SIGNING_CERTIFICATES)))
     } catch (_: Exception) { unavailableOrAllowAll(level, DenyReason.ArtifactUnavailable) }
 
-    /** AllowAllApks means "don't check anything", even when evaluation itself couldn't run. */
     private fun unavailableOrAllowAll(
         level: ClientFilterLevel,
         reason: DenyReason = DenyReason.TrustUnavailable,
     ) = ToolTrustRuntime.unavailable(reason).let {
+        // AllowAllApks bypasses even when evaluation itself couldn't run
         if (level == ClientFilterLevel.AllowAllApks) it.copy(
             decision = LightInstallDecision.Allow, exception = AdmissionException.AllowAll) else it
     }
@@ -73,11 +86,9 @@ object LightSdkServer {
             return isSystemApp && isSystemUid
         }
 
-    /**
-     * returns true iff this server version supports tools built with given sdkVersion
-     */
     var isSdkVersionSupported: (sdkVersion: String) -> Boolean = { true }
 
+    /** Keeps only the installed clients allowed to run under [settings]'s current filter level. */
     fun List<InstalledClient>.filterAllowedInstalledTools(
         settings: LightSdkServerSettings
     ): List<InstalledClient> {
@@ -88,6 +99,9 @@ object LightSdkServer {
         }
     }
 
+    /** 
+     * checks whether a (already installed) package is allowed at [clientFilterLevel]
+     */
     fun isPackageAllowed(
         clientFilterLevel: ClientFilterLevel,
         packageMeta: ApkMetadata
@@ -95,6 +109,11 @@ object LightSdkServer {
         return evaluateTool(clientFilterLevel, packageMeta).decision == LightInstallDecision.Allow
     }
 
+    /** 
+     * checks whether a (already installed) package is allowed at [clientFilterLevel]
+     *
+     * convenience method that looks up ApkMetadata from [callingPackage] name
+     */
     fun isPackageAllowed(
         clientFilterLevel: ClientFilterLevel,
         context: Context,
@@ -103,6 +122,11 @@ object LightSdkServer {
         return evaluateTool(clientFilterLevel, context, callingPackage).decision == LightInstallDecision.Allow
     }
 
+    /**
+     * checks whether the installation of an [apkFile] in disk is permitted at [clientFilterLevel]
+     *
+     * also returns false when the apk file can't be parsed
+     */
     fun isPackageInstallable(
         clientFilterLevel: ClientFilterLevel,
         context: Context,
@@ -433,6 +457,12 @@ object LightSdkServer {
         return lockReceiver
     }
 
+    /**
+     * Snapshot of an APK's identity for trust evaluation. [isInstalled] distinguishes an
+     * already-installed package from an archive being evaluated ahead of install (e.g. before
+     * allowing a sideload); [apkPaths]/[lastUpdateTime]/[firstInstallTime] are only meaningful
+     * for the installed case, since an archive has no installation history yet.
+     */
     data class ApkMetadata(
         val packageName: String,
         val versionName: String?,
@@ -444,6 +474,7 @@ object LightSdkServer {
         val firstInstallTime: Long = 0,
     )
 
+    /** Builds [ApkMetadata] from an installed package's [PackageInfo]. */
     fun readApkMetadata(info: PackageInfo): ApkMetadata {
         val signingInfo = info.signingInfo
         val signatures: Array<Signature> = if (signingInfo != null) {
@@ -467,6 +498,7 @@ object LightSdkServer {
         )
     }
 
+    /** Builds [ApkMetadata] for a not-yet-installed APK file, e.g. ahead of allowing a sideload. */
     fun Context.readApkMetadata(apkFile: File): ApkMetadata? {
         val pm = packageManager
         val flags = PackageManager.GET_SIGNING_CERTIFICATES
