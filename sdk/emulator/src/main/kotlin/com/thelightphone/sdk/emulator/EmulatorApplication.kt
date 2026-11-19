@@ -28,8 +28,6 @@ import com.thelightphone.sdk.server.backup.DefaultObservableBackupPreferences
 import com.thelightphone.sdk.server.backup.InternalToolBackupSpec
 import com.thelightphone.sdk.server.backup.webDavBackupLeafView
 import com.thelightphone.sdk.server.toolmanager.developerModeDataView
-import com.thelightphone.sdk.server.toolmanager.getApkInboxSignaturesDirectory
-import com.thelightphone.sdk.server.toolmanager.readSigningKeyHash
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.ui.LightModalManager
@@ -41,10 +39,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-
-// SHA-256 fingerprint of sdk/keys/lightsdk-dev.jks (alias: lightsdk-dev).
-private const val LIGHTSDK_DEV_CERT_SHA256 =
-    "B9C33E29B0CCAD2BFF11ACAB55F65A3C517EF4BC92CD9C77785366FA353D5F28"
 
 private const val BACKUP_ROOT_PATH = "backup"
 
@@ -109,9 +103,6 @@ class EmulatorApplication : Application(), Configuration.Provider {
         }
     }
 
-    @Volatile
-    private var validSignatures: List<String> = emptyList()
-
     override fun onCreate() {
         super.onCreate()
         val mollySocketUriString = BuildConfig.MOLLYSOCKET_URI
@@ -130,9 +121,6 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 Log.d("LightEmulator", "getting push endpoint for token: $token, vapid: $vapid")
                 "$pushDomain/push/$token"
             }
-            isLightSigned =
-                { _, signature -> validSignatures.any { it.equals(signature, ignoreCase = true) } }
-            isLightApproved = { _, _ -> false }
             provideSdkSettings = { settings }
             permissionActivity = LightSdkPermissionActivity::class.java
             onDeviceKeyEvent = { _, request -> handleDeviceKeyEvent(request) }
@@ -149,11 +137,9 @@ class EmulatorApplication : Application(), Configuration.Provider {
             rootToolManagerDataProvider = ::buildToolManagerRoot
             canBeUninstalledByToolManager = { true }
             onApkUninstalled = {
-                updateValidSignatures()
                 _installedToolsRefreshCount.value++
             }
             onApkInstalled = {
-                updateValidSignatures()
                 backupSettingsViewModel.refreshAllowList()
                 _installedToolsRefreshCount.value++
             }
@@ -177,7 +163,6 @@ class EmulatorApplication : Application(), Configuration.Provider {
 
             with(EmulatorLocationHelper) { initLocationHelper(this@EmulatorApplication) }
         }
-        updateValidSignatures()
         EmulatorHttpServer(this).start()
 
         val backupScheduleSyncer = BackupScheduleSyncer(this, backupObservablePreferences)
@@ -193,17 +178,6 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 )
             )
             .build()
-
-    // For the emulator, any apk built with LIGHTSDK_DEV_CERT_SHA256 is considered signed by Light
-    // also include user uploaded signatures
-    private fun updateValidSignatures() {
-        val signatures = mutableListOf(LIGHTSDK_DEV_CERT_SHA256)
-        val userAdded = LightSdkServer.getApkInboxSignaturesDirectory(this)
-            .listFiles { it.isFile }
-            ?.mapNotNull { it.readSigningKeyHash() }
-            .orEmpty()
-        validSignatures = signatures + userAdded
-    }
 
     private val toolManagerLogger = object : Logger {
         override fun log(tag: String, message: String) {
