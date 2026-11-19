@@ -13,23 +13,16 @@ class ApkSigStampVerifier : StampVerifier {
         if (apkPaths.size != 1) return StampResult.Unavailable("split APK verification is platform-only")
         val file = File(apkPaths.single())
         // A missing/unreadable artifact is an infrastructure failure, not a content
-        // judgment: apksig itself doesn't throw for this (it reports sourceStampInfo
-        // == null, indistinguishable from "read it, no stamp"), so the distinction
-        // has to be made before calling into it.
+        // apksig doesn't throw for this, but we need to distinguish between unreadable and missing stamp
         if (!file.isFile) return StampResult.Unavailable("APK is not a readable file")
         return try {
-            // Presence is checked narrowly (verifySourceStamp(), stamp-against-signing-block
-            // only) so a stamp that structurally exists is still recognized even when the
-            // APK's main content digest is broken. Whether it can be trusted is then decided
-            // by the full-chain verify(): verifySourceStamp() alone verified the stamp against
-            // the APK's signature blocks but never those signatures against the APK's bytes,
-            // so a stamp-intact content edit used to verify. verify() runs the same v1-v4
-            // content-digest checks the platform does, over both the APK and the stamp.
             val verifier = ApkVerifier.Builder(file).build()
             val info = verifier.verifySourceStamp().sourceStampInfo
             when {
                 info == null -> StampResult.NotPresent
                 else -> {
+                    // verifySourceStamp() checks the stamp against the signing block,
+                    // not the full apk v1-v4 verification, so we still need to run verify()
                     val result = verifier.verify()
                     if (result.isVerified && result.isSourceStampVerified) {
                         StampResult.Verified(
@@ -42,8 +35,7 @@ class ApkSigStampVerifier : StampVerifier {
                 }
             }
         } catch (error: ApkFormatException) {
-            // Not a valid zip/APK at all: a stable content judgment (re-reading the
-            // same bytes always gives the same answer), not an infrastructure failure.
+            // artifict not a valid zip/APK (which is not an infrastructure failure)
             StampResult.NotPresent
         } catch (error: Exception) {
             StampResult.Unavailable(error.message ?: error.javaClass.simpleName)
