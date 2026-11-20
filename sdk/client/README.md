@@ -540,7 +540,7 @@ LightTextField(
     value = name,
     placeholder = "Your name",
     onClick = {
-        editText(title = "Name", text = name, initialCaps = name.isBlank()) { result ->
+        editText(title = "Name", text = name) { result ->
             if (result is LightTextEditResult.Submitted) viewModel.setName(result.text)
         }
     },
@@ -553,7 +553,7 @@ It opens the keyboard app full screen when there is one, and otherwise shows `Li
 - `LightTextEditResult.BottomBarItem(text, item)`: the user hit one of the `leftBottomBarItem` / `rightBottomBarItem` you passed (their `onClick` isn't called).
 - `LightTextEditResult.Cancelled`: the user went back.
 
-The options mirror `LightTextInputEditor`'s: `singleLine`, `initialCaps`, `submitLabel` or `submitIcon`, the two bottom bar items, and `showBackButton`. `onResult` runs on the main thread even if your screen left composition while the editor was open. Coming back from the editor shows your screen again, so `willShow` / `onScreenShow` fire as usual.
+The options mirror `LightTextInputEditor`'s: `singleLine`, `autoCapitalize` (sentence caps, on by default), `password` (single line, shown as dots, never capitalized), `submitLabel` or `submitIcon`, the two bottom bar items, and `showBackButton`. `onResult` runs on the main thread even if your screen left composition while the editor was open. Coming back from the editor shows your screen again, so `willShow` / `onScreenShow` fire as usual.
 
 `LightTextField` is the read-only field that pairs with it: it shows the current value and opens the editor when tapped.
 

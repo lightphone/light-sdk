@@ -35,7 +35,8 @@ internal class TextEditOptions(
     val title: String,
     val text: String,
     val singleLine: Boolean,
-    val initialCaps: Boolean,
+    val autoCapitalize: Boolean,
+    val password: Boolean,
     val submitLabel: String,
     val submitIcon: LightIconConfiguration?,
     val leftBottomBarItem: LightBottomBarItem?,
@@ -95,7 +96,8 @@ internal class TextEditorScreen(
                     rightBottomBarItem = options.rightBottomBarItem?.finishing(),
                     showBackButton = options.showBackButton,
                     singleLine = options.singleLine,
-                    initialCaps = options.initialCaps,
+                    autoCapitalize = options.autoCapitalize,
+                    password = options.password,
                 )
             }
         }

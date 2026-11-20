@@ -103,11 +103,13 @@ class LightActivity internal constructor() : ComponentActivity() {
             options.submitIcon,
             options.leftBottomBarItem,
             options.rightBottomBarItem,
+            options.autoCapitalize,
+            options.password,
         )
         if (request != null && externalTextEntry.isAvailable != false) {
             when (val result = externalTextEntry.enterText(options.text, request)) {
                 is LightExternalTextEntry.Result.Saved -> {
-                    val text = if (options.singleLine) result.text.lines().joinToString(" ") else result.text
+                    val text = if (options.singleLine || options.password) result.text.lines().joinToString(" ") else result.text
                     return when (result.actionId) {
                         LightTextEntryActionIds.SUBMIT -> LightTextEditResult.Submitted(text)
                         LightTextEntryActionIds.LEFT -> options.leftBottomBarItem

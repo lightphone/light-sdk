@@ -45,7 +45,10 @@ abstract class SimpleLightScreen<ResultType>(sealedActivity: SealedLightActivity
         onScreenDestroy()
     }
 
-    fun <T> navigateTo(screenFactory: (SealedLightActivity) -> SimpleLightScreen<T>, resultCallback: ((T) -> Unit)? = null) {
+    fun <T> navigateTo(
+        screenFactory: (SealedLightActivity) -> SimpleLightScreen<T>,
+        resultCallback: ((T) -> Unit)? = null
+    ) {
         val screen = screenFactory(SealedLightActivity(activity))
         activity.navigateTo(screen, resultCallback)
     }
@@ -63,7 +66,8 @@ abstract class SimpleLightScreen<ResultType>(sealedActivity: SealedLightActivity
         title: String,
         text: String,
         singleLine: Boolean = false,
-        initialCaps: Boolean = false,
+        autoCapitalize: Boolean = true,
+        password: Boolean = false,
         submitLabel: String = "SUBMIT",
         submitIcon: LightIconConfiguration? = null,
         leftBottomBarItem: LightBottomBarItem? = null,
@@ -72,7 +76,7 @@ abstract class SimpleLightScreen<ResultType>(sealedActivity: SealedLightActivity
         onResult: (LightTextEditResult) -> Unit,
     ) {
         val options = TextEditOptions(
-            title, text, singleLine, initialCaps, submitLabel, submitIcon,
+            title, text, singleLine, autoCapitalize, password, submitLabel, submitIcon,
             leftBottomBarItem, rightBottomBarItem, showBackButton,
         )
         // the activity's scope, not the screen's composition: the fallback editor screen takes
@@ -132,7 +136,7 @@ abstract class LightScreen<ResultType, VM : LightViewModel<ResultType>>(
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent) = viewModel.onKeyDown(keyCode, event)
 
-    override fun onKeyUp(keyCode: Int, event: KeyEvent)= viewModel.onKeyUp(keyCode, event)
+    override fun onKeyUp(keyCode: Int, event: KeyEvent) = viewModel.onKeyUp(keyCode, event)
 
     override fun onKeyMultiple(
         keyCode: Int,

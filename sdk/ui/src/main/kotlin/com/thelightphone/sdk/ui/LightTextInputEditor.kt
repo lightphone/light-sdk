@@ -20,12 +20,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.password
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextRange
@@ -54,6 +57,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 private const val INPUT_UNDERLINE_THICKNESS_PX = 3f
 private const val INPUT_UNDERLINE_GAP_GRID_UNITS = 0.5f
+private const val PASSWORD_MASK_CHAR = '\u2022'
 
 /**
  * Full-screen text entry. Opens the external keyboard app when there is one (see
@@ -61,6 +65,9 @@ private const val INPUT_UNDERLINE_GAP_GRID_UNITS = 0.5f
  * act as they would here, and back (or cancelling) goes back unless [showBackButton] is false.
  * Otherwise, or if a bottom bar item is a [LightBarButton.Icon] the keyboard app can't show, uses
  * the embedded LP3 keyboard.
+ *
+ * [autoCapitalize] capitalizes the start of each sentence, including the first character. A
+ * [password] is never capitalized, is single line, shown as dots, and can't be selected or copied.
  */
 @Composable
 fun LightTextInputEditor(
@@ -76,9 +83,11 @@ fun LightTextInputEditor(
     rightBottomBarItem: LightBottomBarItem? = null,
     showBackButton: Boolean = true,
     singleLine: Boolean = false,
-    initialCaps: Boolean = false,
+    autoCapitalize: Boolean = true,
+    password: Boolean = false,
     editorKey: Any = remember { Any() },
 ) {
+    val isSingleLine = singleLine || password
     val currentOnSubmit by rememberUpdatedState(onSubmit)
     val currentOnBack by rememberUpdatedState(onBack)
     val currentShowBackButton by rememberUpdatedState(showBackButton)
@@ -88,7 +97,9 @@ fun LightTextInputEditor(
     val externalTextEntry = LocalExternalTextEntry.current
     val context = LocalContext.current
     val externalRequest = lightTextEntryRequest(
-        context, title, singleLine, showBackButton, submitLabel, submitIcon, leftBottomBarItem, rightBottomBarItem,
+        context, title, isSingleLine, showBackButton, submitLabel,
+        submitIcon, leftBottomBarItem, rightBottomBarItem,
+        autoCapitalize, password,
     )
     val currentExternalRequest by rememberUpdatedState(externalRequest)
     // go straight to the keyboard app unless we already know it isn't there (or can't show this
@@ -110,7 +121,7 @@ fun LightTextInputEditor(
         }
         when (val result = externalTextEntry.enterText(state.text.toString(), request)) {
             is LightExternalTextEntry.Result.Saved -> {
-                val text = if (singleLine) result.text.lines().joinToString(" ") else result.text
+                val text = if (isSingleLine) result.text.lines().joinToString(" ") else result.text
                 state.setTextAndPlaceCursorAtEnd(text)
                 mode = EditorMode.ExternalDone
                 when (result.actionId) {
@@ -145,7 +156,8 @@ fun LightTextInputEditor(
             leftBottomBarItem = leftBottomBarItem,
             rightBottomBarItem = rightBottomBarItem,
             showBackButton = showBackButton,
-            singleLine = singleLine,
+            singleLine = isSingleLine,
+            password = password,
         )
 
         EditorMode.Embedded -> EmbeddedTextInputEditor(
@@ -160,8 +172,9 @@ fun LightTextInputEditor(
             leftBottomBarItem = leftBottomBarItem,
             rightBottomBarItem = rightBottomBarItem,
             showBackButton = showBackButton,
-            singleLine = singleLine,
-            initialCaps = initialCaps,
+            singleLine = isSingleLine,
+            autoCapitalize = autoCapitalize && !password,
+            password = password,
             editorKey = editorKey,
         )
     }
@@ -189,6 +202,8 @@ fun lightTextEntryRequest(
     submitIcon: LightIconConfiguration?,
     leftBottomBarItem: LightBottomBarItem?,
     rightBottomBarItem: LightBottomBarItem?,
+    autoCapitalize: Boolean,
+    password: Boolean,
 ): TextEntryRequest? {
     // the keyboard app reads the icon straight from this app's resources
     fun icon(icon: LightIconConfiguration) = TextEntryAction.Content.CustomIcon(
@@ -232,9 +247,13 @@ fun lightTextEntryRequest(
     }
     return TextEntryRequest(
         title = title,
-        mode = if (singleLine) TextEntryMode.Simple else TextEntryMode.Multi,
+        mode = if (singleLine || password) TextEntryMode.Simple else TextEntryMode.Multi,
         actions = actions,
         returnActionId = LightTextEntryActionIds.SUBMIT,
+        options = buildMap {
+            if (password) putAll(TextEntryRequest.PASSWORD_OPTIONS)
+            put(TextEntryProtocol.OPTION_AUTO_CAPITALIZE, (autoCapitalize && !password).toString())
+        },
     )
 }
 
@@ -252,7 +271,8 @@ private fun EmbeddedTextInputEditor(
     rightBottomBarItem: LightBottomBarItem?,
     showBackButton: Boolean,
     singleLine: Boolean,
-    initialCaps: Boolean,
+    autoCapitalize: Boolean,
+    password: Boolean,
     editorKey: Any,
 ) {
     val currentOnSubmit by rememberUpdatedState(onSubmit)
@@ -261,19 +281,28 @@ private fun EmbeddedTextInputEditor(
     val currentOnHaptic by rememberUpdatedState {
         if (hapticsEnabled) ContextLightVibrator(context).click()
     }
-    val keyboardCallback = remember(state, singleLine) {
+    // the keyboard view model takes the callback, so the callback reaches it through this
+    val capsTarget = remember { mutableStateOf<Lp3KeyboardViewModel<*>?>(null) }
+    val keyboardCallback = remember(state, singleLine, autoCapitalize) {
         TextFieldKeyboardCallback(
             state = state,
             singleLine = singleLine,
             onReturn = { currentOnSubmit(state.text) },
             onHaptic = { currentOnHaptic() },
+            onCapsModeChange = if (autoCapitalize) { caps -> capsTarget.value?.setCapsMode(caps) } else null,
         )
     }
 
     val keyboardViewModel: Lp3KeyboardViewModel<*> = viewModel<EnQwertyLp3KeyboardViewModel<*>>(
         key = "LightTextInputEditor-$editorKey",
-        factory = factory(keyboardCallback, keyboardOptionsFlow, initialCaps),
+        factory = factory(keyboardCallback, keyboardOptionsFlow),
     )
+    capsTarget.value = keyboardViewModel
+    // the callback updates caps as the user types; this covers the initial text and the user
+    // moving the cursor by touching the text, which doesn't go through the callback
+    LaunchedEffect(keyboardCallback) {
+        snapshotFlow { state.selection to state.text.toString() }.collect { keyboardCallback.updateCapsMode() }
+    }
 
     LightTextInputEditor(
         title,
@@ -288,6 +317,7 @@ private fun EmbeddedTextInputEditor(
         rightBottomBarItem,
         showBackButton,
         singleLine,
+        password,
     )
 }
 
@@ -297,6 +327,8 @@ private fun EmbeddedTextInputEditor(
  * - Top bar with back button + title
  * - Remaining space shows underlined heading-style input (top-aligned)
  * - Embedded LP3 keyboard, and [LightBottomBar] below it
+ *
+ * A [password] is single line, shown as dots, and can't be selected or copied.
  */
 @Composable
 fun LightTextInputEditor(
@@ -312,6 +344,7 @@ fun LightTextInputEditor(
     rightBottomBarItem: LightBottomBarItem? = null,
     showBackButton: Boolean = true,
     singleLine: Boolean = false,
+    password: Boolean = false,
 ) {
     TextInputEditorLayout(
         title = title,
@@ -325,7 +358,8 @@ fun LightTextInputEditor(
         leftBottomBarItem = leftBottomBarItem,
         rightBottomBarItem = rightBottomBarItem,
         showBackButton = showBackButton,
-        singleLine = singleLine,
+        singleLine = singleLine || password,
+        password = password,
     )
 }
 
@@ -352,6 +386,7 @@ private fun TextInputEditorLayout(
     rightBottomBarItem: LightBottomBarItem?,
     showBackButton: Boolean,
     singleLine: Boolean,
+    password: Boolean,
 ) {
     val colors = LightThemeTokens.colors
     val inputStyle = lightInputTextStyle()
@@ -405,14 +440,18 @@ private fun TextInputEditorLayout(
                 contentAlignment = Alignment.TopStart,
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
+                    // plain text, not a selectable field, so there's nothing to copy; a password
+                    // is masked one dot per char, so cursor offsets still line up with the text
                     BasicText(
-                        text = state.text.toString(),
+                        text = if (password) PASSWORD_MASK_CHAR.toString().repeat(state.text.length) else state.text.toString(),
                         style = inputStyle,
                         onTextLayout = { textLayout = it },
                         maxLines = if (singleLine) 1 else Int.MAX_VALUE,
                         softWrap = !singleLine,
                         overflow = if (singleLine) TextOverflow.StartEllipsis else TextOverflow.Clip,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (password) Modifier.semantics { password() } else Modifier),
                     )
                     Spacer(
                         modifier = Modifier.height(
@@ -474,7 +513,6 @@ private fun TextInputEditorLayout(
 private fun factory(
     callback: Lp3RepeatableKeyboardCallback,
     keyboardOptionsFlow: StateFlow<KeyboardOptions>,
-    initialCaps: Boolean,
 ): ViewModelProvider.Factory =
     object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
@@ -486,9 +524,7 @@ private fun factory(
                     val showCloseButton = !it.isRootLayout
                     LayoutOptions(showCloseButton)
                 },
-            ).apply {
-                if (initialCaps) setCapsMode(true)
-            } as T
+            ) as T
         }
 
     }
@@ -512,6 +548,7 @@ private fun PreviewLightTextInputEditorDark() {
         LightTextInputEditor(
             title = "Name",
             state = state,
+            password = true,
             keyboardOptionsFlow = MutableStateFlow(defaultKeyboardOptions()),
             onSubmit = {},
             onBack = {},

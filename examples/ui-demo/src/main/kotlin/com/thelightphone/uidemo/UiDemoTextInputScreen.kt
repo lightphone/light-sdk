@@ -72,7 +72,6 @@ class UiDemoTextInputScreen(sealedActivity: SealedLightActivity) :
                         editText(
                             title = "Name",
                             text = nameValue,
-                            initialCaps = nameValue.isBlank(),
                         ) { result ->
                             if (result is LightTextEditResult.Submitted) viewModel.setName(result.text)
                         }
