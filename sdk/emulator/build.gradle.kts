@@ -99,4 +99,5 @@ dependencies {
     implementation(libs.ktor.serialization.json)
     implementation(libs.androidx.splashscreen)
     implementation(libs.androidx.work.runtime)
+    testImplementation(libs.kotlin.test)
 }
