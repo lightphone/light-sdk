@@ -14,6 +14,16 @@
                 <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
             </intent-filter>
         </service>
+        <!-- Shares text with the keyboard app, see com.thelightphone.sdk.textentry.LightTextEntry
+             and com.thelightphone.lp3Keyboard.textentry.TextEntryClient -->
+        <provider
+            android:name="com.thelightphone.lp3Keyboard.textentry.TextEntryClientProvider"
+            android:authorities="${applicationId}.textentry"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+        <receiver
+            android:name="com.thelightphone.lp3Keyboard.textentry.TextEntryClientReplyReceiver"
+            android:exported="false" />
         <!-- LightAudioService is not declared here. The Gradle plugin emits it
              into the manifests of tools that declare the detached-audio
              capability, so no other tool carries a mediaPlayback claim. -->
