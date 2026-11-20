@@ -22,6 +22,21 @@ enum class LightTrustFilterLevel {
 
 /** Closed so callers assert on *why* an APK was refused and render a stable UI key. */
 enum class DenyReason {
+    /** The stamp verifies, but its certificate is not a trusted Light stamp cert (untrusted or revoked). */
+    UntrustedStampCert,
+
+    /** The trust statement is present but malformed and could not be parsed. */
+    MalformedStatement,
+
+    /** Trust inputs (bundle or stamp verifier) are unavailable, so the APK could not be evaluated. */
+    TrustUnavailable,
+
+    /** The APK artifact could not be read or hashed. */
+    ArtifactUnavailable,
+
+    /** The admission record could not be read or confirmed. */
+    AdmissionUnavailable,
+
     /** No Light stamp, or no trust statement: not something the SDK produced. */
     NotLightBuilt,
 
@@ -170,27 +185,39 @@ object LightInstallPolicy {
         val toolId = statement?.tool?.id
         val versionCode = statement?.tool?.versionCode
 
-        val matchedOnIdentity =
-                blocks.firstOrNull {
-                    when (val match = it.match) {
-                        // block all apks signed by a given key
-                        is BlockMatch.SignerSha256 -> match.value == signerSha256
-                        // block all versions of a tool
-                        is BlockMatch.ToolId -> match.value == toolId
-                        // block a specific version of a tool
-                        is BlockMatch.ToolVersion ->
-                                match.toolId == toolId && match.versionCode == versionCode
-                        // match apk hash in a separate loop to avoid unnecessary hash computation
-                        is BlockMatch.ApkSha256 -> false
-                    }
-                }
-        if (matchedOnIdentity != null) {
-            return matchedOnIdentity
+        // purge outranks block; equal action ties break on reason, lexicographically
+        val severity = compareBy<TrustBlock> { if (it.action == BlockAction.Purge) 0 else 1 }
+            .thenBy { it.reason }
+
+        // Strongest match among the identity (non-hash) forms — never needs the hash.
+        val strongestIdentityMatchingBlock = blocks.asSequence().filter {
+            when (val match = it.match) {
+                is BlockMatch.SignerSha256 -> match.value == signerSha256
+                is BlockMatch.ToolId -> match.value == toolId
+                is BlockMatch.ToolVersion -> match.toolId == toolId && match.versionCode == versionCode
+                is BlockMatch.ApkSha256 -> false
+            }
+        }.minWithOrNull(severity)
+
+        // A hash entry can only win if even its strongest possible (action, reason)
+        // beats the identity winner. Otherwise the hash is never needed.
+        val hashBlocks = blocks.filter { it.match is BlockMatch.ApkSha256 }
+        val strongestHashCandidate = hashBlocks.minWithOrNull(severity)
+        if (strongestIdentityMatchingBlock != null &&
+            (strongestHashCandidate == null ||
+             severity.compare(strongestHashCandidate, strongestIdentityMatchingBlock) >= 0)) {
+            return strongestIdentityMatchingBlock
         }
 
-        // after all metadata matches are exhausted, try to match by apk hash
-        return blocks.firstOrNull {
-            it.match is BlockMatch.ApkSha256 && it.match.value == apkSha256.value
+        // Only now is the hash worth paying for. A matching hash entry can still win.
+        var winner = strongestIdentityMatchingBlock
+        for (block in hashBlocks) {
+            val hashBlock = block.match as BlockMatch.ApkSha256
+            if (hashBlock.value == apkSha256.value &&
+                (winner == null || severity.compare(block, winner) < 0)) {
+                winner = block
+            }
         }
+        return winner
     }
 }
