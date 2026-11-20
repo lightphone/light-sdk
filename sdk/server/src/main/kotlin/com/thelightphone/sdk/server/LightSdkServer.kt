@@ -13,6 +13,7 @@ import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.os.Process
 import android.os.UserHandle
+import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.thelightphone.sdk.server.backup.BackupCapableTool
 import com.thelightphone.sdk.server.backup.SmsBackupExclusion
@@ -271,6 +272,20 @@ object LightSdkServer {
         }
 
     /**
+     * Whether [LightNotificationListenerService] may bring this tool forward for an alert it
+     * posted. Only asked for allowed tools that declare the alerts capability. The enclosing app
+     * can override this for do-not-disturb, per-tool mutes or rate limits.
+     */
+    var allowAlertForeground: (packageName: String) -> Boolean = { true }
+
+    /**
+     * Called with every app's active notifications when the notification listener connects, and
+     * again whenever a notification is posted, updated or removed. Runs on the main thread.
+     * Settable from enclosing application, e.g. to show which tools have notifications.
+     */
+    var onActiveNotificationsChanged: (active: List<StatusBarNotification>) -> Unit = {}
+
+    /**
      * Returns the package of the app that handles full-screen text entry, or null if there isn't
      * one. Tools ask for it through GetKeyboardPackage.
      *
@@ -428,9 +443,20 @@ object LightSdkServer {
         }
 
     /**
+     * Grants [LightNotificationListenerService] notification listener access and asks the system
+     * to bind it, so tools' alerts can bring them forward and [onActiveNotificationsChanged] is
+     * called. Needs MANAGE_NOTIFICATION_LISTENERS, which the system uid has.
+     */
+    fun Context.enableNotificationListener() {
+        LightNotificationListenerService.ensureEnabled(this)
+    }
+
+    /**
      * A receiver that will bring the rootActivity (MainActivity in both emulator and real LightOS)
      * to the foreground with a new intent whenever the device's screen goes off
-     * (unless user has overridden the settings.forceFocusLevel)
+     * (unless user has overridden the settings.forceFocusLevel).
+     * If a tool has an alert the user hasn't cleared, that tool is brought forward instead, so the
+     * alert is what shows when the screen turns back on (unless forceFocusLevel is Never).
      */
     fun Context.registerLockReceiver(
         rootActivityClass: Class<out Activity>,
@@ -439,6 +465,14 @@ object LightSdkServer {
         val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
         val lockReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
+                val alertingTool = LightNotificationListenerService.latestAlertingTool()
+                if (alertingTool != null &&
+                    settings.forceFocusLevel != ForceFocusLevel.Never &&
+                    isPackageAllowed(settings.clientFilterLevel, context, alertingTool)
+                ) {
+                    LightNotificationListenerService.resurface(context, alertingTool)
+                    return
+                }
                 val allowForceFocus = when (settings.forceFocusLevel) {
                     ForceFocusLevel.Always -> true
                     ForceFocusLevel.AlertsOnly, ForceFocusLevel.Never -> false

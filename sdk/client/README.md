@@ -447,7 +447,7 @@ lightConnectivity.observeNetworkStatus().collect {
 
 ### Notifications
 
-`lightContext.notifications` posts and cancels a notification for the tool.
+`lightContext.notifications` posts and cancels a notification for the tool, and schedules alerts that bring the tool forward at a set time.
 
 Declare `POST_NOTIFICATIONS` in `lighttool.toml` and request it at runtime before posting (`checkPermission` / `rememberPermissionRequestLauncher`):
 
@@ -460,9 +460,48 @@ lightContext.notifications.post("Example", "Posted from light-sdk tool")
 lightContext.notifications.cancel()
 ```
 
-Calling `post` again replaces the tool's previous notification, and`cancel` clears it.
+Calling `post` again replaces the tool's previous notification, and `cancel` clears it.
 
-While the notification is active, LightOS displays an asterisk beside the tool in the toolbox and on the standby screen.
+`schedule` brings the tool forward when `triggerAtMillis` arrives, even if the tool is not open. This needs a LightOS version that supports tool alerts; on older versions the alert's notification is posted but the tool isn't opened. `cancel(id)` drops the alert, and dismisses it if it's already showing. Scheduling the same id again replaces the previous alert.
+
+Enable alerts in `lighttool.toml`:
+
+```toml
+[tool]
+capabilities = ["alerts"]
+```
+
+The capability generates the `USE_EXACT_ALARM`, `POST_NOTIFICATIONS` and `RECEIVE_BOOT_COMPLETED` permissions and the SDK's alert receiver, so you don't need to list them. `schedule` throws if the capability is missing.
+
+```kotlin
+lightContext.notifications.schedule(
+    id = "dose-1",
+    triggerAtMillis = System.currentTimeMillis() + 60_000,
+    title = "Dose 1",
+    text = "scheduled dose",
+)
+lightContext.notifications.cancel("dose-1")
+```
+
+`scheduledAlertIds` is a `StateFlow` of the ids that are still scheduled, e.g. to show whether an alert is pending.
+
+When the alert arrives, the SDK posts a notification with the alert's title and text and calls your entry point's `onAlert`. LightOS sees the notification and opens the tool, which turns the screen on if it was off. The screen then times out as usual, but LightOS brings the tool back each time the screen turns off, so the alert is what the user sees when they next turn it on. This continues until you call `alert.dismiss()`. Opening the tool happens separately from `onAlert`, so `onAlert` may run before the tool's screen is showing:
+
+```kotlin
+@EntryPoint
+object MyToolEntryPoint : LightEntryPoint {
+    override suspend fun onAlert(alert: LightAlert): Boolean {
+        // show the alert in the tool's UI, and call alert.dismiss() when the user closes it
+        return false // keep it until the user dismisses it
+    }
+}
+```
+
+Return `true` to drop the alert once `onAlert` returns, which is what happens if you don't override it. Return `false` to keep it; a reboot then delivers it again until you call `cancel(alert.id)`. Scheduling the same id again from `onAlert` (e.g. a repeating alert) is kept either way.
+
+Request `POST_NOTIFICATIONS` at runtime before you schedule alerts; without it the alert can't bring the tool forward. `USE_EXACT_ALARM` is granted at install. Use `canPostNotifications` and `canScheduleExactAlerts` to check what has been granted.
+
+When the user is done with the alert, call `alert.dismiss()` to clear its notification, so LightOS stops bringing the tool back. If you never call it, the tool keeps coming back every time the screen turns off. If you no longer have the `LightAlert` (e.g. the tool's process was restarted), `cancel(alert.id)` dismisses it too, and also stops it from being delivered again.
 
 ### Images and video
 

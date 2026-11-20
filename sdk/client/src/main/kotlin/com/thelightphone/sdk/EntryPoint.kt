@@ -15,6 +15,15 @@ interface LightEntryPoint {
 
     suspend fun onPushNotification(data: ByteArray): Unit = Unit
 
+    /**
+     * Called when an alert scheduled with [LightNotifications.schedule] arrives, after the SDK
+     * has brought the tool forward. Call [LightAlert.dismiss] once the user has dealt with it;
+     * until then LightOS brings the tool back each time the screen turns off. Return true to drop
+     * the alert, or false to keep it so a reboot delivers it again until
+     * [LightNotifications.cancel] drops it.
+     */
+    suspend fun onAlert(alert: LightAlert): Boolean = true
+
     fun getToolManagerManifest(): ClientToolManifest? = null
 
     suspend fun onToolManagerDataUpdate(): Unit = Unit
