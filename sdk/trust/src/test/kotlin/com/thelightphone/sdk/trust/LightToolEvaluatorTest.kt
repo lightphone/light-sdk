@@ -89,7 +89,7 @@ class LightToolEvaluatorTest {
             val result = evaluate(state = blocked, level = level, admission = record, developer = true)
             assertEquals(LightInstallDecision.Allow, result.decision)
             assertTrue(result.currentlyApproved)
-            assertEquals(kill, result.block)
+            assertEquals(kill, assertIs<ToolEvaluation.Bypassed>(result).block)
             assertFalse(result.mayUseApprovalProtectedApi)
         }
     }
@@ -107,7 +107,7 @@ class LightToolEvaluatorTest {
     @Test fun `trust unavailable denies without using stale purge policy unless bypassed`() {
         val result = evaluate(state = null, admission = record)
         assertEquals(LightInstallDecision.Deny(DenyReason.TrustUnavailable), result.decision)
-        assertNull(result.block)
+        assertIs<ToolEvaluation.Denied>(result)
         assertFalse(result.currentlyApproved)
         assertEquals(LightInstallDecision.Allow, evaluate(state = null, developer = true).decision)
         assertEquals(LightInstallDecision.Allow, evaluate(state = null,

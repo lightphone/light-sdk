@@ -85,11 +85,8 @@ class ToolTrustRuntime(
             if (level == ClientFilterLevel.AllowAllApks || developerBypass) {
                 val bypassException = if (level == ClientFilterLevel.AllowAllApks)
                     AdmissionException.AllowAll else AdmissionException.DeveloperHash
-                return unavailable(DenyReason.ArtifactUnavailable).copy(
-                    decision = LightInstallDecision.Allow,
-                    exception = bypassException,
-                    bundleVersion = state?.version,
-                )
+                return ToolEvaluation.Bypassed(bypassException, block = null,
+                    ToolProvenance.Unverified, currentlyApproved = false, state?.version)
             }
             throw error
         }
@@ -105,8 +102,7 @@ class ToolTrustRuntime(
 
         // don't write admission if the package was accepted through a bypass
         val skipsAdmissionWrite = !meta.isInstalled ||
-            initial.decision != LightInstallDecision.Allow ||
-            initial.exception != null
+            initial !is ToolEvaluation.Allowed
         if (skipsAdmissionWrite) {
             initial
         } else {
@@ -120,7 +116,7 @@ class ToolTrustRuntime(
                 val record = if (fresh.decision == LightInstallDecision.Allow) AdmissionRecord(
                     meta.packageName, artifact.apkSha256, signer,
                     (artifact.statement as? StatementReadResult.Present)?.statement?.tool?.id,
-                    meta.versionCode, state?.version, trustLevel, Instant.now(), fresh.exception,
+                    meta.versionCode, state?.version, trustLevel, Instant.now(), (fresh as? ToolEvaluation.Bypassed)?.exception,
                     artifact.installationFingerprint,
                 ) else null
                 AdmissionEvaluation(fresh.decision, record)
@@ -130,18 +126,18 @@ class ToolTrustRuntime(
                 // to guarantee that the artifacts evaluation stands by itself
                 is AdmissionOutcome.Admitted -> evaluate(outcome.record)
                 // the fresh re-check inside admitInstalled failed policy.
-                is AdmissionOutcome.Refused -> initial.copy(decision = outcome.decision)
+                is AdmissionOutcome.Refused -> ToolEvaluation.of(outcome.decision,
+                    initial.provenance, initial.currentlyApproved, initial.bundleVersion)
                 // don't return allow decisions that weren't persisted
-                else -> initial.copy(decision = LightInstallDecision.Deny(DenyReason.AdmissionUnavailable))
+                else -> ToolEvaluation.Denied(DenyReason.AdmissionUnavailable,
+                    initial.provenance, initial.currentlyApproved, initial.bundleVersion)
             }
         }
     } catch (_: Exception) {
         // Anything unexpected (bad metadata, a crashing verifier, etc.) fails closed, except that
         // AllowAllApks must still mean "don't check anything" even when evaluation itself blew up.
-        val fallback = unavailable(DenyReason.ArtifactUnavailable)
-        if (level == ClientFilterLevel.AllowAllApks)
-            fallback.copy(decision = LightInstallDecision.Allow, exception = AdmissionException.AllowAll)
-        else fallback
+        if (level == ClientFilterLevel.AllowAllApks) allowAllUnevaluated()
+        else unavailable(DenyReason.ArtifactUnavailable)
     }
 
     /**
@@ -174,7 +170,11 @@ class ToolTrustRuntime(
 
     companion object {
         // could not be evaluated. never approved, never blocked
-        fun unavailable(reason: DenyReason = DenyReason.TrustUnavailable) = ToolEvaluation(
-            ToolProvenance.Unverified, false, null, LightInstallDecision.Deny(reason), null, null)
+        fun unavailable(reason: DenyReason = DenyReason.TrustUnavailable): ToolEvaluation =
+            ToolEvaluation.Denied(reason, ToolProvenance.Unverified, currentlyApproved = false, bundleVersion = null)
+
+        // AllowAllApks bypasses even when evaluation itself couldn't run. never approved, never blocked
+        fun allowAllUnevaluated(): ToolEvaluation = ToolEvaluation.Bypassed(AdmissionException.AllowAll,
+            block = null, ToolProvenance.Unverified, currentlyApproved = false, bundleVersion = null)
     }
 }

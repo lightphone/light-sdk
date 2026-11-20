@@ -24,21 +24,80 @@ enum class ToolProvenance { LightStamped, EmulatorDevelopment, Unverified }
  * The full result of evaluating one [ToolArtifact]: not just "can it install" ([decision]), but
  * also whether it is *currently* approved independent of [decision] (so a caller can tell a
  * blocked-but-previously-approved tool apart from one that was never approved at all).
+ *
+ * Each case carries only the fields that can be meaningful for it: a bypass [AdmissionException]
+ * exists only on [Bypassed], and a bundle block is only worth reporting separately on [Bypassed]
+ * (everywhere else a block already shows up as [Killed]).
  */
-data class ToolEvaluation(
-    val provenance: ToolProvenance,
-    /** Whether the bundle approves this exact artifact right now, regardless of [decision] or [block]. */
-    val currentlyApproved: Boolean,
-    /** Set when the strictest filter level would kill this artifact, even if [decision] allows it via bypass. */
-    val block: LightInstallDecision.Kill?,
-    val decision: LightInstallDecision,
-    /** Which bypass (if any) is the reason [decision] is `Allow`; `null` means it passed policy on its own merits. */
-    val exception: AdmissionException?,
-    val bundleVersion: Long?,
-) {
+sealed interface ToolEvaluation {
+    val provenance: ToolProvenance
+    /** Whether the bundle approves this exact artifact right now, regardless of [decision]. */
+    val currentlyApproved: Boolean
+    val bundleVersion: Long?
+    val decision: LightInstallDecision
     /** True only for a real, unbypassed, unblocked approval — the gate for APIs that must not be fooled by a bypass exception. */
     val mayUseApprovalProtectedApi: Boolean
-        get() = currentlyApproved && block == null
+
+    /**
+     * Passed policy on its own merits at the requested level. Never blocked: outside
+     * `AllowAllApks` (which is itself a bypass) a matching block always kills.
+     */
+    data class Allowed(
+        override val provenance: ToolProvenance,
+        override val currentlyApproved: Boolean,
+        override val bundleVersion: Long?,
+    ) : ToolEvaluation {
+        override val decision get() = LightInstallDecision.Allow
+        override val mayUseApprovalProtectedApi get() = currentlyApproved
+    }
+
+    /** Allowed only because of [exception]; policy on its own would not have been consulted or would have refused. */
+    data class Bypassed(
+        val exception: AdmissionException,
+        /** Set when the strictest filter level would kill this artifact, even though [exception] allows it. */
+        val block: LightInstallDecision.Kill?,
+        override val provenance: ToolProvenance,
+        override val currentlyApproved: Boolean,
+        override val bundleVersion: Long?,
+    ) : ToolEvaluation {
+        override val decision get() = LightInstallDecision.Allow
+        override val mayUseApprovalProtectedApi get() = currentlyApproved && block == null
+    }
+
+    data class Denied(
+        val reason: DenyReason,
+        override val provenance: ToolProvenance,
+        override val currentlyApproved: Boolean,
+        override val bundleVersion: Long?,
+    ) : ToolEvaluation {
+        override val decision get() = LightInstallDecision.Deny(reason)
+        override val mayUseApprovalProtectedApi get() = currentlyApproved
+    }
+
+    /** A bundle block matched; [currentlyApproved] still reflects the bundle's allow list alone. */
+    data class Killed(
+        val kill: LightInstallDecision.Kill,
+        override val provenance: ToolProvenance,
+        override val currentlyApproved: Boolean,
+        override val bundleVersion: Long?,
+    ) : ToolEvaluation {
+        override val decision get() = kill
+        override val mayUseApprovalProtectedApi get() = false
+    }
+
+    companion object {
+        /** Maps an unbypassed policy [decision] onto its case. */
+        fun of(
+            decision: LightInstallDecision,
+            provenance: ToolProvenance,
+            currentlyApproved: Boolean,
+            bundleVersion: Long?,
+        ): ToolEvaluation = when (decision) {
+            LightInstallDecision.Allow -> Allowed(provenance, currentlyApproved, bundleVersion)
+            is LightInstallDecision.Deny -> Denied(decision.reason, provenance, currentlyApproved, bundleVersion)
+            is LightInstallDecision.Kill -> Killed(decision, provenance, currentlyApproved, bundleVersion)
+        }
+    }
 }
 
 object LightToolEvaluator {
@@ -111,8 +170,6 @@ object LightToolEvaluator {
             else -> null
         }
         val decision = when {
-            // Any bypass exception grants Allow outright, independent of `normal`.
-            exception != null -> LightInstallDecision.Allow
             // `normal` can only be Allow here because LightInstallPolicy saw a statement whose
             // signer matched the APK's reported signer; if that statement names a different
             // *package* than the one being installed, it was never authenticated for this APK.
@@ -132,6 +189,8 @@ object LightToolEvaluator {
             emulatorDevelopmentSigner -> ToolProvenance.EmulatorDevelopment
             else -> ToolProvenance.Unverified
         }
-        return ToolEvaluation(provenance, approved, block, decision, exception, state?.version)
+        // Any bypass exception grants Allow outright, independent of `decision`.
+        return if (exception != null) ToolEvaluation.Bypassed(exception, block, provenance, approved, state?.version)
+            else ToolEvaluation.of(decision, provenance, approved, state?.version)
     }
 }
