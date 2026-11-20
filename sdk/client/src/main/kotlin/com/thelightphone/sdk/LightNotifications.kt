@@ -1,6 +1,7 @@
 package com.thelightphone.sdk
 
 import android.Manifest
+import android.R
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -90,7 +91,7 @@ class LightNotifications(private val context: Context) {
             .cancel(FULL_SCREEN_ALERT_NOTIFICATION_ID)
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    @RequiresPermission(allOf = [Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.USE_FULL_SCREEN_INTENT])
     private fun postFullScreenAlert(context: Context, launch: Intent, title: String, text: String) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
@@ -113,7 +114,7 @@ class LightNotifications(private val context: Context) {
             context.applicationInfo.loadLabel(context.packageManager).toString()
         }
         val notification = Notification.Builder(context, LightAlertChannel.ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_dialog_info)
             .setContentTitle(shownTitle)
             .setContentText(text)
             .setCategory(Notification.CATEGORY_ALARM)
