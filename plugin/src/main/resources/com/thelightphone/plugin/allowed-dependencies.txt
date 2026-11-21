@@ -37,3 +37,7 @@ de.connect2x.trixnity:trixnity-client
 de.connect2x.trixnity:trixnity-client-repository-room
 de.connect2x.trixnity:trixnity-client-media-okio
 de.connect2x.trixnity:trixnity-client-cryptodriver-libolm
+# The driver above is Kotlin only; libolm.so and libjnidispatch.so ship in these
+# two transitives. The builder approves native libraries by allowlisted AAR.
+de.connect2x.trixnity:trixnity-libolm-android
+net.java.dev.jna:jna
