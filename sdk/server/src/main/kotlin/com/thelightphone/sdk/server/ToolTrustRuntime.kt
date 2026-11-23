@@ -85,11 +85,7 @@ class ToolTrustRuntime(
             if (level == ClientFilterLevel.AllowAllApks || developerBypass) {
                 val bypassException = if (level == ClientFilterLevel.AllowAllApks)
                     AdmissionException.AllowAll else AdmissionException.DeveloperHash
-                return unavailable(DenyReason.ArtifactUnavailable).copy(
-                    decision = LightInstallDecision.Allow,
-                    exception = bypassException,
-                    bundleVersion = state?.version,
-                )
+                return exceptionWithoutArtifact(bypassException, state?.version)
             }
             throw error
         }
@@ -97,7 +93,13 @@ class ToolTrustRuntime(
         // convenience method that populate the LightToolEvaluator inputs,
         // except the admission record, which might change between other `evaluate` calls.
         fun evaluate(admission: AdmissionRecord?) = LightToolEvaluator.evaluate(
-            artifact, state, trustLevel, admission, developerBypass, emulatorSigner)
+            artifact = artifact,
+            state = state,
+            level = trustLevel,
+            admission = admission,
+            developerSignerBypass = developerBypass,
+            emulatorDevelopmentSigner = emulatorSigner,
+        )
 
         // use an existing admission if it exists
         val existingAdmission = if (meta.isInstalled) admissionStore?.admissionOf(meta.packageName) else null
@@ -105,8 +107,8 @@ class ToolTrustRuntime(
 
         // don't write admission if the package was accepted through a bypass
         val skipsAdmissionWrite = !meta.isInstalled ||
-            initial.decision != LightInstallDecision.Allow ||
-            initial.exception != null
+            initial.outcome !is ToolEvaluationOutcome.PolicyDecision ||
+            initial.decision != LightInstallDecision.Allow
         if (skipsAdmissionWrite) {
             initial
         } else {
@@ -117,11 +119,13 @@ class ToolTrustRuntime(
                 // check against a null admission (as if there's no past record), because a new
                 // admission record should stand on its own
                 val fresh = evaluate(null)
-                val record = if (fresh.decision == LightInstallDecision.Allow) AdmissionRecord(
+                val record = if (fresh.outcome is ToolEvaluationOutcome.PolicyDecision &&
+                    fresh.decision == LightInstallDecision.Allow
+                ) AdmissionRecord(
                     meta.packageName, artifact.apkSha256, signer,
                     (artifact.statement as? StatementReadResult.Present)?.statement?.tool?.id,
-                    meta.versionCode, state?.version, trustLevel, Instant.now(), fresh.exception,
-                    artifact.installationFingerprint,
+                    meta.versionCode, state?.version, trustLevel, Instant.now(),
+                    installationFingerprint = artifact.installationFingerprint,
                 ) else null
                 AdmissionEvaluation(fresh.decision, record)
             }
@@ -130,18 +134,22 @@ class ToolTrustRuntime(
                 // to guarantee that the artifacts evaluation stands by itself
                 is AdmissionOutcome.Admitted -> evaluate(outcome.record)
                 // the fresh re-check inside admitInstalled failed policy.
-                is AdmissionOutcome.Refused -> initial.copy(decision = outcome.decision)
+                is AdmissionOutcome.Refused -> initial.copy(
+                    outcome = ToolEvaluationOutcome.PolicyDecision(outcome.decision),
+                )
                 // don't return allow decisions that weren't persisted
-                else -> initial.copy(decision = LightInstallDecision.Deny(DenyReason.AdmissionUnavailable))
+                else -> initial.copy(
+                    outcome = ToolEvaluationOutcome.PolicyDecision(
+                        LightInstallDecision.Deny(DenyReason.AdmissionUnavailable),
+                    ),
+                )
             }
         }
     } catch (_: Exception) {
         // Anything unexpected (bad metadata, a crashing verifier, etc.) fails closed, except that
         // AllowAllApks must still mean "don't check anything" even when evaluation itself blew up.
-        val fallback = unavailable(DenyReason.ArtifactUnavailable)
-        if (level == ClientFilterLevel.AllowAllApks)
-            fallback.copy(decision = LightInstallDecision.Allow, exception = AdmissionException.AllowAll)
-        else fallback
+        if (level == ClientFilterLevel.AllowAllApks) exceptionWithoutArtifact(AdmissionException.AllowAll)
+        else unavailable(DenyReason.ArtifactUnavailable)
     }
 
     /**
@@ -173,8 +181,21 @@ class ToolTrustRuntime(
     }
 
     companion object {
-        // could not be evaluated. never approved, never blocked
         fun unavailable(reason: DenyReason = DenyReason.TrustUnavailable) = ToolEvaluation(
-            ToolProvenance.Unverified, false, null, LightInstallDecision.Deny(reason), null, null)
+            provenance = ToolProvenance.Unverified,
+            approvedByBundle = false,
+            bundleVersion = null,
+            outcome = ToolEvaluationOutcome.PolicyDecision(LightInstallDecision.Deny(reason)),
+        )
+
+        internal fun exceptionWithoutArtifact(
+            exception: AdmissionException,
+            bundleVersion: Long? = null,
+        ) = ToolEvaluation(
+            provenance = ToolProvenance.Unverified,
+            approvedByBundle = false,
+            bundleVersion = bundleVersion,
+            outcome = ToolEvaluationOutcome.ExceptionGranted(exception),
+        )
     }
 }

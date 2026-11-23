@@ -21,24 +21,61 @@ data class ToolArtifact(
 enum class ToolProvenance { LightStamped, EmulatorDevelopment, Unverified }
 
 /**
- * The full result of evaluating one [ToolArtifact]: not just "can it install" ([decision]), but
- * also whether it is *currently* approved independent of [decision] (so a caller can tell a
- * blocked-but-previously-approved tool apart from one that was never approved at all).
+ * Result of evaluating one [ToolArtifact].
+ *
+ * @property decision The effective admission verdict, including any bypass.
+ * @property approvedByBundle Whether the bundle's allowlist covers this exact
+ * artifact, even if a block also matches.
  */
 data class ToolEvaluation(
     val provenance: ToolProvenance,
-    /** Whether the bundle approves this exact artifact right now, regardless of [decision] or [block]. */
-    val currentlyApproved: Boolean,
-    /** Set when the strictest filter level would kill this artifact, even if [decision] allows it via bypass. */
-    val block: LightInstallDecision.Kill?,
-    val decision: LightInstallDecision,
-    /** Which bypass (if any) is the reason [decision] is `Allow`; `null` means it passed policy on its own merits. */
-    val exception: AdmissionException?,
+    val approvedByBundle: Boolean,
     val bundleVersion: Long?,
+    val outcome: ToolEvaluationOutcome,
 ) {
-    /** True only for a real, unbypassed, unblocked approval — the gate for APIs that must not be fooled by a bypass exception. */
+    val decision: LightInstallDecision
+        get() = when (val result = outcome) {
+            is ToolEvaluationOutcome.PolicyDecision -> result.decision
+            is ToolEvaluationOutcome.Bypass -> LightInstallDecision.Allow
+        }
+
+    /**
+     * Requires current bundle approval and no matching block.
+     * An admission exception alone grants no access to protected APIs.
+     */
     val mayUseApprovalProtectedApi: Boolean
-        get() = currentlyApproved && block == null
+        get() = approvedByBundle &&
+            decision !is LightInstallDecision.Kill &&
+            outcome !is ToolEvaluationOutcome.BlockOverridden
+}
+
+sealed interface ToolEvaluationOutcome {
+    /** A policy [LightInstallDecision.Allow] is eligible for normal admission recording. */
+    data class PolicyDecision(
+        val decision: LightInstallDecision,
+    ) : ToolEvaluationOutcome
+
+    /** An exception granted admission, so normal admission recording is skipped. */
+    sealed interface Bypass : ToolEvaluationOutcome {
+        val exception: AdmissionException
+    }
+
+    /**
+     * An exception grants admission without overriding a known bundle block.
+     * This includes fallback paths where block evaluation was unavailable.
+     */
+    data class ExceptionGranted(
+        override val exception: AdmissionException,
+    ) : Bypass
+
+    /**
+     * An exception grants admission despite a matching bundle block.
+     * The block still prevents access to approval-protected APIs.
+     */
+    data class BlockOverridden(
+        override val exception: AdmissionException,
+        val block: LightInstallDecision.Kill,
+    ) : Bypass
 }
 
 object LightToolEvaluator {
@@ -111,8 +148,6 @@ object LightToolEvaluator {
             else -> null
         }
         val decision = when {
-            // Any bypass exception grants Allow outright, independent of `normal`.
-            exception != null -> LightInstallDecision.Allow
             // `normal` can only be Allow here because LightInstallPolicy saw a statement whose
             // signer matched the APK's reported signer; if that statement names a different
             // *package* than the one being installed, it was never authenticated for this APK.
@@ -132,6 +167,11 @@ object LightToolEvaluator {
             emulatorDevelopmentSigner -> ToolProvenance.EmulatorDevelopment
             else -> ToolProvenance.Unverified
         }
-        return ToolEvaluation(provenance, approved, block, decision, exception, state?.version)
+        val outcome = when {
+            exception == null -> ToolEvaluationOutcome.PolicyDecision(decision)
+            block == null -> ToolEvaluationOutcome.ExceptionGranted(exception)
+            else -> ToolEvaluationOutcome.BlockOverridden(exception, block)
+        }
+        return ToolEvaluation(provenance, approved, state?.version, outcome)
     }
 }

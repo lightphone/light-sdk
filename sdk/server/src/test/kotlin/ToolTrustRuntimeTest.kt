@@ -48,6 +48,12 @@ class ToolTrustRuntimeTest {
         for (level in ClientFilterLevel.entries) {
             val result = runtime.evaluate(meta, level)
             assertEquals(LightInstallDecision.Allow, result.decision)
+            val exception = if (level == ClientFilterLevel.AllowAllApks) {
+                AdmissionException.AllowAll
+            } else {
+                AdmissionException.DeveloperHash
+            }
+            assertEquals(ToolEvaluationOutcome.ExceptionGranted(exception), result.outcome)
             assertFalse(result.mayUseApprovalProtectedApi)
         }
     }

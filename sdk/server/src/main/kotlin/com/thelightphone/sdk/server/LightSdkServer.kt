@@ -70,11 +70,12 @@ object LightSdkServer {
     private fun unavailableOrAllowAll(
         level: ClientFilterLevel,
         reason: DenyReason = DenyReason.TrustUnavailable,
-    ) = ToolTrustRuntime.unavailable(reason).let {
-        // AllowAllApks bypasses even when evaluation itself couldn't run
-        if (level == ClientFilterLevel.AllowAllApks) it.copy(
-            decision = LightInstallDecision.Allow, exception = AdmissionException.AllowAll) else it
+    ) = if (level == ClientFilterLevel.AllowAllApks) {
+        ToolTrustRuntime.exceptionWithoutArtifact(AdmissionException.AllowAll)
+    } else {
+        ToolTrustRuntime.unavailable(reason)
     }
+
     private const val TAG = "LightSdkServer"
     const val SCREEN_OFF_FLAG = "SCREEN_OFF"
     const val TOOL_MANAGER_PATH_EXTRA = "TOOL_MANAGER_PATH"

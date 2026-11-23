@@ -33,6 +33,12 @@ class LightToolEvaluatorTest {
             assertEquals(level != LightTrustFilterLevel.ExcludeAllApks,
                 evaluate(level = level).decision == LightInstallDecision.Allow)
         }
+        val policy = evaluate()
+        assertEquals(ToolEvaluationOutcome.PolicyDecision(LightInstallDecision.Allow), policy.outcome)
+        val bypass = evaluate(developer = true)
+        assertEquals(ToolEvaluationOutcome.ExceptionGranted(AdmissionException.DeveloperHash), bypass.outcome)
+        assertTrue(bypass.mayUseApprovalProtectedApi)
+
         val unapproved = state.copy(bundle = bundle.copy(allow = emptyList()))
         assertEquals(LightInstallDecision.Deny(DenyReason.NotApproved), evaluate(state = unapproved).decision)
         assertEquals(LightInstallDecision.Allow,
@@ -77,7 +83,7 @@ class LightToolEvaluatorTest {
     @Test fun `manifest package cannot borrow another tool identity under the same signer`() {
         val result = evaluate(artifact = artifact.copy(packageName = "another.tool"))
         assertEquals(LightInstallDecision.Deny(DenyReason.StatementNotForThisApk), result.decision)
-        assertFalse(result.currentlyApproved)
+        assertFalse(result.approvedByBundle)
         assertFalse(result.mayUseApprovalProtectedApi)
     }
 
@@ -85,11 +91,19 @@ class LightToolEvaluatorTest {
         val kill = LightInstallDecision.Kill(BlockAction.Purge, "recalled")
         val blocked = state.copy(bundle = bundle.copy(block = listOf(
             TrustBlock(BlockMatch.SignerSha256(signer), kill.action, kill.reason))))
-        for (level in listOf(LightTrustFilterLevel.AllowAllApks, LightTrustFilterLevel.AllowLightApprovedApks)) {
+        val policy = evaluate(state = blocked, admission = record)
+        assertEquals(ToolEvaluationOutcome.PolicyDecision(kill), policy.outcome)
+        assertTrue(policy.approvedByBundle)
+        assertFalse(policy.mayUseApprovalProtectedApi)
+
+        for ((level, exception) in listOf(
+            LightTrustFilterLevel.AllowAllApks to AdmissionException.AllowAll,
+            LightTrustFilterLevel.AllowLightApprovedApks to AdmissionException.DeveloperHash,
+        )) {
             val result = evaluate(state = blocked, level = level, admission = record, developer = true)
             assertEquals(LightInstallDecision.Allow, result.decision)
-            assertTrue(result.currentlyApproved)
-            assertEquals(kill, result.block)
+            assertTrue(result.approvedByBundle)
+            assertEquals(ToolEvaluationOutcome.BlockOverridden(exception, kill), result.outcome)
             assertFalse(result.mayUseApprovalProtectedApi)
         }
     }
@@ -99,7 +113,7 @@ class LightToolEvaluatorTest {
             artifact.copy(signerSha256 = "d".repeat(64)), artifact.copy(versionCode = 8))) {
             val result = evaluate(artifact = input, developer = true)
             assertEquals(LightInstallDecision.Allow, result.decision)
-            assertFalse(result.currentlyApproved)
+            assertFalse(result.approvedByBundle)
             assertFalse(result.mayUseApprovalProtectedApi)
         }
     }
@@ -107,8 +121,8 @@ class LightToolEvaluatorTest {
     @Test fun `trust unavailable denies without using stale purge policy unless bypassed`() {
         val result = evaluate(state = null, admission = record)
         assertEquals(LightInstallDecision.Deny(DenyReason.TrustUnavailable), result.decision)
-        assertNull(result.block)
-        assertFalse(result.currentlyApproved)
+        assertEquals(ToolEvaluationOutcome.PolicyDecision(result.decision), result.outcome)
+        assertFalse(result.approvedByBundle)
         assertEquals(LightInstallDecision.Allow, evaluate(state = null, developer = true).decision)
         assertEquals(LightInstallDecision.Allow, evaluate(state = null,
             level = LightTrustFilterLevel.AllowAllApks).decision)
@@ -118,7 +132,7 @@ class LightToolEvaluatorTest {
         val unsigned = artifact.copy(stamp = StampResult.NotPresent, statement = StatementReadResult.Absent)
         val result = evaluate(artifact = unsigned, emulator = true, level = LightTrustFilterLevel.AllowLightSignedApks)
         assertEquals(LightInstallDecision.Allow, result.decision)
-        assertFalse(result.currentlyApproved)
+        assertFalse(result.approvedByBundle)
         assertNotEquals(LightInstallDecision.Allow, evaluate(artifact = unsigned, emulator = true).decision)
         val blocked = state.copy(bundle = bundle.copy(block = listOf(
             TrustBlock(BlockMatch.SignerSha256(signer), BlockAction.Block, "blocked"))))
@@ -129,6 +143,6 @@ class LightToolEvaluatorTest {
     @Test fun `malformed statement is distinguished and cannot grant approval`() {
         val result = evaluate(artifact = artifact.copy(statement = StatementReadResult.Malformed))
         assertEquals(LightInstallDecision.Deny(DenyReason.MalformedStatement), result.decision)
-        assertFalse(result.currentlyApproved)
+        assertFalse(result.approvedByBundle)
     }
 }
