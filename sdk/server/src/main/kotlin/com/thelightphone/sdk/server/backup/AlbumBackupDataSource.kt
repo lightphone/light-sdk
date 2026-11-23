@@ -2,13 +2,13 @@ package com.thelightphone.sdk.server.backup
 
 import com.thelightphone.backup.BackupDataSource
 import com.thelightphone.backup.BackupPath
+import com.thelightphone.sdk.digest.sha256Hex
 import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.toolmanager.Logger
 import kotlinx.io.files.Path
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
-import java.security.MessageDigest
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -102,9 +102,8 @@ class AlbumBackupDataSource(
     private fun labelOf(path: Path) = path.toString().substringBefore('/')
 
     private fun dirTag(dir: File): String =
-        MessageDigest.getInstance("SHA-256")
-            .digest(dir.absolutePath.toByteArray(Charsets.UTF_8))
-            .toHexString()
+        dir.absolutePath.toByteArray(Charsets.UTF_8)
+            .sha256Hex()
             .take(TAG_LENGTH)
 
     companion object {

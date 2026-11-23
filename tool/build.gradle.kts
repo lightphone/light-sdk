@@ -151,13 +151,11 @@ abstract class UploadToolTask : DefaultTask() {
         return ByteArray(length / 2) { i -> ((this[2 * i].digitToInt(16) shl 4) or this[2 * i + 1].digitToInt(16)).toByte() }
     }
 
-    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-
     private fun sign(method: String, path: String, timestampMillis: Long): String {
         val canonical = "$method\n$path\n$timestampMillis"
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(token.get().hexToBytes(), "HmacSHA256"))
-        return mac.doFinal(canonical.toByteArray(Charsets.UTF_8)).toHex()
+        return mac.doFinal(canonical.toByteArray(Charsets.UTF_8)).toHexString()
     }
 
     private fun authedRequest(uri: URI, method: String): HttpRequest.Builder {

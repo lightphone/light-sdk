@@ -29,6 +29,7 @@ include(":tool")
 // The tool builder passes -DlightSdk.toolOnly=true to configure only what
 // :tool needs.
 if (providers.systemProperty("lightSdk.toolOnly").orNull != "true") {
+    include(":sdk:digest")
     include(":sdk:trust")
     include(":sdk:trust-apksig")
     include(":sdk:trust-android-validation")

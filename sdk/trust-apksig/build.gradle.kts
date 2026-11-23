@@ -12,6 +12,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":sdk:digest"))
     api(project(":sdk:trust"))
     implementation(libs.apksig)
     testImplementation(libs.kotlin.test)

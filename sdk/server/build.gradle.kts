@@ -52,6 +52,7 @@ afterEvaluate {
 }
 
 dependencies {
+    implementation(project(":sdk:digest"))
     api(project(":sdk:shared"))
     api(libs.light.toolmanager.server)
     api(libs.light.backup)

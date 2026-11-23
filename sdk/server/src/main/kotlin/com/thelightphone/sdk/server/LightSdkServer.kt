@@ -23,12 +23,12 @@ import com.thelightphone.toolmanager.KeyCipher
 import com.thelightphone.toolmanager.RootViewSpec
 import com.thelightphone.toolmanager.datatree.BranchDataTree
 import com.thelightphone.toolmanager.datatree.RootDataTree
+import com.thelightphone.sdk.digest.sha256Hex
 import com.thelightphone.sdk.shared.LightConstants
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.toolmanager.LocalNetworkInfo
 import java.io.File
-import java.security.MessageDigest
 
 
 data class InstalledClient(
@@ -457,11 +457,7 @@ object LightSdkServer {
             }
         } else emptyArray()
 
-        val sha256Hashes = signatures.map { sig ->
-            MessageDigest.getInstance("SHA-256")
-                .digest(sig.toByteArray())
-                .toHexString()
-        }
+        val sha256Hashes = signatures.map { it.toByteArray().sha256Hex() }
 
         return ApkMetadata(
             packageName = info.packageName,

@@ -1,7 +1,8 @@
 package com.thelightphone.sdk.trust
 
+import com.thelightphone.sdk.digest.digestHex
+import com.thelightphone.sdk.digest.newSha256Digest
 import java.io.File
-import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 sealed interface StatementReadResult {
@@ -45,7 +46,7 @@ object LightTrustStatementReader {
 }
 
 fun apkSha256(apk: File): String {
-    val digest = MessageDigest.getInstance("SHA-256")
+    val digest = newSha256Digest()
     apk.inputStream().use { input ->
         val buffer = ByteArray(64 * 1024)
         while (true) {
@@ -54,5 +55,5 @@ fun apkSha256(apk: File): String {
             digest.update(buffer, 0, count)
         }
     }
-    return digest.digest().joinToString("") { "%02x".format(it) }
+    return digest.digestHex()
 }
