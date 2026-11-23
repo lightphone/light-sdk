@@ -1,8 +1,8 @@
 package com.thelightphone.sdk.trust
 
 import java.nio.file.Files
-import java.time.Instant
 import kotlin.test.*
+import kotlin.time.Instant
 
 class AdmissionStoreTest {
     private val fingerprint = InstallationFingerprint("/data/app/example/base.apk", 1, 1)

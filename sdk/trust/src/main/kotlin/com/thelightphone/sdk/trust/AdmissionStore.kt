@@ -1,6 +1,6 @@
 package com.thelightphone.sdk.trust
 
-import java.time.Instant
+import kotlin.time.Instant
 
 enum class AdmissionException { AllowAll, DeveloperHash, EmulatorDevelopmentKey }
 

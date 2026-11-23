@@ -18,7 +18,7 @@ import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.nio.file.StandardOpenOption.READ
 import java.nio.file.StandardOpenOption.WRITE
 import java.security.MessageDigest
-import java.time.Instant
+import kotlin.time.Instant
 
 /**
  * Persists [AdmissionRecord]s to a dedicated private file, one record per package.
@@ -98,8 +98,8 @@ private fun AdmissionRecord.toJson(): JsonObject = buildJsonObject {
     put("versionCode", versionCode)
     admittedUnderBundleVersion?.let { put("admittedUnderBundleVersion", it) }
     put("admittedUnderLevel", admittedUnderLevel.name)
-    put("admittedAtEpochSecond", admittedAt.epochSecond)
-    put("admittedAtNano", admittedAt.nano)
+    put("admittedAtEpochSecond", admittedAt.epochSeconds)
+    put("admittedAtNano", admittedAt.nanosecondsOfSecond)
     exception?.let { put("exception", it.name) }
     installationFingerprint?.let {
         put("fingerprintBaseApkPath", it.baseApkPath)
@@ -127,7 +127,7 @@ private fun JsonObject.toAdmissionRecord(): AdmissionRecord {
         versionCode = requiredLong("versionCode"),
         admittedUnderBundleVersion = optionalLong("admittedUnderBundleVersion"),
         admittedUnderLevel = LightTrustFilterLevel.valueOf(requiredString("admittedUnderLevel")),
-        admittedAt = Instant.ofEpochSecond(requiredLong("admittedAtEpochSecond"), requiredLong("admittedAtNano")),
+        admittedAt = Instant.fromEpochSeconds(requiredLong("admittedAtEpochSecond"), requiredLong("admittedAtNano")),
         exception = optionalString("exception")?.let { AdmissionException.valueOf(it) },
         installationFingerprint = fingerprintPath?.let {
             InstallationFingerprint(

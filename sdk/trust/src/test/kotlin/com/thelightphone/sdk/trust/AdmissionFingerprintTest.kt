@@ -1,13 +1,13 @@
 package com.thelightphone.sdk.trust
 
 import java.nio.file.Files
-import java.time.Instant
 import kotlin.test.*
+import kotlin.time.Instant
 
 class AdmissionFingerprintTest {
     private val fingerprint = InstallationFingerprint("/data/app/original/base.apk", 10, 20)
     private val record = AdmissionRecord("example.tool", "a".repeat(64), "b".repeat(64), "example.tool",
-        1, 7, LightTrustFilterLevel.AllowLightSignedApks, Instant.EPOCH, installationFingerprint = fingerprint)
+        1, 7, LightTrustFilterLevel.AllowLightSignedApks, Instant.fromEpochSeconds(0, 0), installationFingerprint = fingerprint)
     private val allow = AdmissionEvaluation(LightInstallDecision.Allow, record)
 
     @Test fun `same hash and timestamps at a new location require fresh admission after reopen`() {
