@@ -150,6 +150,13 @@ class UiDemoHomeScreen(sealedActivity: SealedLightActivity) :
                                 .lightClickable { navigateTo(::UiDemoAlertsScreen) }
                                 .padding(vertical = 0.75f.gridUnitsAsDp()),
                         )
+                        LightText(
+                            text = "NOTIFICATIONS",
+                            variant = LightTextVariant.Copy,
+                            modifier = Modifier
+                                .lightClickable { navigateTo(::UiDemoNotificationsScreen) }
+                                .padding(vertical = 0.75f.gridUnitsAsDp()),
+                        )
                     }
                 }
 
