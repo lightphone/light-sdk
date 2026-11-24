@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,9 +14,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
-import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -42,7 +41,7 @@ import com.thelightphone.sdk.ui.designVerticalPxToSp
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
-import com.thelightphone.sdk.rememberKeyboardOptions
+import com.thelightphone.sdk.textentry.LightTextEditResult
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
 import com.thelightphone.sdk.ui.LightFullscreenModal
@@ -51,7 +50,6 @@ import com.thelightphone.sdk.ui.LightIcon
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightScrollView
 import com.thelightphone.sdk.ui.LightText
-import com.thelightphone.sdk.ui.LightTextInputEditor
 import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.LightTheme
 import com.thelightphone.sdk.ui.LightThemeController
@@ -75,8 +73,24 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
     override fun Content() {
         val themeColors by LightThemeController.colors.collectAsState()
         val state by viewModel.uiState.collectAsState()
-        val textFieldState = rememberTextFieldState("")
-        val keyboardOptionsFlow = rememberKeyboardOptions()
+        LaunchedEffect(Unit) {
+            viewModel.locationInputRequests.collect { request ->
+                editText(
+                    title = "Search Location",
+                    text = request.query,
+                    singleLine = true,
+                    submitIcon = LightIcons.SEARCH,
+                    showBackButton = request.canCancel,
+                ) { result ->
+                    when {
+                        result is LightTextEditResult.Submitted -> viewModel.submitLocation(result.text)
+                        request.canCancel -> viewModel.cancelLocationInput()
+                        // no location yet, so nothing to go back to
+                        else -> goBack()
+                    }
+                }
+            }
+        }
         LightTheme(colors = themeColors) {
             Box(
                 modifier = Modifier
@@ -84,19 +98,8 @@ class WeatherHomeScreen(sealedActivity: SealedLightActivity) :
                     .background(LightThemeTokens.colors.background),
             ) {
                 when (val mode = state.mode) {
-                    is WeatherScreenMode.LocationInput -> {
-                        LightTextInputEditor(
-                            title = "Search Location",
-                            editorKey = state.locationInputSession,
-                            keyboardOptionsFlow = keyboardOptionsFlow,
-                            state = textFieldState,
-                            onSubmit = viewModel::submitLocation,
-                            onBack = viewModel::cancelLocationInput,
-                            submitIcon = LightIcons.SEARCH,
-                            showBackButton = state.canCancelLocationInput,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
+                    // the editor is open over this, so there's nothing to show
+                    is WeatherScreenMode.LocationInput -> Unit
 
                     is WeatherScreenMode.LocationSearchResults -> {
                         LocationSearchResultsContent(
