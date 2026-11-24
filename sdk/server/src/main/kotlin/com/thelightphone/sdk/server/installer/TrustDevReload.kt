@@ -19,8 +19,6 @@ import java.io.IOException
  * receiver's manifest permission, not by anything here.
  */
 object TrustDevReload {
-    const val ACTION_RELOAD = "com.thelightphone.sdk.server.trust.RELOAD_DEV_BUNDLE"
-
     sealed interface Outcome {
         data class Applied(val result: TrustResult<TrustState>) : Outcome
         data class ReadFailed(val cause: IOException) : Outcome
