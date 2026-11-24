@@ -1,7 +1,7 @@
 package com.thelightphone.sdk.trust
 
-import java.time.Instant
 import kotlin.test.*
+import kotlin.time.Instant
 
 class LightToolEvaluatorTest {
     private val signer = "a".repeat(64)
