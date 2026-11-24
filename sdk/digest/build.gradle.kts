@@ -4,6 +4,7 @@ plugins {
 }
 
 group = property("sdkGroup") as String
+
 version = property("sdkVersion") as String
 
 java {
@@ -13,7 +14,11 @@ java {
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(rootProject.ext["jvmTarget"] as String))
+        jvmTarget.set(
+            org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(
+                rootProject.ext["jvmTarget"] as String
+            )
+        )
     }
 }
 

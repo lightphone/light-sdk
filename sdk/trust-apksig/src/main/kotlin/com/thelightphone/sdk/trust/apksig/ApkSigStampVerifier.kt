@@ -1,16 +1,16 @@
 package com.thelightphone.sdk.trust.apksig
 
-import com.thelightphone.sdk.digest.sha256Hex
-import com.thelightphone.sdk.trust.StampVerifier
-import com.thelightphone.sdk.trust.StampResult
-
 import com.android.apksig.ApkVerifier
 import com.android.apksig.apk.ApkFormatException
+import com.thelightphone.sdk.digest.sha256Hex
+import com.thelightphone.sdk.trust.StampResult
+import com.thelightphone.sdk.trust.StampVerifier
 import java.io.File
 
 class ApkSigStampVerifier : StampVerifier {
     override fun verify(apkPaths: List<String>): StampResult {
-        if (apkPaths.size != 1) return StampResult.Unavailable("split APK verification is platform-only")
+        if (apkPaths.size != 1)
+            return StampResult.Unavailable("split APK verification is platform-only")
         val file = File(apkPaths.single())
         // A missing/unreadable artifact is an infrastructure failure, not a content
         // judgment: apksig itself doesn't throw for this (it reports sourceStampInfo
@@ -34,7 +34,8 @@ class ApkSigStampVerifier : StampVerifier {
                     if (result.isVerified && result.isSourceStampVerified) {
                         StampResult.Verified(
                             certSha256 = info.certificate.encoded.sha256Hex(),
-                            lineageSha256 = info.certificatesInLineage.map { it.encoded.sha256Hex() },
+                            lineageSha256 =
+                                info.certificatesInLineage.map { it.encoded.sha256Hex() },
                         )
                     } else {
                         StampResult.NotVerified

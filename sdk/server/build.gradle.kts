@@ -7,6 +7,7 @@ plugins {
 }
 
 group = property("sdkGroup") as String
+
 version = property("sdkVersion") as String
 
 android {
@@ -18,23 +19,23 @@ android {
         buildConfigField("String", "SDK_VERSION", "\"$version\"")
     }
 
-    buildFeatures {
-        buildConfig = true
-    }
+    buildFeatures { buildConfig = true }
 
     compileOptions {
         sourceCompatibility = JavaVersion.toVersion(rootProject.ext["jvmTarget"] as String)
         targetCompatibility = JavaVersion.toVersion(rootProject.ext["jvmTarget"] as String)
     }
 
-    publishing {
-        singleVariant("release") {}
-    }
+    publishing { singleVariant("release") {} }
 }
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(rootProject.ext["jvmTarget"] as String))
+        jvmTarget.set(
+            org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(
+                rootProject.ext["jvmTarget"] as String
+            )
+        )
     }
 }
 

@@ -19,7 +19,10 @@ android {
         release {
             isMinifyEnabled = true
             signingConfig = signingConfigs.getByName("debug")
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
     compileOptions {
@@ -31,12 +34,14 @@ android {
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
-val copyTrustFixtures by tasks.registering(Sync::class) {
-    from(rootProject.file("signer/tests/vectors/bundle")) {
-        include("*/bundle.json", "*/bundle.sig", "INSECURE-bundle-public.pem")
+val copyTrustFixtures by
+    tasks.registering(Sync::class) {
+        from(rootProject.file("signer/tests/vectors/bundle")) {
+            include("*/bundle.json", "*/bundle.sig", "INSECURE-bundle-public.pem")
+        }
+        into(layout.buildDirectory.dir("generated/trust-fixtures"))
     }
-    into(layout.buildDirectory.dir("generated/trust-fixtures"))
-}
+
 tasks.named("preBuild") { dependsOn(copyTrustFixtures) }
 
 dependencies { implementation(project(":sdk:trust")) }

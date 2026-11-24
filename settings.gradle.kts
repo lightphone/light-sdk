@@ -20,10 +20,15 @@ dependencyResolutionManagement {
 rootProject.name = "light-sdk"
 
 includeBuild("plugin")
+
 include(":lint-rules")
+
 include(":sdk:shared")
+
 include(":sdk:ui")
+
 include(":sdk:client")
+
 include(":tool")
 
 // The tool builder passes -DlightSdk.toolOnly=true to configure only what
