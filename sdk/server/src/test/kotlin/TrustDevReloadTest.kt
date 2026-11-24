@@ -1,4 +1,6 @@
 import com.thelightphone.sdk.server.installer.TrustDevReload
+import com.thelightphone.sdk.trust.FileTrustPersistence
+import com.thelightphone.sdk.trust.TrustFailure
 import com.thelightphone.sdk.trust.LightTrustBundleFormat
 import com.thelightphone.sdk.trust.LightTrustBundleVerifier
 import com.thelightphone.sdk.trust.LightTrustStore
@@ -6,6 +8,7 @@ import com.thelightphone.sdk.trust.SignedTrustBundle
 import com.thelightphone.sdk.trust.TrustBundleCandidateStaging
 import com.thelightphone.sdk.trust.TrustPersistence
 import com.thelightphone.sdk.trust.TrustResult
+import java.io.IOException
 import java.nio.file.Files
 import java.security.KeyPairGenerator
 import java.security.Signature
@@ -86,5 +89,41 @@ class TrustDevReloadTest {
         val applied = assertIs<TrustDevReload.Outcome.Applied>(outcome)
         assertIs<TrustResult.Success<*>>(applied.result)
         assertEquals(1L, store.state().version)
+    }
+
+    @Test fun `reload reports oversized files without applying a candidate`() {
+        val directory = Files.createTempDirectory("dev-reload-test").toFile()
+        val (verifier, bundle) = selfSignedBundle()
+        directory.resolve("bundle.json").writeBytes(bundle.bytes)
+        directory.resolve("bundle.sig").writeBytes(ByteArray(FileTrustPersistence.MAX_SIGNATURE_BYTES + 1))
+        val store = openStore(verifier)
+
+        val outcome = TrustDevReload.reload(directory, TrustBundleCandidateStaging(Memory()), store)
+
+        assertIs<TrustDevReload.Outcome.ReadFailed>(outcome)
+        assertNull(store.state().version)
+    }
+
+    @Test fun `reload returns a failure when staging cannot write`() {
+        val directory = Files.createTempDirectory("dev-reload-test").toFile()
+        val (verifier, bundle) = selfSignedBundle()
+        directory.resolve("bundle.json").writeBytes(bundle.bytes)
+        directory.resolve("bundle.sig").writeBytes(bundle.signature)
+        val store = openStore(verifier)
+        var readAttempted = false
+        val staging = TrustBundleCandidateStaging(object : TrustPersistence {
+            override fun read(): SignedTrustBundle? {
+                readAttempted = true
+                return null
+            }
+            override fun write(bundle: SignedTrustBundle) { throw IOException("staging write failed") }
+        })
+
+        val outcome = TrustDevReload.reload(directory, staging, store)
+
+        val failure = assertIs<TrustDevReload.Outcome.Applied>(outcome)
+        assertEquals(TrustResult.Failure(TrustFailure.PersistenceFailed), failure.result)
+        assertFalse(readAttempted)
+        assertNull(store.state().version)
     }
 }

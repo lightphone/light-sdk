@@ -8,6 +8,7 @@ import com.thelightphone.sdk.server.LightPushDistributor
 import com.thelightphone.sdk.server.LightPushRegistry
 import com.thelightphone.sdk.trust.LightTrustStore
 import com.thelightphone.sdk.trust.TrustBundleCandidateStaging
+import com.thelightphone.sdk.trust.TrustFailure
 import com.thelightphone.sdk.trust.TrustResult
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -251,15 +252,18 @@ class EmulatorHttpServer(
                     call.respondText("Trust store unavailable", status = HttpStatusCode.ServiceUnavailable)
                     return@post
                 }
-                val request = call.receiveText()
+                val request = readTrustBundleUpload(call.receiveChannel())
+                if (request == null) {
+                    call.respondText("Trust bundle upload is too large", status = HttpStatusCode.PayloadTooLarge)
+                    return@post
+                }
                 val candidate = try {
                     parseTrustBundleUpload(request)
                 } catch (e: IllegalArgumentException) {
                     call.respondText(e.message ?: "Invalid candidate", status = HttpStatusCode.BadRequest)
                     return@post
                 }
-                trustBundleCandidateStaging.stage(candidate)
-                when (val result = trustBundleCandidateStaging.submit(store, candidate)) {
+                when (val result = trustBundleCandidateStaging.stageAndSubmit(store, candidate)) {
                     is TrustResult.Success -> call.respondText(
                         buildJsonObject { put("version", result.value.version) }.toString(),
                         ContentType.Application.Json
@@ -267,7 +271,11 @@ class EmulatorHttpServer(
                     is TrustResult.Failure -> call.respondText(
                         buildJsonObject { put("error", result.reason.toString()) }.toString(),
                         ContentType.Application.Json,
-                        HttpStatusCode.BadRequest
+                        when (result.reason) {
+                            TrustFailure.PersistenceFailed,
+                            is TrustFailure.PersistenceDurabilityUnknown -> HttpStatusCode.InternalServerError
+                            else -> HttpStatusCode.BadRequest
+                        },
                     )
                 }
             }

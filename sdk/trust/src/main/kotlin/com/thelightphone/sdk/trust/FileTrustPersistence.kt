@@ -14,14 +14,16 @@ import java.nio.file.StandardOpenOption.READ
 import java.nio.file.StandardOpenOption.WRITE
 import java.security.MessageDigest
 
-private const val MAX_BUNDLE_BYTES = 100_000_000
-private const val MAX_SIGNATURE_BYTES = 100_000
-
 /**
  * Dedicated private file; never point this backend at an admission or stamp cache file. Missing
  * records return null. Read failures, including corrupt records, propagate to the caller.
  */
 class FileTrustPersistence(private val path: Path) : TrustPersistence {
+    companion object {
+        const val MAX_BUNDLE_BYTES = 100_000_000
+        const val MAX_SIGNATURE_BYTES = 100_000
+    }
+
     override fun read(): SignedTrustBundle? {
         val bytes =
             try {

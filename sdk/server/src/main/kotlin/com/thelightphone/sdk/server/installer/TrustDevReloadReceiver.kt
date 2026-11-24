@@ -18,6 +18,8 @@ class TrustDevReloadReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (val outcome = TrustDevReload.reload(context)) {
             is TrustDevReload.Outcome.Applied -> Log.i(TAG, "Dev bundle reload: ${outcome.result}")
+            is TrustDevReload.Outcome.ReadFailed ->
+                Log.e(TAG, "Unable to read dev bundle candidate", outcome.cause)
             TrustDevReload.Outcome.NoCandidate ->
                 Log.i(TAG, "Dev bundle reload: no candidate at ${TrustDevReload.directoryFor(context)}")
             TrustDevReload.Outcome.StoreUnavailable ->

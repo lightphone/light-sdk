@@ -1,8 +1,12 @@
 package com.thelightphone.sdk.emulator.http
 
+import io.ktor.utils.io.ByteReadChannel
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class TrustBundleUploadTest {
     @Test fun decodesExactPair() {
@@ -28,6 +32,13 @@ class TrustBundleUploadTest {
     @Test fun rejectsInvalidJsonAndBase64() {
         for (request in listOf("{", "[]", """{"bytesBase64":"!","signatureBase64":"AA=="}""")) {
             assertFailsWith<IllegalArgumentException> { parseTrustBundleUpload(request) }
+        }
+    }
+
+    @Test fun boundsRequestBody() {
+        runBlocking {
+            assertEquals("abcd", readTrustBundleUpload(ByteReadChannel("abcd"), limit = 4))
+            assertNull(readTrustBundleUpload(ByteReadChannel("abcde"), limit = 4))
         }
     }
 }
