@@ -1,5 +1,7 @@
 package com.thelightphone.sdk.trust
 
+import java.io.IOException
+
 class SignedTrustBundle(bytes: ByteArray, signature: ByteArray) {
     private val payload = bytes.copyOf()
     private val detached = signature.copyOf()
@@ -8,14 +10,17 @@ class SignedTrustBundle(bytes: ByteArray, signature: ByteArray) {
 }
 
 /**
- * Implementations must replace the whole record in one atomic step, or fail
- * without changing what is stored. A partial write would leave a bundle and its
- * version floor disagreeing.
+ * Implementations atomically replace the whole record. A failure before replacement leaves the
+ * old record intact. The file backend signals an already visible replacement whose durability
+ * could not be confirmed with [TrustWriteDurabilityUnknown].
  */
 interface TrustPersistence {
     fun read(): SignedTrustBundle?
     fun write(bundle: SignedTrustBundle)
 }
+
+internal class TrustWriteDurabilityUnknown(cause: Exception) :
+    IOException("Trust bundle was replaced but its durability could not be confirmed", cause)
 
 data class TrustState(val bundle: LightTrustBundle?, val trustedStampCerts: Set<String>) {
     val version: Long? get() = bundle?.version
@@ -49,7 +54,12 @@ class LightTrustStore private constructor(
         if (floor != null && bundle.version <= floor) {
             return TrustResult.Failure(TrustFailure.VersionNotNewer(bundle.version, floor))
         }
-        try { persistence.write(input) } catch (_: Exception) {
+        try {
+            persistence.write(input)
+        } catch (_: TrustWriteDurabilityUnknown) {
+            accepted = stateFor(bundle)
+            return TrustResult.Failure(TrustFailure.PersistenceDurabilityUnknown(bundle.version))
+        } catch (_: Exception) {
             return TrustResult.Failure(TrustFailure.PersistenceFailed)
         }
         accepted = stateFor(bundle)
@@ -90,6 +100,10 @@ class LightTrustStore private constructor(
                 (disk == null || !winner.bytes.contentEquals(disk.bytes) || !winner.signature.contentEquals(disk.signature))) {
                 try {
                     persistence.write(winner)
+                } catch (_: TrustWriteDurabilityUnknown) {
+                    return TrustResult.Failure(
+                        TrustFailure.PersistenceDurabilityUnknown(checkNotNull(initial).version)
+                    )
                 } catch (_: Exception) {
                     return TrustResult.Failure(TrustFailure.PersistenceFailed)
                 }

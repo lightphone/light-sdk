@@ -15,10 +15,8 @@ import java.nio.file.StandardOpenOption.WRITE
 import java.security.MessageDigest
 
 /**
- * Dedicated private file; never point this backend at an admission or stamp cache file.
- * [LightTrustStore] treats any read/write failure here (including a thrown exception from corrupt
- * data, surfaced below rather than silently dropped) as trust-unavailable, not as first boot or an
- * empty bundle.
+ * Dedicated private file; never point this backend at an admission or stamp cache file. Missing
+ * records return null. Read failures, including corrupt records, propagate to the caller.
  */
 class FileTrustPersistence(private val path: Path) : TrustPersistence {
     override fun read(): SignedTrustBundle? {
@@ -66,6 +64,7 @@ class FileTrustPersistence(private val path: Path) : TrustPersistence {
         val parent = path.toAbsolutePath().parent
         Files.createDirectories(parent)
         val temporary = Files.createTempFile(parent, ".trust-bundle-", ".tmp")
+        var replaced = false
         try {
             FileChannel.open(temporary, WRITE).use { file ->
                 val buffer = ByteBuffer.wrap(bytes)
@@ -75,10 +74,14 @@ class FileTrustPersistence(private val path: Path) : TrustPersistence {
             // Do not fall back to a non-atomic replacement on unsupported filesystems.
             FileChannel.open(parent, READ).use { directory ->
                 Files.move(temporary, path, ATOMIC_MOVE, REPLACE_EXISTING)
+                replaced = true
                 directory.force(true)
             }
+        } catch (error: Exception) {
+            if (replaced) throw TrustWriteDurabilityUnknown(error)
+            throw error
         } finally {
-            Files.deleteIfExists(temporary)
+            if (!replaced) Files.deleteIfExists(temporary)
         }
     }
 }
