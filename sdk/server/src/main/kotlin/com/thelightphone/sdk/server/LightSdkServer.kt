@@ -22,6 +22,7 @@ import com.thelightphone.sdk.server.toolmanager.UsbTethering
 import com.thelightphone.sdk.shared.LightConstants
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
+import com.thelightphone.sdk.trust.*
 import com.thelightphone.toolmanager.AndroidKeystoreKeyCipher
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.DataView
@@ -31,7 +32,6 @@ import com.thelightphone.toolmanager.RootViewSpec
 import com.thelightphone.toolmanager.datatree.BranchDataTree
 import com.thelightphone.toolmanager.datatree.RootDataTree
 import java.io.File
-import com.thelightphone.sdk.trust.*
 
 data class InstalledClient(val packageInfo: PackageInfo, val sdkVersion: String)
 
@@ -48,7 +48,7 @@ object LightSdkServer {
 
     /**
      * evaluates [meta] at [level] through [toolTrustRuntime]
-     * 
+     *
      * ealls back to [unavailableOrAllowAll] until [toolTrustRuntime] is wired up
      */
     fun evaluateTool(level: ClientFilterLevel, meta: ApkMetadata): ToolEvaluation =
@@ -56,23 +56,38 @@ object LightSdkServer {
 
     /**
      * Looks up [packageName]'s current [PackageInfo] and evaluates it at [level].
-     * 
-     * failed lookups (i.e: package was just uninstalled) fallback to
-     * [unavailableOrAllowAll], so that [ClientFilterLevel.AllowAllApks] applies.
+     *
+     * failed lookups (i.e: package was just uninstalled) fallback to [unavailableOrAllowAll], so
+     * that [ClientFilterLevel.AllowAllApks] applies.
      */
-    fun evaluateTool(level: ClientFilterLevel, context: Context, packageName: String): ToolEvaluation = try {
-        evaluateTool(level, readApkMetadata(context.packageManager.getPackageInfo(
-            packageName, PackageManager.GET_SIGNING_CERTIFICATES)))
-    } catch (_: Exception) { unavailableOrAllowAll(level, DenyReason.ArtifactUnavailable) }
+    fun evaluateTool(
+        level: ClientFilterLevel,
+        context: Context,
+        packageName: String,
+    ): ToolEvaluation =
+        try {
+            evaluateTool(
+                level,
+                readApkMetadata(
+                    context.packageManager.getPackageInfo(
+                        packageName,
+                        PackageManager.GET_SIGNING_CERTIFICATES,
+                    )
+                ),
+            )
+        } catch (_: Exception) {
+            unavailableOrAllowAll(level, DenyReason.ArtifactUnavailable)
+        }
 
     private fun unavailableOrAllowAll(
         level: ClientFilterLevel,
         reason: DenyReason = DenyReason.TrustUnavailable,
-    ) = if (level == ClientFilterLevel.AllowAllApks) {
-        ToolTrustRuntime.exceptionWithoutArtifact(AdmissionException.AllowAll)
-    } else {
-        ToolTrustRuntime.unavailable(reason)
-    }
+    ) =
+        if (level == ClientFilterLevel.AllowAllApks) {
+            ToolTrustRuntime.exceptionWithoutArtifact(AdmissionException.AllowAll)
+        } else {
+            ToolTrustRuntime.unavailable(reason)
+        }
 
     private const val TAG = "LightSdkServer"
     const val SCREEN_OFF_FLAG = "SCREEN_OFF"
@@ -98,17 +113,12 @@ object LightSdkServer {
         }
     }
 
-    /** 
-     * checks whether a (already installed) package is allowed at [clientFilterLevel]
-     */
-    fun isPackageAllowed(
-        clientFilterLevel: ClientFilterLevel,
-        packageMeta: ApkMetadata
-    ): Boolean {
+    /** checks whether a (already installed) package is allowed at [clientFilterLevel] */
+    fun isPackageAllowed(clientFilterLevel: ClientFilterLevel, packageMeta: ApkMetadata): Boolean {
         return evaluateTool(clientFilterLevel, packageMeta).decision == LightInstallDecision.Allow
     }
 
-    /** 
+    /**
      * checks whether a (already installed) package is allowed at [clientFilterLevel]
      *
      * convenience method that looks up ApkMetadata from [callingPackage] name
@@ -118,7 +128,8 @@ object LightSdkServer {
         context: Context,
         callingPackage: String,
     ): Boolean {
-        return evaluateTool(clientFilterLevel, context, callingPackage).decision == LightInstallDecision.Allow
+        return evaluateTool(clientFilterLevel, context, callingPackage).decision ==
+            LightInstallDecision.Allow
     }
 
     /**
@@ -513,8 +524,8 @@ object LightSdkServer {
     /**
      * Snapshot of an APK's identity for trust evaluation. [isInstalled] distinguishes an
      * already-installed package from an archive being evaluated ahead of install (e.g. before
-     * allowing a sideload); [apkPaths]/[lastUpdateTime]/[firstInstallTime] are only meaningful
-     * for the installed case, since an archive has no installation history yet.
+     * allowing a sideload); [apkPaths]/[lastUpdateTime]/[firstInstallTime] are only meaningful for
+     * the installed case, since an archive has no installation history yet.
      */
     data class ApkMetadata(
         val packageName: String,
@@ -530,9 +541,10 @@ object LightSdkServer {
     /** Builds [ApkMetadata] from an installed package's [PackageInfo]. */
     fun readApkMetadata(info: PackageInfo): ApkMetadata {
         val signingInfo = info.signingInfo
-        val signatures: Array<Signature> = if (signingInfo != null) {
-            signingInfo.apkContentsSigners
-        } else emptyArray()
+        val signatures: Array<Signature> =
+            if (signingInfo != null) {
+                signingInfo.apkContentsSigners
+            } else emptyArray()
 
         val sha256Hashes = signatures.map { it.toByteArray().sha256Hex() }
 
@@ -541,7 +553,10 @@ object LightSdkServer {
             versionName = info.versionName,
             versionCode = info.longVersionCode,
             signingCertSha256 = sha256Hashes,
-            apkPaths = info.applicationInfo?.let { listOf(it.sourceDir) + it.splitSourceDirs.orEmpty() }.orEmpty(),
+            apkPaths =
+                info.applicationInfo
+                    ?.let { listOf(it.sourceDir) + it.splitSourceDirs.orEmpty() }
+                    .orEmpty(),
             lastUpdateTime = info.lastUpdateTime,
             firstInstallTime = info.firstInstallTime,
         )
@@ -560,5 +575,4 @@ object LightSdkServer {
         info.applicationInfo?.publicSourceDir = apkFile.absolutePath
         return readApkMetadata(info).copy(isInstalled = false)
     }
-
 }

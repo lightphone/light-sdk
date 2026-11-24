@@ -13,7 +13,8 @@ class ApkSigStampVerifier : StampVerifier {
             return StampResult.Unavailable("split APK verification is platform-only")
         val file = File(apkPaths.single())
         // A missing/unreadable artifact is an infrastructure failure, not a content
-        // apksig doesn't throw for this, but we need to distinguish between unreadable and missing stamp
+        // apksig doesn't throw for this, but we need to distinguish between unreadable and missing
+        // stamp
         if (!file.isFile) return StampResult.Unavailable("APK is not a readable file")
         return try {
             val verifier = ApkVerifier.Builder(file).build()

@@ -12,12 +12,9 @@ import androidx.work.Configuration
 import com.thelightphone.backup.BackupScheduler
 import com.thelightphone.backup.BackupWorkerFactory
 import com.thelightphone.backup.RemoteBackupProvider
+import com.thelightphone.lp3Keyboard.textentry.TextEntryProtocol
 import com.thelightphone.sdk.emulator.backup.DefaultBackupDependencyProvider
 import com.thelightphone.sdk.emulator.backup.dummyCloudBackupLeafView
-import com.thelightphone.toolmanager.BranchView
-import com.thelightphone.toolmanager.RootViewSpec
-import com.thelightphone.toolmanager.datatree.RootDataTree
-import com.thelightphone.toolmanager.datatree.StaticBranchProvider
 import com.thelightphone.sdk.emulator.http.EmulatorHttpServer
 import com.thelightphone.sdk.server.DefaultLightSdkServerSettings
 import com.thelightphone.sdk.server.LightSdkServer
@@ -30,10 +27,13 @@ import com.thelightphone.sdk.server.backup.webDavBackupLeafView
 import com.thelightphone.sdk.server.toolmanager.developerModeDataView
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
-import com.thelightphone.lp3Keyboard.textentry.TextEntryProtocol
 import com.thelightphone.sdk.ui.LightModalManager
+import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.DiscoveredToolsBranchProvider
 import com.thelightphone.toolmanager.Logger
+import com.thelightphone.toolmanager.RootViewSpec
+import com.thelightphone.toolmanager.datatree.RootDataTree
+import com.thelightphone.toolmanager.datatree.StaticBranchProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,13 +55,12 @@ class EmulatorApplication : Application(), Configuration.Provider {
     val deviceKeyHandler by lazy { EmulatorDeviceKeyHandler(lightAudioManager) }
 
     val backupSharedPrefs: SharedPreferences by lazy {
-        getSharedPreferences(
-            "emulator-backup",
-            MODE_PRIVATE
-        )
+        getSharedPreferences("emulator-backup", MODE_PRIVATE)
     }
 
-    val backupObservablePreferences by lazy { DefaultObservableBackupPreferences(backupSharedPrefs) }
+    val backupObservablePreferences by lazy {
+        DefaultObservableBackupPreferences(backupSharedPrefs)
+    }
 
     val settings by lazy { DefaultLightSdkServerSettings(this) }
 
@@ -70,9 +69,7 @@ class EmulatorApplication : Application(), Configuration.Provider {
         DefaultBackupDependencyProvider(this, toolManagerLogger, cipher, BACKUP_ROOT_PATH)
     }
 
-    private val backupPackageAllowList by lazy {
-        BackupPackageAllowList(backupSharedPrefs)
-    }
+    private val backupPackageAllowList by lazy { BackupPackageAllowList(backupSharedPrefs) }
 
     val backupSettingsViewModel by lazy {
         object :
@@ -88,7 +85,8 @@ class EmulatorApplication : Application(), Configuration.Provider {
 
             override suspend fun removeStoredCredentials(provider: RemoteBackupProvider) {
                 when (provider) {
-                    RemoteBackupProvider.WebDav -> backupDependencyProvider.webDavCredentialStorage.removeWebDavCredentials()
+                    RemoteBackupProvider.WebDav ->
+                        backupDependencyProvider.webDavCredentialStorage.removeWebDavCredentials()
                     else -> backupDependencyProvider.tokenStorage.removeOAuthDetails(provider.name)
                 }
             }
@@ -131,17 +129,16 @@ class EmulatorApplication : Application(), Configuration.Provider {
             isNetworkApprovedForToolManager = { true }
             foregroundToolManagerUi = { activity, path ->
                 if (activity !is ToolManagerActivity) {
-                    val intent = Intent(activity, ToolManagerActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        .putExtra(LightSdkServer.TOOL_MANAGER_PATH_EXTRA, path)
+                    val intent =
+                        Intent(activity, ToolManagerActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            .putExtra(LightSdkServer.TOOL_MANAGER_PATH_EXTRA, path)
                     activity.startActivity(intent)
                 }
             }
             rootToolManagerDataProvider = ::buildToolManagerRoot
             canBeUninstalledByToolManager = { true }
-            onApkUninstalled = {
-                _installedToolsRefreshCount.value++
-            }
+            onApkUninstalled = { _installedToolsRefreshCount.value++ }
             onApkInstalled = {
                 backupSettingsViewModel.refreshAllowList()
                 _installedToolsRefreshCount.value++
@@ -158,7 +155,9 @@ class EmulatorApplication : Application(), Configuration.Provider {
 
             canBackUpFromPackage = { tool -> backupPackageAllowList.userAllowedTool(tool) }
             getAlbumPhotoBackupDirs = {
-                listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES))
+                listOf(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                )
             }
             getAlbumVideoBackupDirs = {
                 listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES))
@@ -173,36 +172,32 @@ class EmulatorApplication : Application(), Configuration.Provider {
     }
 
     override val workManagerConfiguration: Configuration
-        get() = Configuration.Builder()
-            .setWorkerFactory(
-                BackupWorkerFactory(
-                    backupObservablePreferences,
-                    backupDependencyProvider
+        get() =
+            Configuration.Builder()
+                .setWorkerFactory(
+                    BackupWorkerFactory(backupObservablePreferences, backupDependencyProvider)
                 )
-            )
-            .build()
+                .build()
 
     // text entry goes to the stock LP3 keyboard, if it's been installed on the emulator
-    private fun installedLp3Keyboard(): String? = try {
-        packageManager.getPackageInfo(TextEntryProtocol.LP3_KEYBOARD_PACKAGE, 0)
-        TextEntryProtocol.LP3_KEYBOARD_PACKAGE
-    } catch (e: PackageManager.NameNotFoundException) {
-        null
-    }
-
-    private val toolManagerLogger = object : Logger {
-        override fun log(tag: String, message: String) {
-            Log.d(tag, message)
+    private fun installedLp3Keyboard(): String? =
+        try {
+            packageManager.getPackageInfo(TextEntryProtocol.LP3_KEYBOARD_PACKAGE, 0)
+            TextEntryProtocol.LP3_KEYBOARD_PACKAGE
+        } catch (e: PackageManager.NameNotFoundException) {
+            null
         }
 
-        override fun reportError(
-            tag: String,
-            exception: Throwable?,
-            message: String
-        ) {
-            Log.e(tag, message, exception)
+    private val toolManagerLogger =
+        object : Logger {
+            override fun log(tag: String, message: String) {
+                Log.d(tag, message)
+            }
+
+            override fun reportError(tag: String, exception: Throwable?, message: String) {
+                Log.e(tag, message, exception)
+            }
         }
-    }
 
     private fun buildToolManagerRoot(): RootDataTree {
         return RootDataTree {
@@ -211,28 +206,30 @@ class EmulatorApplication : Application(), Configuration.Provider {
             val onBackupLinked: suspend (RemoteBackupProvider) -> Unit = {
                 backupObservablePreferences.setActiveProvider(it)
             }
-            val backupBranch = BranchView(
-                RootViewSpec("Backup", BACKUP_ROOT_PATH),
-                StaticBranchProvider(
-                    listOf(
-                        dummyCloudBackupLeafView(
-                            backupDependencyProvider.tokenStorage,
-                            BuildConfig.BACKUP_WORKER_HOST,
-                            onLinked = onBackupLinked
-                        ),
-                        webDavBackupLeafView(
-                            backupDependencyProvider.webDavCredentialStorage,
-                            onLinked = onBackupLinked
-                        ),
-                    )
+            val backupBranch =
+                BranchView(
+                    RootViewSpec("Backup", BACKUP_ROOT_PATH),
+                    StaticBranchProvider(
+                        listOf(
+                            dummyCloudBackupLeafView(
+                                backupDependencyProvider.tokenStorage,
+                                BuildConfig.BACKUP_WORKER_HOST,
+                                onLinked = onBackupLinked,
+                            ),
+                            webDavBackupLeafView(
+                                backupDependencyProvider.webDavCredentialStorage,
+                                onLinked = onBackupLinked,
+                            ),
+                        )
+                    ),
                 )
-            )
-            val toolBranch = DiscoveredToolsBranchProvider(this, toolManagerLogger) {
-                LightSdkServer.isPackageAllowed(settings.clientFilterLevel, this, it)
-            }
+            val toolBranch =
+                DiscoveredToolsBranchProvider(this, toolManagerLogger) {
+                    LightSdkServer.isPackageAllowed(settings.clientFilterLevel, this, it)
+                }
             BranchView(
                 RootViewSpec("root", ""),
-                StaticBranchProvider(listOf(developerMode, backupBranch) + toolBranch.getChildren())
+                StaticBranchProvider(listOf(developerMode, backupBranch) + toolBranch.getChildren()),
             )
         }
     }
@@ -245,19 +242,23 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 val componentToRelaunch =
                     request.componentToRelaunch?.let(ComponentName::unflattenFromString)
                 startActivity(
-                    Intent().setComponent(componentToRelaunch)
+                    Intent()
+                        .setComponent(componentToRelaunch)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
                 EmulatorNavController.navigateTo(Nav.Toolbox)
             }
 
-            val keyModal = DeviceKeyModal(
-                modal,
-                onMoreClick = {
-                    EmulatorNavController.navigateTo(Nav.Settings(backButtonOverride = ::relaunchSender))
-                },
-                onExpired = { relaunchSender() }
-            )
+            val keyModal =
+                DeviceKeyModal(
+                    modal,
+                    onMoreClick = {
+                        EmulatorNavController.navigateTo(
+                            Nav.Settings(backButtonOverride = ::relaunchSender)
+                        )
+                    },
+                    onExpired = { relaunchSender() },
+                )
             // show the modal, and then pull this app into focus over the client
             LightModalManager.show(keyModal)
             foregroundEmulator()
@@ -265,8 +266,9 @@ class EmulatorApplication : Application(), Configuration.Provider {
     }
 
     private fun foregroundEmulator() {
-        val intent = Intent(this.applicationContext, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intent =
+            Intent(this.applicationContext, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent)
     }
 }
