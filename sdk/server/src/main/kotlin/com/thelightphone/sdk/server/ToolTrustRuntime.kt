@@ -2,7 +2,7 @@ package com.thelightphone.sdk.server
 
 import com.thelightphone.sdk.trust.*
 import java.io.File
-import java.time.Instant
+import kotlin.time.Clock
 
 data class StampCacheKey(
     val packageName: String,
@@ -171,7 +171,7 @@ class ToolTrustRuntime(
                                     meta.versionCode,
                                     state?.version,
                                     trustLevel,
-                                    Instant.now(),
+                                    Clock.System.now(),
                                     installationFingerprint = artifact.installationFingerprint,
                                 )
                             else null
