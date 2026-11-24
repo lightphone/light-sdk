@@ -19,11 +19,21 @@ class StagedApkInstallTest {
             val replacement = inbox.resolve("replacement.apk").apply { writeText("untrusted") }
             var installed: ByteArray? = null
 
-            val allowed = installFromPrivateCopy(apk, privateDir, isAllowed = { checked ->
-                assertEquals("approved", checked.readText())
-                Files.move(replacement.toPath(), apk.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                true
-            }, install = { staged -> installed = staged.readBytes() })
+            val allowed =
+                installFromPrivateCopy(
+                    apk,
+                    privateDir,
+                    isAllowed = { checked ->
+                        assertEquals("approved", checked.readText())
+                        Files.move(
+                            replacement.toPath(),
+                            apk.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING,
+                        )
+                        true
+                    },
+                    install = { staged -> installed = staged.readBytes() },
+                )
 
             assertTrue(allowed)
             assertEquals("untrusted", apk.readText())

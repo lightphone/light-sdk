@@ -16,10 +16,8 @@ import java.io.FileInputStream
  * Gates installation through [LightSdkServer.isPackageInstallable] before passing the APK to
  * [PackageInstaller]. The trust runtime is used when configured by the host; otherwise the gate
  * denies parsed APKs except at [ClientFilterLevel.AllowAllApks].
-
  */
-class LightApkInstallWorker(context: Context, params: WorkerParameters) :
-    Worker(context, params) {
+class LightApkInstallWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
 
     companion object {
         private const val TAG = "LightOSApkInstallWorker"
@@ -27,8 +25,7 @@ class LightApkInstallWorker(context: Context, params: WorkerParameters) :
     }
 
     override fun doWork(): Result {
-        val apkPath = inputData.getString(KEY_APK_PATH)
-            ?: return Result.failure()
+        val apkPath = inputData.getString(KEY_APK_PATH) ?: return Result.failure()
 
         val apkFile = File(apkPath)
         if (!apkFile.exists() || apkFile.length() == 0L) {
@@ -38,19 +35,20 @@ class LightApkInstallWorker(context: Context, params: WorkerParameters) :
         }
 
         return try {
-            val allowed = installFromPrivateCopy(
-                source = apkFile,
-                stagingDirectory = applicationContext.cacheDir,
-                isAllowed = { staged ->
-                    val settings = LightSdkServer.provideSdkSettings(applicationContext)
-                    LightSdkServer.isPackageInstallable(
-                        settings.clientFilterLevel,
-                        applicationContext,
-                        staged,
-                    )
-                },
-                install = { staged -> installApk(staged, apkPath) },
-            )
+            val allowed =
+                installFromPrivateCopy(
+                    source = apkFile,
+                    stagingDirectory = applicationContext.cacheDir,
+                    isAllowed = { staged ->
+                        val settings = LightSdkServer.provideSdkSettings(applicationContext)
+                        LightSdkServer.isPackageInstallable(
+                            settings.clientFilterLevel,
+                            applicationContext,
+                            staged,
+                        )
+                    },
+                    install = { staged -> installApk(staged, apkPath) },
+                )
             if (allowed) {
                 Result.success()
             } else {
@@ -71,9 +69,10 @@ class LightApkInstallWorker(context: Context, params: WorkerParameters) :
 
     private fun installApk(apkFile: File, originalApkPath: String) {
         val packageInstaller = applicationContext.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(
-            PackageInstaller.SessionParams.MODE_FULL_INSTALL
-        )
+        val params =
+            PackageInstaller.SessionParams(
+                PackageInstaller.SessionParams.MODE_FULL_INSTALL,
+            )
 
         val sessionId = packageInstaller.createSession(params)
         val session = packageInstaller.openSession(sessionId)
@@ -86,17 +85,19 @@ class LightApkInstallWorker(context: Context, params: WorkerParameters) :
                 }
             }
 
-            val intent = Intent(
-                applicationContext,
-                LightApkInstallResultReceiver::class.java
-            )
+            val intent =
+                Intent(
+                    applicationContext,
+                    LightApkInstallResultReceiver::class.java,
+                )
             intent.putExtra(KEY_APK_PATH, originalApkPath)
-            val pi = PendingIntent.getBroadcast(
-                applicationContext,
-                sessionId,
-                intent,
-                PendingIntent.FLAG_MUTABLE
-            )
+            val pi =
+                PendingIntent.getBroadcast(
+                    applicationContext,
+                    sessionId,
+                    intent,
+                    PendingIntent.FLAG_MUTABLE,
+                )
 
             s.commit(pi.intentSender)
         }
