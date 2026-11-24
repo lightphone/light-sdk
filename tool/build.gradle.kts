@@ -45,9 +45,7 @@ android {
     }
 
     buildTypes {
-        debug {
-            signingConfig = signingConfigs.getByName("lightsdkDev")
-        }
+        debug { signingConfig = signingConfigs.getByName("lightsdkDev") }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -69,7 +67,11 @@ android {
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(rootProject.ext["jvmTarget"] as String))
+        jvmTarget.set(
+            org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(
+                rootProject.ext["jvmTarget"] as String
+            )
+        )
     }
 }
 
@@ -80,60 +82,57 @@ dependencies {
 }
 
 /**
- * Uploads the debug APK to a device/emulator running the Light SDK server, via the
- * "developer" tool manager branch (see DeveloperModeDataTree.kt in sdk/server), and waits for
- * the device to report that the tool was (re)installed.
+ * Uploads the debug APK to a device/emulator running the Light SDK server, via the "developer" tool
+ * manager branch (see DeveloperModeDataTree.kt in sdk/server), and waits for the device to report
+ * that the tool was (re)installed.
  *
- * Usage:
- *   ./gradlew :tool:uploadTool -Pdevice.ip=192.168.1.42 -Pdevice.token=<hex signing key> \
- *       [-Pdevice.port=54449] [-Pdevice.timeoutSeconds=60]
+ * Usage: ./gradlew :tool:uploadTool -Pdevice.ip=192.168.1.42 -Pdevice.token=<hex signing key> \
+ * [-Pdevice.port=54449] [-Pdevice.timeoutSeconds=60]
  *
- * device.token must be one of the device's HMAC signing keys, hex-encoded - either its
- * primaryKey (shown in the Tool Manager URL, e.g. "...#abc123") or a key minted/persisted under
- * the "Authentication" branch. Every request is signed with it (see authedRequest/sign below);
- * it is not sent as a bearer token.
+ * device.token must be one of the device's HMAC signing keys, hex-encoded - either its primaryKey
+ * (shown in the Tool Manager URL, e.g. "...#abc123") or a key minted/persisted under the
+ * "Authentication" branch. Every request is signed with it (see authedRequest/sign below); it is
+ * not sent as a bearer token.
  */
 abstract class UploadToolTask : DefaultTask() {
 
-    @get:Internal
-    abstract val apkDir: DirectoryProperty
+    @get:Internal abstract val apkDir: DirectoryProperty
 
-    @get:Internal
-    abstract val packageName: Property<String>
+    @get:Internal abstract val packageName: Property<String>
 
-    @get:Internal
-    abstract val ipAddress: Property<String>
+    @get:Internal abstract val ipAddress: Property<String>
 
-    @get:Internal
-    abstract val port: Property<Int>
+    @get:Internal abstract val port: Property<Int>
 
-    @get:Internal
-    abstract val token: Property<String>
+    @get:Internal abstract val token: Property<String>
 
-    @get:Internal
-    abstract val timeoutSeconds: Property<Long>
+    @get:Internal abstract val timeoutSeconds: Property<Long>
 
-    @get:Internal
-    abstract val pollIntervalSeconds: Property<Long>
+    @get:Internal abstract val pollIntervalSeconds: Property<Long>
 
     // The server presents a cert for its own *.my.local-ip.co hostname (see
     // ToolManagerServiceAndroid), which will never match when we connect straight to a LAN
     // IP/port. Trusting everything here is fine: this is a local dev-upload tool talking
     // to a device the caller already picked by IP, not a general-purpose HTTP client.
     private fun insecureHttpClient(): HttpClient {
-        val trustAll = object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-        }
-        val sslContext = SSLContext.getInstance("TLS").apply {
-            init(null, arrayOf(trustAll), SecureRandom())
-        }
+        val trustAll =
+            object : X509TrustManager {
+                override fun checkClientTrusted(
+                    chain: Array<out X509Certificate>?,
+                    authType: String?,
+                ) = Unit
+
+                override fun checkServerTrusted(
+                    chain: Array<out X509Certificate>?,
+                    authType: String?,
+                ) = Unit
+
+                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+            }
+        val sslContext =
+            SSLContext.getInstance("TLS").apply { init(null, arrayOf(trustAll), SecureRandom()) }
         val sslParameters = SSLParameters().apply { endpointIdentificationAlgorithm = "" }
-        return HttpClient.newBuilder()
-            .sslContext(sslContext)
-            .sslParameters(sslParameters)
-            .build()
+        return HttpClient.newBuilder().sslContext(sslContext).sslParameters(sslParameters).build()
     }
 
     private fun localIpHost(ip: String) = "${ip.replace(".", "-")}.my.local-ip.co"
@@ -148,16 +147,16 @@ abstract class UploadToolTask : DefaultTask() {
     // under the "Authentication" branch) - not an arbitrary human-chosen password.
     private fun String.hexToBytes(): ByteArray {
         require(length % 2 == 0) { "device.token must be a hex-encoded key (odd length: $length)" }
-        return ByteArray(length / 2) { i -> ((this[2 * i].digitToInt(16) shl 4) or this[2 * i + 1].digitToInt(16)).toByte() }
+        return ByteArray(length / 2) { i ->
+            ((this[2 * i].digitToInt(16) shl 4) or this[2 * i + 1].digitToInt(16)).toByte()
+        }
     }
-
-    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xFF) }
 
     private fun sign(method: String, path: String, timestampMillis: Long): String {
         val canonical = "$method\n$path\n$timestampMillis"
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(token.get().hexToBytes(), "HmacSHA256"))
-        return mac.doFinal(canonical.toByteArray(Charsets.UTF_8)).toHex()
+        return mac.doFinal(canonical.toByteArray(Charsets.UTF_8)).toHexString()
     }
 
     private fun authedRequest(uri: URI, method: String): HttpRequest.Builder {
@@ -167,21 +166,24 @@ abstract class UploadToolTask : DefaultTask() {
             .header("X-Tm-Signature", sign(method, uri.rawPath, timestampMillis))
     }
 
-    // Server serializes the tools list as {"tools":[{"packageName":"...","lastUpdateMillis":n},...]}
+    // Server serializes the tools list as
+    // {"tools":[{"packageName":"...","lastUpdateMillis":n},...]}
     // in declaration order (ApkInboxDataTree.ToolMeta).
     private fun extractLastUpdateMillis(json: String, packageName: String): Long? {
-        val pattern = Regex(
-            "\\{\"packageName\":\"${Regex.escape(packageName)}\",\"lastUpdateMillis\":(\\d+)\\}"
-        )
+        val pattern =
+            Regex(
+                "\\{\"packageName\":\"${Regex.escape(packageName)}\",\"lastUpdateMillis\":(\\d+)\\}"
+            )
         return pattern.find(json)?.groupValues?.get(1)?.toLong()
     }
 
     @TaskAction
     fun upload() {
-        val missing = listOfNotNull(
-            "device.ip".takeUnless { ipAddress.isPresent },
-            "device.token".takeUnless { token.isPresent },
-        )
+        val missing =
+            listOfNotNull(
+                "device.ip".takeUnless { ipAddress.isPresent },
+                "device.token".takeUnless { token.isPresent },
+            )
         if (missing.isNotEmpty()) {
             throw GradleException(
                 "Missing required propert${if (missing.size == 1) "y" else "ies"}: " +
@@ -189,23 +191,37 @@ abstract class UploadToolTask : DefaultTask() {
             )
         }
 
-        val apk = apkDir.get().asFileTree.files.filter { it.extension == "apk" }.let { apks ->
-            apks.singleOrNull()
-                ?: throw GradleException("Expected exactly one .apk in ${apkDir.get()}, found: $apks")
-        }
+        val apk =
+            apkDir
+                .get()
+                .asFileTree
+                .files
+                .filter { it.extension == "apk" }
+                .let { apks ->
+                    apks.singleOrNull()
+                        ?: throw GradleException(
+                            "Expected exactly one .apk in ${apkDir.get()}, found: $apks"
+                        )
+                }
         val pkg = packageName.get()
         val client = insecureHttpClient()
         val toolMetaUri = URI("${baseUrl()}/api/data/developer/toolMeta")
 
         fun fetchLastUpdateMillis(): Long? {
-            val response = client.send(authedRequest(toolMetaUri, "GET").GET().build(), HttpResponse.BodyHandlers.ofString())
+            val response =
+                client.send(
+                    authedRequest(toolMetaUri, "GET").GET().build(),
+                    HttpResponse.BodyHandlers.ofString(),
+                )
             check(response.statusCode() == 200) {
                 "Failed to query toolMeta: HTTP ${response.statusCode()} - ${response.body()}"
             }
             return extractLastUpdateMillis(response.body(), pkg)
         }
 
-        logger.lifecycle("Checking current install state of $pkg on ${ipAddress.get()}:${port.get()}...")
+        logger.lifecycle(
+            "Checking current install state of $pkg on ${ipAddress.get()}:${port.get()}..."
+        )
         val before = fetchLastUpdateMillis()
         logger.lifecycle(
             if (before == null) "$pkg is not currently installed on the device."
@@ -214,22 +230,30 @@ abstract class UploadToolTask : DefaultTask() {
 
         val uploadFileName = "$pkg.apk"
         logger.lifecycle("Uploading ${apk.name} (${apk.length()} bytes) as $uploadFileName...")
-        val uploadResponse = client.send(
-            authedRequest(URI("${baseUrl()}/api/upload/developer/apkInbox/$uploadFileName"), "POST")
-                .POST(HttpRequest.BodyPublishers.ofFile(apk.toPath()))
-                .build(),
-            HttpResponse.BodyHandlers.ofString()
-        )
+        val uploadResponse =
+            client.send(
+                authedRequest(
+                        URI("${baseUrl()}/api/upload/developer/apkInbox/$uploadFileName"),
+                        "POST",
+                    )
+                    .POST(HttpRequest.BodyPublishers.ofFile(apk.toPath()))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString(),
+            )
         check(uploadResponse.statusCode() == 200) {
             "Upload failed: HTTP ${uploadResponse.statusCode()} - ${uploadResponse.body()}"
         }
 
-        val notifyResponse = client.send(
-            authedRequest(URI("${baseUrl()}/api/notify/developer/apkInbox/$uploadFileName"), "POST")
-                .POST(HttpRequest.BodyPublishers.noBody())
-                .build(),
-            HttpResponse.BodyHandlers.ofString()
-        )
+        val notifyResponse =
+            client.send(
+                authedRequest(
+                        URI("${baseUrl()}/api/notify/developer/apkInbox/$uploadFileName"),
+                        "POST",
+                    )
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build(),
+                HttpResponse.BodyHandlers.ofString(),
+            )
         check(notifyResponse.statusCode() == 200) {
             "Notify failed: HTTP ${notifyResponse.statusCode()} - ${notifyResponse.body()}"
         }
@@ -259,10 +283,14 @@ tasks.register<UploadToolTask>("uploadTool") {
     dependsOn("assembleDebug")
 
     apkDir.set(layout.buildDirectory.dir("outputs/apk/debug"))
-    packageName.set(requireNotNull(android.defaultConfig.applicationId) { "applicationId is not set" })
+    packageName.set(
+        requireNotNull(android.defaultConfig.applicationId) { "applicationId is not set" }
+    )
     ipAddress.set(providers.gradleProperty("device.ip").orElse("127.0.0.1"))
     port.set(providers.gradleProperty("device.port").map { it.toInt() }.orElse(54449))
     token.set(providers.gradleProperty("device.token"))
-    timeoutSeconds.set(providers.gradleProperty("device.timeoutSeconds").map { it.toLong() }.orElse(60L))
+    timeoutSeconds.set(
+        providers.gradleProperty("device.timeoutSeconds").map { it.toLong() }.orElse(60L)
+    )
     pollIntervalSeconds.set(2L)
 }

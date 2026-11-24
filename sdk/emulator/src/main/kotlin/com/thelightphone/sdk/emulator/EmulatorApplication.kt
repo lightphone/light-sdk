@@ -30,6 +30,7 @@ import com.thelightphone.sdk.server.backup.webDavBackupLeafView
 import com.thelightphone.sdk.server.toolmanager.developerModeDataView
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
+import com.thelightphone.lp3Keyboard.textentry.TextEntryProtocol
 import com.thelightphone.sdk.ui.LightModalManager
 import com.thelightphone.toolmanager.DiscoveredToolsBranchProvider
 import com.thelightphone.toolmanager.Logger
@@ -108,6 +109,7 @@ class EmulatorApplication : Application(), Configuration.Provider {
         val mollySocketUriString = BuildConfig.MOLLYSOCKET_URI
         with(LightSdkServer) {
             registerLockReceiver(MainActivity::class.java, settings)
+            enableNotificationListener()
             customServiceMethodResolver = { _, methodId, _ ->
                 if (methodId == "GetMollySocketUri" && mollySocketUriString.isNotEmpty()) {
                     val json = "{\"mollySocketUri\":\"$mollySocketUriString\"}"
@@ -124,6 +126,7 @@ class EmulatorApplication : Application(), Configuration.Provider {
             provideSdkSettings = { settings }
             permissionActivity = LightSdkPermissionActivity::class.java
             onDeviceKeyEvent = { _, request -> handleDeviceKeyEvent(request) }
+            getKeyboardPackage = ::installedLp3Keyboard
             // emulator is running on local device, automatically approve network
             isNetworkApprovedForToolManager = { true }
             foregroundToolManagerUi = { activity, path ->
@@ -178,6 +181,14 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 )
             )
             .build()
+
+    // text entry goes to the stock LP3 keyboard, if it's been installed on the emulator
+    private fun installedLp3Keyboard(): String? = try {
+        packageManager.getPackageInfo(TextEntryProtocol.LP3_KEYBOARD_PACKAGE, 0)
+        TextEntryProtocol.LP3_KEYBOARD_PACKAGE
+    } catch (e: PackageManager.NameNotFoundException) {
+        null
+    }
 
     private val toolManagerLogger = object : Logger {
         override fun log(tag: String, message: String) {

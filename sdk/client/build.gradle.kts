@@ -70,6 +70,9 @@ dependencies {
     implementation(libs.androidx.media3.database)
     api(libs.light.toolmanager.client)
     lintChecks(project(":lint-rules"))
+    // lintChecks only runs the rules on this module; lintPublish ships them to tools in the AAR.
+    // Not transitive: lintPublish takes exactly one jar, and lint provides the Kotlin stdlib.
+    lintPublish(project(":lint-rules")) { isTransitive = false }
 
     testImplementation(libs.kotlin.test)
 }

@@ -8,18 +8,19 @@ import android.provider.Telephony
 import android.webkit.MimeTypeMap
 import com.thelightphone.backup.BackupDataSource
 import com.thelightphone.backup.BackupPath
+import com.thelightphone.sdk.digest.digestHex
+import com.thelightphone.sdk.digest.newSha256Digest
 import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.toolmanager.Logger
-import kotlinx.io.files.Path
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.FilterInputStream
 import java.io.InputStream
 import java.io.OutputStream
-import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Clock
 import kotlin.time.Instant
+import kotlinx.io.files.Path
+import org.json.JSONArray
+import org.json.JSONObject
 
 private fun mmsPartUri(partId: Long): Uri = Uri.parse("content://mms/part/$partId")
 
@@ -27,96 +28,136 @@ private fun mmsPartUri(partId: Long): Uri = Uri.parse("content://mms/part/$partI
  * Backs up SMS/MMS (and RCS, insofar as the platform surfaces it through the same Telephony
  * provider) messages.
  */
-class SmsMmsBackupDataSource(
-    private val appContext: Context,
-    private val logger: Logger,
-) : BackupDataSource {
+class SmsMmsBackupDataSource(private val appContext: Context, private val logger: Logger) :
+    BackupDataSource {
 
-    private val contentResolver: ContentResolver get() = appContext.contentResolver
+    private val contentResolver: ContentResolver
+        get() = appContext.contentResolver
 
     // BackupRunner always calls hashForFile immediately after readFile for the same path (and
     // never concurrently with another file's readFile), so readFile's stream computes the hash as
     // a side effect of the caller reading it, and hashForFile just collects the result from here.
     private val hashCache = ConcurrentHashMap<String, String>()
 
-    override suspend fun getPathsToBackUp(): Result<List<BackupPath>> = runCatching {
-        if (LightSdkServer.canBackUpFromPackage(BackupCapableTool(AUTHORITY, true))) {
-            listOf(
-                BackupPath(
-                    authority = AUTHORITY,
-                    localPath = Path(ROOT_LABEL),
-                    label = ROOT_LABEL
-                )
-            )
-        } else emptyList()
-    }.onFailure { logger.reportError(TAG, it, "Failed to list backup paths") }
+    override suspend fun getPathsToBackUp(): Result<List<BackupPath>> =
+        runCatching {
+                if (LightSdkServer.canBackUpFromPackage(BackupCapableTool(AUTHORITY, true))) {
+                    listOf(
+                        BackupPath(
+                            authority = AUTHORITY,
+                            localPath = Path(ROOT_LABEL),
+                            label = ROOT_LABEL,
+                        )
+                    )
+                } else emptyList()
+            }
+            .onFailure { logger.reportError(TAG, it, "Failed to list backup paths") }
 
-    override suspend fun getEarliestPossibleBackupDate(parent: Path): Result<Instant> = runCatching {
-        val earliestSms = earliestSinceEpoch(
-            Telephony.Sms.CONTENT_URI,
-            Telephony.Sms.DATE,
-            LightSdkServer.getSmsBackupExclusion(),
-        ) { Instant.fromEpochMilliseconds(it) }
-        val earliestMms = earliestSinceEpoch(Telephony.Mms.CONTENT_URI, Telephony.Mms.DATE, null) { Instant.fromEpochSeconds(it) }
-        val earliest = listOfNotNull(earliestSms, earliestMms).minOrNull() ?: Clock.System.now()
-        logger.log(TAG, "Earliest possible backup date: $earliest")
-        earliest
-    }.onFailure { logger.reportError(TAG, it, "Failed to determine earliest possible backup date") }
+    override suspend fun getEarliestPossibleBackupDate(parent: Path): Result<Instant> =
+        runCatching {
+                val earliestSms =
+                    earliestSinceEpoch(
+                        Telephony.Sms.CONTENT_URI,
+                        Telephony.Sms.DATE,
+                        LightSdkServer.getSmsBackupExclusion(),
+                    ) {
+                        Instant.fromEpochMilliseconds(it)
+                    }
+                val earliestMms =
+                    earliestSinceEpoch(Telephony.Mms.CONTENT_URI, Telephony.Mms.DATE, null) {
+                        Instant.fromEpochSeconds(it)
+                    }
+                val earliest =
+                    listOfNotNull(earliestSms, earliestMms).minOrNull() ?: Clock.System.now()
+                logger.log(TAG, "Earliest possible backup date: $earliest")
+                earliest
+            }
+            .onFailure {
+                logger.reportError(TAG, it, "Failed to determine earliest possible backup date")
+            }
 
     override suspend fun getFilesToBackUpForPath(
         parent: Path,
         lowerBound: Instant,
-        upperBound: Instant
-    ): Result<List<Path>> = runCatching {
-        val files = mutableListOf<Path>()
+        upperBound: Instant,
+    ): Result<List<Path>> =
+        runCatching {
+                val files = mutableListOf<Path>()
 
-        val hasSms = hasSmsInRange(lowerBound, upperBound)
-        if (hasSms) {
-            files += FileKey.SmsWindow(lowerBound, upperBound).toPath()
-        }
-
-        val mmsIds = mmsIdsInRange(lowerBound, upperBound)
-        var partCount = 0
-        if (mmsIds.isNotEmpty()) {
-            files += FileKey.MmsWindow(lowerBound, upperBound).toPath()
-            for (mmsId in mmsIds) {
-                // text/SMIL parts are inlined in the mms window file, only media parts are files
-                for (part in partsFor(mmsId).filter { it.hasFile }) {
-                    files += FileKey.MmsPart(lowerBound, upperBound, mmsId, part.id, part.fileName).toPath()
-                    partCount++
+                val hasSms = hasSmsInRange(lowerBound, upperBound)
+                if (hasSms) {
+                    files += FileKey.SmsWindow(lowerBound, upperBound).toPath()
                 }
+
+                val mmsIds = mmsIdsInRange(lowerBound, upperBound)
+                var partCount = 0
+                if (mmsIds.isNotEmpty()) {
+                    files += FileKey.MmsWindow(lowerBound, upperBound).toPath()
+                    for (mmsId in mmsIds) {
+                        // text/SMIL parts are inlined in the mms window file, only media parts are
+                        // files
+                        for (part in partsFor(mmsId).filter { it.hasFile }) {
+                            files +=
+                                FileKey.MmsPart(
+                                        lowerBound,
+                                        upperBound,
+                                        mmsId,
+                                        part.id,
+                                        part.fileName,
+                                    )
+                                    .toPath()
+                            partCount++
+                        }
+                    }
+                }
+                if (files.isNotEmpty()) {
+                    logger.log(
+                        TAG,
+                        "Window ($lowerBound, $upperBound]: sms=$hasSms, mms=${mmsIds.size}, mmsParts=$partCount",
+                    )
+                }
+                files
             }
-        }
-        if (files.isNotEmpty()) {
-            logger.log(
-                TAG,
-                "Window ($lowerBound, $upperBound]: sms=$hasSms, mms=${mmsIds.size}, mmsParts=$partCount",
-            )
-        }
-        files
-    }.onFailure { logger.reportError(TAG, it, "Failed to list files to back up for window ($lowerBound, $upperBound]") }
+            .onFailure {
+                logger.reportError(
+                    TAG,
+                    it,
+                    "Failed to list files to back up for window ($lowerBound, $upperBound]",
+                )
+            }
 
-    override suspend fun readFile(path: Path): Result<InputStream> = runCatching {
-        val key = FileKey.parse(path)
-        logger.log(TAG, "Reading ${key.describe()}")
-        val raw = when (key) {
-            is FileKey.SmsWindow -> smsWindowStream(key.lowerBound, key.upperBound)
-            is FileKey.MmsWindow -> mmsWindowStream(key.lowerBound, key.upperBound)
-            is FileKey.MmsPart ->
-                contentResolver.openInputStream(mmsPartUri(key.partId))
-                    ?: throw NoSuchElementException("MMS part ${key.partId} (message ${key.mmsId}) is no longer available")
-        }
-        hashingStream(path.toString(), raw)
-    }.onFailure { logger.reportError(TAG, it, "Failed to read ${safeDescribe(path)}") }
+    override suspend fun readFile(path: Path): Result<InputStream> =
+        runCatching {
+                val key = FileKey.parse(path)
+                logger.log(TAG, "Reading ${key.describe()}")
+                val raw =
+                    when (key) {
+                        is FileKey.SmsWindow -> smsWindowStream(key.lowerBound, key.upperBound)
+                        is FileKey.MmsWindow -> mmsWindowStream(key.lowerBound, key.upperBound)
+                        is FileKey.MmsPart ->
+                            contentResolver.openInputStream(mmsPartUri(key.partId))
+                                ?: throw NoSuchElementException(
+                                    "MMS part ${key.partId} (message ${key.mmsId}) is no longer available"
+                                )
+                    }
+                hashingStream(path.toString(), raw)
+            }
+            .onFailure { logger.reportError(TAG, it, "Failed to read ${safeDescribe(path)}") }
 
-    override suspend fun hashForFile(path: Path): Result<String> = runCatching {
-        hashCache[path.toString()] ?: run {
-            logger.log(TAG, "Hash cache miss for ${safeDescribe(path)}, regenerating to compute it")
-            readFile(path).getOrThrow().use { it.copyTo(DiscardingOutputStream) }
-            hashCache[path.toString()]
-                ?: error("Failed to compute hash for ${safeDescribe(path)}")
-        }
-    }.onFailure { logger.reportError(TAG, it, "Failed to hash ${safeDescribe(path)}") }
+    override suspend fun hashForFile(path: Path): Result<String> =
+        runCatching {
+                hashCache[path.toString()]
+                    ?: run {
+                        logger.log(
+                            TAG,
+                            "Hash cache miss for ${safeDescribe(path)}, regenerating to compute it",
+                        )
+                        readFile(path).getOrThrow().use { it.copyTo(DiscardingOutputStream) }
+                        hashCache[path.toString()]
+                            ?: error("Failed to compute hash for ${safeDescribe(path)}")
+                    }
+            }
+            .onFailure { logger.reportError(TAG, it, "Failed to hash ${safeDescribe(path)}") }
 
     // for logging
     private fun safeDescribe(path: Path): String =
@@ -124,25 +165,35 @@ class SmsMmsBackupDataSource(
 
     private fun hasSmsInRange(lower: Instant, upper: Instant): Boolean {
         val (selection, selectionArgs) = smsWindowSelection(lower, upper)
-        val cursor = contentResolver.query(
-            Telephony.Sms.CONTENT_URI,
-            arrayOf(Telephony.Sms._ID),
-            selection,
-            selectionArgs,
-            null
-        ) ?: throw IllegalStateException("SMS provider query returned null - is READ_SMS granted?")
+        val cursor =
+            contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms._ID),
+                selection,
+                selectionArgs,
+                null,
+            )
+                ?: throw IllegalStateException(
+                    "SMS provider query returned null - is READ_SMS granted?"
+                )
         return cursor.use { it.moveToFirst() }
     }
 
     private fun mmsIdsInRange(lower: Instant, upper: Instant): List<Long> {
-        val cursor = contentResolver.query(
-            Telephony.Mms.CONTENT_URI,
-            arrayOf(Telephony.Mms._ID),
-            "${Telephony.Mms.DATE} > ? AND ${Telephony.Mms.DATE} <= ?",
-            arrayOf(lower.epochSeconds.toString(), upper.epochSeconds.toString()),
-            null
-        ) ?: throw IllegalStateException("MMS provider query returned null - is READ_SMS granted?")
-        return cursor.use { c -> generateSequence { if (c.moveToNext()) c.getLong(0) else null }.toList() }
+        val cursor =
+            contentResolver.query(
+                Telephony.Mms.CONTENT_URI,
+                arrayOf(Telephony.Mms._ID),
+                "${Telephony.Mms.DATE} > ? AND ${Telephony.Mms.DATE} <= ?",
+                arrayOf(lower.epochSeconds.toString(), upper.epochSeconds.toString()),
+                null,
+            )
+                ?: throw IllegalStateException(
+                    "MMS provider query returned null - is READ_SMS granted?"
+                )
+        return cursor.use { c ->
+            generateSequence { if (c.moveToNext()) c.getLong(0) else null }.toList()
+        }
     }
 
     private fun earliestSinceEpoch(
@@ -152,52 +203,74 @@ class SmsMmsBackupDataSource(
         toInstant: (Long) -> Instant,
     ): Instant? {
         val (selection, selectionArgs) = exclusion.applyTo(null, emptyArray())
-        val cursor = contentResolver.query(uri, arrayOf(dateColumn), selection, selectionArgs, "$dateColumn ASC")
-            ?: throw IllegalStateException("Telephony provider query returned null - is READ_SMS granted?")
+        val cursor =
+            contentResolver.query(
+                uri,
+                arrayOf(dateColumn),
+                selection,
+                selectionArgs,
+                "$dateColumn ASC",
+            )
+                ?: throw IllegalStateException(
+                    "Telephony provider query returned null - is READ_SMS granted?"
+                )
         return cursor.use { if (it.moveToFirst()) toInstant(it.getLong(0)) else null }
     }
 
     // SMS in (lower, upper], minus anything the host app excludes from backups
     private fun smsWindowSelection(lower: Instant, upper: Instant): Pair<String?, Array<String>> =
-        LightSdkServer.getSmsBackupExclusion().applyTo(
-            "${Telephony.Sms.DATE} > ? AND ${Telephony.Sms.DATE} <= ?",
-            arrayOf(lower.toEpochMilliseconds().toString(), upper.toEpochMilliseconds().toString()),
-        )
+        LightSdkServer.getSmsBackupExclusion()
+            .applyTo(
+                "${Telephony.Sms.DATE} > ? AND ${Telephony.Sms.DATE} <= ?",
+                arrayOf(
+                    lower.toEpochMilliseconds().toString(),
+                    upper.toEpochMilliseconds().toString(),
+                ),
+            )
 
     private fun smsWindowStream(lower: Instant, upper: Instant): InputStream {
         val (selection, selectionArgs) = smsWindowSelection(lower, upper)
-        val cursor = contentResolver.query(
-            Telephony.Sms.CONTENT_URI,
-            SMS_PROJECTION,
-            selection,
-            selectionArgs,
-            "${Telephony.Sms.DATE} ASC"
-        ) ?: throw IllegalStateException("SMS provider query returned null - is READ_SMS granted?")
+        val cursor =
+            contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                SMS_PROJECTION,
+                selection,
+                selectionArgs,
+                "${Telephony.Sms.DATE} ASC",
+            )
+                ?: throw IllegalStateException(
+                    "SMS provider query returned null - is READ_SMS granted?"
+                )
         return CursorNdjsonInputStream(cursor, ::smsRowToJson)
     }
 
     private fun mmsWindowStream(lower: Instant, upper: Instant): InputStream {
-        val cursor = contentResolver.query(
-            Telephony.Mms.CONTENT_URI,
-            MMS_PROJECTION,
-            "${Telephony.Mms.DATE} > ? AND ${Telephony.Mms.DATE} <= ?",
-            arrayOf(lower.epochSeconds.toString(), upper.epochSeconds.toString()),
-            "${Telephony.Mms.DATE} ASC"
-        ) ?: throw IllegalStateException("MMS provider query returned null - is READ_SMS granted?")
+        val cursor =
+            contentResolver.query(
+                Telephony.Mms.CONTENT_URI,
+                MMS_PROJECTION,
+                "${Telephony.Mms.DATE} > ? AND ${Telephony.Mms.DATE} <= ?",
+                arrayOf(lower.epochSeconds.toString(), upper.epochSeconds.toString()),
+                "${Telephony.Mms.DATE} ASC",
+            )
+                ?: throw IllegalStateException(
+                    "MMS provider query returned null - is READ_SMS granted?"
+                )
         return CursorNdjsonInputStream(cursor, ::mmsRowToJson)
     }
 
-    private fun smsRowToJson(cursor: Cursor): JSONObject = JSONObject().apply {
-        put("id", cursor.getLongOrNull(Telephony.Sms._ID))
-        put("tId", cursor.getLongOrNull(Telephony.Sms.THREAD_ID))
-        put("adr", cursor.getStringOrNull(Telephony.Sms.ADDRESS))
-        put("body", cursor.getStringOrNull(Telephony.Sms.BODY))
-        put("d", cursor.getLongOrNull(Telephony.Sms.DATE))
-        put("dSent", cursor.getLongOrNull(Telephony.Sms.DATE_SENT))
-        put("type", cursor.getIntOrNull(Telephony.Sms.TYPE))
-        put("rd", cursor.getIntOrNull(Telephony.Sms.READ))
-        put("sId", cursor.getIntOrNull(Telephony.Sms.SUBSCRIPTION_ID))
-    }
+    private fun smsRowToJson(cursor: Cursor): JSONObject =
+        JSONObject().apply {
+            put("id", cursor.getLongOrNull(Telephony.Sms._ID))
+            put("tId", cursor.getLongOrNull(Telephony.Sms.THREAD_ID))
+            put("adr", cursor.getStringOrNull(Telephony.Sms.ADDRESS))
+            put("body", cursor.getStringOrNull(Telephony.Sms.BODY))
+            put("d", cursor.getLongOrNull(Telephony.Sms.DATE))
+            put("dSent", cursor.getLongOrNull(Telephony.Sms.DATE_SENT))
+            put("type", cursor.getIntOrNull(Telephony.Sms.TYPE))
+            put("rd", cursor.getIntOrNull(Telephony.Sms.READ))
+            put("sId", cursor.getIntOrNull(Telephony.Sms.SUBSCRIPTION_ID))
+        }
 
     private fun mmsRowToJson(cursor: Cursor): JSONObject {
         val id = cursor.getLongOrNull(Telephony.Mms._ID)
@@ -205,23 +278,39 @@ class SmsMmsBackupDataSource(
             put("id", id)
             put("tId", cursor.getLongOrNull(Telephony.Mms.THREAD_ID))
             // Stored in whole seconds - normalized to milliseconds to match the sms rows above.
-            put("d", cursor.getLongOrNull(Telephony.Mms.DATE)?.let { Instant.fromEpochSeconds(it).toEpochMilliseconds() })
-            put("dSent", cursor.getLongOrNull(Telephony.Mms.DATE_SENT)?.let { Instant.fromEpochSeconds(it).toEpochMilliseconds() })
+            put(
+                "d",
+                cursor.getLongOrNull(Telephony.Mms.DATE)?.let {
+                    Instant.fromEpochSeconds(it).toEpochMilliseconds()
+                },
+            )
+            put(
+                "dSent",
+                cursor.getLongOrNull(Telephony.Mms.DATE_SENT)?.let {
+                    Instant.fromEpochSeconds(it).toEpochMilliseconds()
+                },
+            )
             put("mBox", cursor.getIntOrNull(Telephony.Mms.MESSAGE_BOX))
             put("rd", cursor.getIntOrNull(Telephony.Mms.READ))
             put("sId", cursor.getIntOrNull(Telephony.Mms.SUBSCRIPTION_ID))
             put("subj", cursor.getStringOrNull(Telephony.Mms.SUBJECT))
             if (id != null) {
                 put("adrs", addressesFor(id))
-                put("parts", JSONArray(partsFor(id).map { part ->
-                    JSONObject().apply {
-                        put("id", part.id)
-                        put("cType", part.contentType)
-                        put("fName", part.fileName)
-                        // parts without a backing file (message text, SMIL layout) only exist here
-                        if (!part.hasFile) put("text", part.text)
-                    }
-                }))
+                put(
+                    "parts",
+                    JSONArray(
+                        partsFor(id).map { part ->
+                            JSONObject().apply {
+                                put("id", part.id)
+                                put("cType", part.contentType)
+                                put("fName", part.fileName)
+                                // parts without a backing file (message text, SMIL layout) only
+                                // exist here
+                                if (!part.hasFile) put("text", part.text)
+                            }
+                        }
+                    ),
+                )
             }
         }
     }
@@ -232,10 +321,12 @@ class SmsMmsBackupDataSource(
         val result = JSONArray()
         contentResolver.query(uri, arrayOf("address", "type"), null, null, null)?.use { c ->
             while (c.moveToNext()) {
-                result.put(JSONObject().apply {
-                    put("adr", c.getStringOrNull("address"))
-                    put("type", addressTypeName(c.getIntOrNull("type")))
-                })
+                result.put(
+                    JSONObject().apply {
+                        put("adr", c.getStringOrNull("address"))
+                        put("type", addressTypeName(c.getIntOrNull("type")))
+                    }
+                )
             }
         }
         return result
@@ -243,31 +334,43 @@ class SmsMmsBackupDataSource(
 
     // don't feel great about this but it's widely used
     // https://stackoverflow.com/questions/3012287/how-to-read-mms-data-in-android
-    private fun addressTypeName(type: Int?): String = when (type) {
-        137 -> "from"
-        151 -> "to"
-        130 -> "cc"
-        129 -> "bcc"
-        else -> "unknown"
-    }
+    private fun addressTypeName(type: Int?): String =
+        when (type) {
+            137 -> "from"
+            151 -> "to"
+            130 -> "cc"
+            129 -> "bcc"
+            else -> "unknown"
+        }
 
     // "_id"/"ct"/"name"/"cl"/"_data"/"text" are undocumented columns of the mms part sub-table.
-    // Media parts have a backing file (_data); text and SMIL parts don't, their content is in "text"
+    // Media parts have a backing file (_data); text and SMIL parts don't, their content is in
+    // "text"
     // and opening them as a stream fails.
     private fun partsFor(mmsId: Long): List<MmsPartInfo> {
         val uri = Uri.withAppendedPath(Telephony.Mms.CONTENT_URI, "$mmsId/part")
         val result = mutableListOf<MmsPartInfo>()
-        contentResolver.query(uri, arrayOf("_id", "ct", "name", "cl", "_data", "text"), null, null, null)?.use { c ->
-            while (c.moveToNext()) {
-                val partId = c.getLongOrNull("_id") ?: continue
-                val contentType = c.getStringOrNull("ct") ?: "application/octet-stream"
-                val fileName = (c.getStringOrNull("name") ?: c.getStringOrNull("cl"))
-                    ?.replace('/', '_')?.replace('\\', '_')
-                    ?: defaultPartFileName(partId, contentType)
-                val hasFile = c.getStringOrNull("_data") != null
-                result += MmsPartInfo(partId, contentType, fileName, hasFile, c.getStringOrNull("text"))
+        contentResolver
+            .query(uri, arrayOf("_id", "ct", "name", "cl", "_data", "text"), null, null, null)
+            ?.use { c ->
+                while (c.moveToNext()) {
+                    val partId = c.getLongOrNull("_id") ?: continue
+                    val contentType = c.getStringOrNull("ct") ?: "application/octet-stream"
+                    val fileName =
+                        (c.getStringOrNull("name") ?: c.getStringOrNull("cl"))
+                            ?.replace('/', '_')
+                            ?.replace('\\', '_') ?: defaultPartFileName(partId, contentType)
+                    val hasFile = c.getStringOrNull("_data") != null
+                    result +=
+                        MmsPartInfo(
+                            partId,
+                            contentType,
+                            fileName,
+                            hasFile,
+                            c.getStringOrNull("text"),
+                        )
+                }
             }
-        }
         return result
     }
 
@@ -278,7 +381,7 @@ class SmsMmsBackupDataSource(
 
     // Since these files are generated by us, we can hash/cache as we go
     private fun hashingStream(pathKey: String, inner: InputStream): InputStream {
-        val digest = MessageDigest.getInstance("SHA-256")
+        val digest = newSha256Digest()
         var cached = false
         return object : FilterInputStream(inner) {
             override fun read(): Int {
@@ -296,7 +399,7 @@ class SmsMmsBackupDataSource(
             private fun cacheDigest() {
                 if (cached) return
                 cached = true
-                hashCache[pathKey] = digest.digest().toHexString()
+                hashCache[pathKey] = digest.digestHex()
             }
         }
     }
@@ -314,28 +417,30 @@ class SmsMmsBackupDataSource(
         const val AUTHORITY = "sms-mms"
         private const val ROOT_LABEL = "sms-mms"
 
-        private val SMS_PROJECTION = arrayOf(
-            Telephony.Sms._ID,
-            Telephony.Sms.THREAD_ID,
-            Telephony.Sms.ADDRESS,
-            Telephony.Sms.BODY,
-            Telephony.Sms.DATE,
-            Telephony.Sms.DATE_SENT,
-            Telephony.Sms.TYPE,
-            Telephony.Sms.READ,
-            Telephony.Sms.SUBSCRIPTION_ID,
-        )
+        private val SMS_PROJECTION =
+            arrayOf(
+                Telephony.Sms._ID,
+                Telephony.Sms.THREAD_ID,
+                Telephony.Sms.ADDRESS,
+                Telephony.Sms.BODY,
+                Telephony.Sms.DATE,
+                Telephony.Sms.DATE_SENT,
+                Telephony.Sms.TYPE,
+                Telephony.Sms.READ,
+                Telephony.Sms.SUBSCRIPTION_ID,
+            )
 
-        private val MMS_PROJECTION = arrayOf(
-            Telephony.Mms._ID,
-            Telephony.Mms.THREAD_ID,
-            Telephony.Mms.DATE,
-            Telephony.Mms.DATE_SENT,
-            Telephony.Mms.MESSAGE_BOX,
-            Telephony.Mms.READ,
-            Telephony.Mms.SUBSCRIPTION_ID,
-            Telephony.Mms.SUBJECT,
-        )
+        private val MMS_PROJECTION =
+            arrayOf(
+                Telephony.Mms._ID,
+                Telephony.Mms.THREAD_ID,
+                Telephony.Mms.DATE,
+                Telephony.Mms.DATE_SENT,
+                Telephony.Mms.MESSAGE_BOX,
+                Telephony.Mms.READ,
+                Telephony.Mms.SUBSCRIPTION_ID,
+                Telephony.Mms.SUBJECT,
+            )
     }
 }
 
@@ -345,10 +450,12 @@ private val WINDOW_BOUNDS_REGEX = Regex("""(-?\d+)-(-?\d+)""")
 // zero date puts the earliest window before 1970 once the runner subtracts its buffer, so the
 // string can't simply be split on the first '-'.
 internal fun parseWindowBounds(raw: String): Pair<Instant, Instant> {
-    val match = WINDOW_BOUNDS_REGEX.matchEntire(raw)
-        ?: throw IllegalArgumentException("Malformed backup window: $raw")
+    val match =
+        WINDOW_BOUNDS_REGEX.matchEntire(raw)
+            ?: throw IllegalArgumentException("Malformed backup window: $raw")
     val (lower, upper) = match.destructured
-    return Instant.fromEpochMilliseconds(lower.toLong()) to Instant.fromEpochMilliseconds(upper.toLong())
+    return Instant.fromEpochMilliseconds(lower.toLong()) to
+        Instant.fromEpochMilliseconds(upper.toLong())
 }
 
 // Encodes/decodes the synthetic Paths this data source hands out
@@ -361,14 +468,18 @@ private sealed class FileKey {
 
     data class SmsWindow(val lowerBound: Instant, val upperBound: Instant) : FileKey() {
         override fun toPath() =
-            Path("sms/${lowerBound.toEpochMilliseconds()}-${upperBound.toEpochMilliseconds()}/sms.ndjson")
+            Path(
+                "sms/${lowerBound.toEpochMilliseconds()}-${upperBound.toEpochMilliseconds()}/sms.ndjson"
+            )
 
         override fun describe() = "sms window ($lowerBound, $upperBound]"
     }
 
     data class MmsWindow(val lowerBound: Instant, val upperBound: Instant) : FileKey() {
         override fun toPath() =
-            Path("mms/${lowerBound.toEpochMilliseconds()}-${upperBound.toEpochMilliseconds()}/mms.ndjson")
+            Path(
+                "mms/${lowerBound.toEpochMilliseconds()}-${upperBound.toEpochMilliseconds()}/mms.ndjson"
+            )
 
         override fun describe() = "mms window ($lowerBound, $upperBound]"
     }
@@ -381,7 +492,9 @@ private sealed class FileKey {
         val fileName: String,
     ) : FileKey() {
         override fun toPath() =
-            Path("mms/${lowerBound.toEpochMilliseconds()}-${upperBound.toEpochMilliseconds()}/parts/$mmsId-$partId-$fileName")
+            Path(
+                "mms/${lowerBound.toEpochMilliseconds()}-${upperBound.toEpochMilliseconds()}/parts/$mmsId-$partId-$fileName"
+            )
 
         override fun describe() = "mms part id=$partId of message id=$mmsId"
     }
@@ -419,12 +532,13 @@ private class CursorNdjsonInputStream(
     private var exhausted = false
 
     private fun advance() {
-        buffer = if (cursor.moveToNext()) {
-            (rowToJson(cursor).toString() + "\n").toByteArray(Charsets.UTF_8)
-        } else {
-            exhausted = true
-            ByteArray(0)
-        }
+        buffer =
+            if (cursor.moveToNext()) {
+                (rowToJson(cursor).toString() + "\n").toByteArray(Charsets.UTF_8)
+            } else {
+                exhausted = true
+                ByteArray(0)
+            }
         bufferPos = 0
     }
 
@@ -453,6 +567,7 @@ private class CursorNdjsonInputStream(
 
 private object DiscardingOutputStream : OutputStream() {
     override fun write(b: Int) {}
+
     override fun write(b: ByteArray, off: Int, len: Int) {}
 }
 

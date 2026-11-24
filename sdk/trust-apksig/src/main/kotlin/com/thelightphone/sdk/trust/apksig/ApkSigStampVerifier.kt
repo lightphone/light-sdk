@@ -1,16 +1,16 @@
 package com.thelightphone.sdk.trust.apksig
 
-import com.thelightphone.sdk.trust.StampVerifier
-import com.thelightphone.sdk.trust.StampResult
-
 import com.android.apksig.ApkVerifier
 import com.android.apksig.apk.ApkFormatException
+import com.thelightphone.sdk.digest.sha256Hex
+import com.thelightphone.sdk.trust.StampResult
+import com.thelightphone.sdk.trust.StampVerifier
 import java.io.File
-import java.security.MessageDigest
 
 class ApkSigStampVerifier : StampVerifier {
     override fun verify(apkPaths: List<String>): StampResult {
-        if (apkPaths.size != 1) return StampResult.Unavailable("split APK verification is platform-only")
+        if (apkPaths.size != 1)
+            return StampResult.Unavailable("split APK verification is platform-only")
         val file = File(apkPaths.single())
         // A missing/unreadable artifact is an infrastructure failure, not a content
         // apksig doesn't throw for this, but we need to distinguish between unreadable and missing stamp
@@ -26,8 +26,9 @@ class ApkSigStampVerifier : StampVerifier {
                     val result = verifier.verify()
                     if (result.isVerified && result.isSourceStampVerified) {
                         StampResult.Verified(
-                            certSha256 = sha256(info.certificate.encoded),
-                            lineageSha256 = info.certificatesInLineage.map { sha256(it.encoded) },
+                            certSha256 = info.certificate.encoded.sha256Hex(),
+                            lineageSha256 =
+                                info.certificatesInLineage.map { it.encoded.sha256Hex() },
                         )
                     } else {
                         StampResult.NotVerified
@@ -41,8 +42,4 @@ class ApkSigStampVerifier : StampVerifier {
             StampResult.Unavailable(error.message ?: error.javaClass.simpleName)
         }
     }
-
-    private fun sha256(value: ByteArray): String = MessageDigest.getInstance("SHA-256")
-        .digest(value)
-        .joinToString("") { "%02x".format(it) }
 }
