@@ -58,6 +58,40 @@ class LightToolMetadataTest {
     }
 
     @Test
+    fun `alert permissions come from the alerts capability`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "X"
+            versionCode = 1
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
+            permissions = ["android.permission.USE_EXACT_ALARM"]
+        """.trimIndent())
+
+        val ex = assertThrows<LightToolMetadataException> { LightToolMetadata.parse(file) }
+        assert(ex.message!!.contains("alerts")) { ex.message ?: "" }
+    }
+
+    @Test
+    fun `an allowlisted permission the alerts capability also generates stays declarable`(@TempDir dir: Path) {
+        val file = writeToml(dir, """
+            [tool]
+            id = "com.example.mytool"
+            label = "X"
+            versionCode = 1
+            versionName = "1.0.0"
+            serverPackage = "com.lightos"
+            permissions = ["android.permission.POST_NOTIFICATIONS"]
+            capabilities = ["alerts"]
+        """.trimIndent())
+
+        val meta = LightToolMetadata.parse(file)
+        assertEquals(listOf("android.permission.POST_NOTIFICATIONS"), meta.permissions)
+        assertEquals(listOf("alerts"), meta.capabilities)
+    }
+
+    @Test
     fun `orientation is optional`(@TempDir dir: Path) {
         val file = writeToml(dir, """
             [tool]

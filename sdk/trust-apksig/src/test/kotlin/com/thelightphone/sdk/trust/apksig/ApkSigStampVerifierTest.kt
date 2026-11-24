@@ -5,8 +5,8 @@ import com.thelightphone.sdk.trust.StampResult
 import java.io.File
 import java.nio.file.Files
 import java.security.KeyStore
-import java.security.PrivateKey
 import java.security.MessageDigest
+import java.security.PrivateKey
 import java.security.cert.X509Certificate
 import java.util.Base64
 import java.util.zip.CRC32
@@ -17,15 +17,20 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class ApkSigStampVerifierTest {
-    @Test fun `missing APK is an infrastructure failure, not a content fact`() {
+    @Test
+    fun `missing APK is an infrastructure failure, not a content fact`() {
         assertIs<StampResult.Unavailable>(ApkSigStampVerifier().verify(listOf("missing.apk")))
     }
 
-    @Test fun `split APK verification is platform-only`() {
-        assertIs<StampResult.Unavailable>(ApkSigStampVerifier().verify(listOf("base.apk", "split.apk")))
+    @Test
+    fun `split APK verification is platform-only`() {
+        assertIs<StampResult.Unavailable>(
+            ApkSigStampVerifier().verify(listOf("base.apk", "split.apk"))
+        )
     }
 
-    @Test fun `garbage non-zip content is a content fact, not an infrastructure failure`() {
+    @Test
+    fun `garbage non-zip content is a content fact, not an infrastructure failure`() {
         val file = Files.createTempFile("garbage-", ".apk").toFile()
         try {
             file.writeBytes(ByteArray(64) { it.toByte() })
@@ -35,17 +40,20 @@ class ApkSigStampVerifierTest {
         }
     }
 
-    @Test fun `signed and stamped APK verifies against the stamp certificate`() {
+    @Test
+    fun `signed and stamped APK verifies against the stamp certificate`() {
         val (apk, stampCert) = signedFixture(tamper = false)
         try {
-            val result = assertIs<StampResult.Verified>(ApkSigStampVerifier().verify(listOf(apk.path)))
+            val result =
+                assertIs<StampResult.Verified>(ApkSigStampVerifier().verify(listOf(apk.path)))
             assertEquals(sha256(stampCert.encoded), result.certSha256)
         } finally {
             apk.delete()
         }
     }
 
-    @Test fun `content edited after signing does not verify despite an intact stamp`() {
+    @Test
+    fun `content edited after signing does not verify despite an intact stamp`() {
         val (apk, _) = signedFixture(tamper = true)
         try {
             assertIs<StampResult.NotVerified>(ApkSigStampVerifier().verify(listOf(apk.path)))
@@ -58,14 +66,14 @@ class ApkSigStampVerifierTest {
         MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }
 
     /**
-     * Builds a tiny real-shaped APK (binary-XML manifest + a payload entry), signs it with
-     * v1-v3 plus a source stamp using throwaway, in-memory-generated keys, and optionally
-     * flips a payload byte after signing (preserving the signing block) to exercise the
-     * tamper path. No committed binary fixtures and no system properties: everything is
-     * generated at test time. [MINIMAL_MANIFEST] is the one exception - a compiled (AAPT2)
-     * binary XML manifest, inlined as base64 because apksig's full verify() hard-requires a
-     * parseable `AndroidManifest.xml` entry to determine the checked platform version range,
-     * and that format isn't practical to hand-assemble.
+     * Builds a tiny real-shaped APK (binary-XML manifest + a payload entry), signs it with v1-v3
+     * plus a source stamp using throwaway, in-memory-generated keys, and optionally flips a payload
+     * byte after signing (preserving the signing block) to exercise the tamper path. No committed
+     * binary fixtures and no system properties: everything is generated at test time.
+     * [MINIMAL_MANIFEST] is the one exception - a compiled (AAPT2) binary XML manifest, inlined as
+     * base64 because apksig's full verify() hard-requires a parseable `AndroidManifest.xml` entry
+     * to determine the checked platform version range, and that format isn't practical to
+     * hand-assemble.
      */
     private fun signedFixture(tamper: Boolean): Pair<File, X509Certificate> {
         val unsigned = Files.createTempFile("unsigned-", ".apk").toFile()
@@ -95,9 +103,10 @@ class ApkSigStampVerifierTest {
             // and signature blocks stay intact but the digested bytes change - the same shape
             // as a surgical post-sign edit that leaves the stamp itself untouched.
             val bytes = signed.readBytes()
-            val offset = (0..bytes.size - PAYLOAD.size).first { at ->
-                PAYLOAD.indices.all { bytes[at + it] == PAYLOAD[it] }
-            }
+            val offset =
+                (0..bytes.size - PAYLOAD.size).first { at ->
+                    PAYLOAD.indices.all { bytes[at + it] == PAYLOAD[it] }
+                }
             val tampered = PAYLOAD.copyOf().also { it[0] = (it[0].toInt() xor 1).toByte() }
             tampered.copyInto(bytes, offset)
             // STORED entries carry their CRC-32 in both the local and central-directory
@@ -116,7 +125,9 @@ class ApkSigStampVerifierTest {
                     at++
                 }
             }
-            check(patched == 2) { "expected to patch exactly 2 CRC fields (local + central), patched $patched" }
+            check(patched == 2) {
+                "expected to patch exactly 2 CRC fields (local + central), patched $patched"
+            }
             signed.writeBytes(bytes)
         }
 
@@ -125,7 +136,12 @@ class ApkSigStampVerifierTest {
 
     private fun crc32LittleEndian(content: ByteArray): ByteArray {
         val crc = CRC32().apply { update(content) }.value
-        return byteArrayOf(crc.toByte(), (crc shr 8).toByte(), (crc shr 16).toByte(), (crc shr 24).toByte())
+        return byteArrayOf(
+            crc.toByte(),
+            (crc shr 8).toByte(),
+            (crc shr 16).toByte(),
+            (crc shr 24).toByte(),
+        )
     }
 
     private fun storedEntry(zip: ZipOutputStream, name: String, content: ByteArray) {
@@ -140,23 +156,40 @@ class ApkSigStampVerifierTest {
     }
 
     private fun signerConfig(alias: String, key: PrivateKey, cert: X509Certificate) =
-        ApkSigner.SignerConfig.Builder(alias, key, listOf(cert), /* deterministicDsaSigning= */ false).build()
+        ApkSigner.SignerConfig.Builder(
+                alias,
+                key,
+                listOf(cert),
+                /* deterministicDsaSigning= */ false,
+            )
+            .build()
 
     private fun generateCertificate(alias: String): Pair<PrivateKey, X509Certificate> {
         val keytool = File(System.getProperty("java.home"), "bin/keytool").absolutePath
         val store = Files.createTempFile("keystore-$alias-", ".jks").toFile()
         store.delete()
         val password = "changeit"
-        val process = ProcessBuilder(
-            keytool, "-genkeypair",
-            "-keystore", store.path,
-            "-storepass", password,
-            "-keyalg", "RSA",
-            "-keysize", "2048",
-            "-alias", alias,
-            "-dname", "CN=Light Trust Test $alias",
-            "-validity", "1",
-        ).redirectErrorStream(true).start()
+        val process =
+            ProcessBuilder(
+                    keytool,
+                    "-genkeypair",
+                    "-keystore",
+                    store.path,
+                    "-storepass",
+                    password,
+                    "-keyalg",
+                    "RSA",
+                    "-keysize",
+                    "2048",
+                    "-alias",
+                    alias,
+                    "-dname",
+                    "CN=Light Trust Test $alias",
+                    "-validity",
+                    "1",
+                )
+                .redirectErrorStream(true)
+                .start()
         val output = process.inputStream.readBytes().decodeToString()
         check(process.waitFor() == 0) { "keytool failed for $alias: $output" }
         try {

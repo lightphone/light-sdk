@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SimpleLightScreen
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.Json
 import kotlin.time.Clock
@@ -15,6 +16,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 sealed class WeatherScreenMode {
+    /** asking for a location: the editor is open over this, or about to reopen after an error */
     data object LocationInput : WeatherScreenMode()
     data class LocationSearchResults(
         val query: String,
@@ -45,10 +47,12 @@ sealed class WeatherScreenMode {
 data class WeatherUiState(
     val mode: WeatherScreenMode = WeatherScreenMode.Loading(FETCHING_WEATHER_MESSAGE),
     val canCancelLocationInput: Boolean = false,
-    val locationInputSession: Int = 0,
     val temperatureUnit: TemperatureUnit = TemperatureUnit.Celsius,
     val errorModal: String? = null,
 )
+
+/** open the location editor with [query] in it */
+data class LocationInputRequest(val query: String, val canCancel: Boolean)
 
 private enum class LocationInputSource {
     Initial,
@@ -72,6 +76,15 @@ class WeatherViewModel(
     private val _uiState = MutableStateFlow(WeatherUiState())
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
 
+    // buffered, so a request made while the screen is away (e.g. under the editor) isn't lost
+    private val _locationInputRequests = Channel<LocationInputRequest>(Channel.CONFLATED)
+    val locationInputRequests: Flow<LocationInputRequest> = _locationInputRequests.receiveAsFlow()
+
+    // what the user last searched for, to put back in the editor when it reopens
+    private var locationQueryDraft: String = ""
+    // the editor reopens once the error modal over it is dismissed
+    private var reopenLocationInputOnDismiss = false
+
     private var lastSelectedDayIndex: Int = 0
     private var savedLocationQuery: String = ""
     private var cachedLocationName: String = ""
@@ -87,14 +100,33 @@ class WeatherViewModel(
     private fun settingsMode(): WeatherScreenMode.Settings =
         WeatherScreenMode.Settings(cachedLocationName)
 
-    private fun WeatherUiState.openLocationInput(
-        canCancel: Boolean = canCancelLocationInput,
-    ): WeatherUiState = copy(
-        mode = WeatherScreenMode.LocationInput,
-        canCancelLocationInput = canCancel,
-        locationInputSession = locationInputSession + 1,
-        errorModal = null,
-    )
+    private fun openLocationInput(
+        canCancel: Boolean = _uiState.value.canCancelLocationInput,
+        errorMessage: String? = null,
+    ) {
+        updateState {
+            it.copy(
+                mode = WeatherScreenMode.LocationInput,
+                canCancelLocationInput = canCancel,
+                errorModal = errorMessage,
+            )
+        }
+        if (errorMessage != null) {
+            reopenLocationInputOnDismiss = true
+        } else {
+            requestLocationInput()
+        }
+    }
+
+    private fun requestLocationInput() {
+        reopenLocationInputOnDismiss = false
+        // coming back from the editor (keyboard app or editor screen) shows this screen again,
+        // which mustn't refresh the old forecast over the search
+        skipRefreshOnNextScreenShow = true
+        _locationInputRequests.trySend(
+            LocationInputRequest(locationQueryDraft, _uiState.value.canCancelLocationInput),
+        )
+    }
 
     private fun updateState(transform: (WeatherUiState) -> WeatherUiState) {
         _uiState.update(transform)
@@ -105,9 +137,7 @@ class WeatherViewModel(
     }
 
     private fun showLocationInputError(message: String) {
-        updateState {
-            it.openLocationInput(canCancel = it.canCancelLocationInput).copy(errorModal = message)
-        }
+        openLocationInput(errorMessage = message)
     }
 
     private suspend fun showApiFailure(error: Throwable? = null) {
@@ -194,7 +224,7 @@ class WeatherViewModel(
         updateState { it.copy(temperatureUnit = unit) }
 
         if (query == null || locationName == null || lat == null || lon == null) {
-            updateState { it.copy(temperatureUnit = unit).openLocationInput(canCancel = false) }
+            openLocationInput(canCancel = false)
             return
         }
 
@@ -217,10 +247,11 @@ class WeatherViewModel(
         )
     }
 
-    fun submitLocation(rawQuery: CharSequence) {
-        val query = rawQuery.toString().trim()
+    fun submitLocation(rawQuery: String) {
+        locationQueryDraft = rawQuery
+        val query = rawQuery.trim()
         if (query.isEmpty()) {
-            _uiState.update { it.copy(errorModal = "Please enter a location.") }
+            showLocationInputError("Please enter a location.")
             return
         }
 
@@ -269,7 +300,7 @@ class WeatherViewModel(
     }
 
     fun cancelLocationSearchResults() {
-        _uiState.update { it.openLocationInput(canCancel = it.canCancelLocationInput) }
+        openLocationInput()
     }
 
     private suspend fun refreshForecast(
@@ -440,7 +471,7 @@ class WeatherViewModel(
 
     fun openLocationFromSettings() {
         locationInputSource = LocationInputSource.Settings
-        _uiState.update { it.openLocationInput(canCancel = true) }
+        openLocationInput(canCancel = true)
     }
 
     fun toggleTemperatureUnit() {
@@ -453,6 +484,7 @@ class WeatherViewModel(
         }
     }
 
+    /** the user backed out of the editor */
     fun cancelLocationInput() {
         if (!_uiState.value.canCancelLocationInput) return
         when (locationInputSource) {
@@ -534,6 +566,9 @@ class WeatherViewModel(
 
     fun dismissError() {
         _uiState.update { it.copy(errorModal = null) }
+        if (reopenLocationInputOnDismiss && _uiState.value.mode == WeatherScreenMode.LocationInput) {
+            requestLocationInput()
+        }
     }
 
     override fun onCleared() {

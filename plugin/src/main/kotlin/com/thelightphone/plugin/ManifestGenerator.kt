@@ -81,6 +81,22 @@ object ManifestGenerator {
             )
         )
 
+        // Only tools that opted in carry the alarm and boot receiver, so no other
+        // tool wakes on every boot.
+        val alertReceiver = marginBlock(
+            if (LightToolPolicy.ALERTS !in metadata.capabilities) emptyList() else listOf(
+                """        <receiver""",
+                """            android:name="com.thelightphone.sdk.LightAlertReceiver"""",
+                """            android:exported="false">""",
+                """            <intent-filter>""",
+                """                <action android:name="android.intent.action.BOOT_COMPLETED" />""",
+                """                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />""",
+                """                <action android:name="com.thelightphone.sdk.action.FIRE_ALERT" />""",
+                """            </intent-filter>""",
+                """        </receiver>""",
+            )
+        )
+
         val cleartext = marginBlock(
             if (LightToolPolicy.CLEARTEXT_HTTP !in metadata.capabilities) emptyList() else listOf(
                 """        android:usesCleartextTraffic="true"""",
@@ -121,7 +137,7 @@ object ManifestGenerator {
             |            <meta-data
             |                android:name="com.thelightphone.sdk.SDK_VERSION"
             |                android:value="${'$'}{sdkVersion}" />
-            |        </receiver>$detachedAudioService$toolManagerProvider
+            |        </receiver>$alertReceiver$detachedAudioService$toolManagerProvider
             |    </application>
             |    <queries>
             |        <intent>

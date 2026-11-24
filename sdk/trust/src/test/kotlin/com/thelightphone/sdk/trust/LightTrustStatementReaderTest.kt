@@ -6,7 +6,8 @@ import java.util.zip.ZipOutputStream
 import kotlin.test.*
 
 class LightTrustStatementReaderTest {
-    @Test fun `duplicate trust statements are rejected even when zip reader could select one`() {
+    @Test
+    fun `duplicate trust statements are rejected even when zip reader could select one`() {
         val file = Files.createTempFile("statement-", ".apk").toFile()
         try {
             val name = "META-INF/light-trust.json"
@@ -28,10 +29,13 @@ class LightTrustStatementReaderTest {
             }
             file.writeBytes(raw)
             assertEquals(StatementReadResult.Malformed, LightTrustStatementReader.read(file))
-        } finally { file.delete() }
+        } finally {
+            file.delete()
+        }
     }
 
-    @Test fun `oversized compressed statement is bounded and absent statement is distinct`() {
+    @Test
+    fun `oversized compressed statement is bounded and absent statement is distinct`() {
         val file = Files.createTempFile("statement-", ".apk").toFile()
         try {
             ZipOutputStream(file.outputStream()).use { zip ->
@@ -40,9 +44,11 @@ class LightTrustStatementReaderTest {
                 zip.closeEntry()
             }
             assertEquals(StatementReadResult.Malformed, LightTrustStatementReader.read(file))
-            ZipOutputStream(file.outputStream()).use { }
+            ZipOutputStream(file.outputStream()).use {}
             assertEquals(StatementReadResult.Absent, LightTrustStatementReader.read(file))
             assertEquals(64, apkSha256(file).length)
-        } finally { file.delete() }
+        } finally {
+            file.delete()
+        }
     }
 }

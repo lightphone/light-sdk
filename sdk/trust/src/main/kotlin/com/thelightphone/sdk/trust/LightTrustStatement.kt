@@ -2,8 +2,8 @@ package com.thelightphone.sdk.trust
 
 /**
  * Identity of the tool a [LightTrustStatement] describes. [id] and [versionCode] are what trust
- * decisions key off of (approval lookup, block matching, the manifest versionCode check); the
- * rest is provenance recorded for humans, not evaluated by policy.
+ * decisions key off of (approval lookup, block matching, the manifest versionCode check); the rest
+ * is provenance recorded for humans, not evaluated by policy.
  */
 data class LightTrustTool(
     val id: String,
@@ -29,8 +29,10 @@ data class LightTrustStatement(
     val sdkGitRef: String,
     /** Developer identity recorded at build time — informational, not trust-bearing. */
     val devId: String,
-    /** Must match the APK's actual signing certificate, or [LightInstallPolicy] rejects the
-     *  install as [DenyReason.StatementNotForThisApk]. */
+    /**
+     * Must match the APK's actual signing certificate, or [LightInstallPolicy] rejects the install
+     * as [DenyReason.StatementNotForThisApk].
+     */
     val signerSha256: String,
     /** Matched against a bundle approval's `ApprovedArtifact.BuildId` entries. */
     val buildId: String,

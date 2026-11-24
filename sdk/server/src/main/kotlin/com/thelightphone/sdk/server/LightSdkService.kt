@@ -279,6 +279,15 @@ class LightSdkService : Service() {
                 }
             }
 
+            LightServiceMethod.GetKeyboardPackage -> {
+                val response = LightServiceMethod.GetKeyboardPackage.Response(
+                    LightSdkServer.getKeyboardPackage()
+                )
+                LightResult.Success(
+                    LightServiceMethod.GetKeyboardPackage.encodeResponse(response)
+                )
+            }
+
             null, is LightServiceMethod.CustomServiceMethod<*, *> -> {
                 // The app that wraps this server may be able to handle custom methods
                 LightSdkServer.customServiceMethodResolver.invoke(callingUid, methodId, payload)

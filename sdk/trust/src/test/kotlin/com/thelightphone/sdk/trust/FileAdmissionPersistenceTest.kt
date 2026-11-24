@@ -4,7 +4,8 @@ import java.nio.file.Files
 import kotlin.test.*
 
 class FileAdmissionPersistenceTest {
-    @Test fun `a second instance over the same path is refused`() {
+    @Test
+    fun `a second instance over the same path is refused`() {
         val directory = Files.createTempDirectory("admission-owner-test")
         val path = directory.resolve("records")
         try {
@@ -16,7 +17,8 @@ class FileAdmissionPersistenceTest {
         }
     }
 
-    @Test fun `different literal paths to the same location are still recognized as one owner`() {
+    @Test
+    fun `different literal paths to the same location are still recognized as one owner`() {
         val directory = Files.createTempDirectory("admission-owner-test")
         val path = directory.resolve("records")
         try {
@@ -30,7 +32,8 @@ class FileAdmissionPersistenceTest {
         }
     }
 
-    @Test fun `distinct paths do not collide`() {
+    @Test
+    fun `distinct paths do not collide`() {
         val directory = Files.createTempDirectory("admission-owner-test")
         val a = directory.resolve("records-a")
         val b = directory.resolve("records-b")

@@ -7,6 +7,7 @@ plugins {
 }
 
 group = property("sdkGroup") as String
+
 version = property("sdkVersion") as String
 
 android {
@@ -18,23 +19,23 @@ android {
         buildConfigField("String", "SDK_VERSION", "\"$version\"")
     }
 
-    buildFeatures {
-        buildConfig = true
-    }
+    buildFeatures { buildConfig = true }
 
     compileOptions {
         sourceCompatibility = JavaVersion.toVersion(rootProject.ext["jvmTarget"] as String)
         targetCompatibility = JavaVersion.toVersion(rootProject.ext["jvmTarget"] as String)
     }
 
-    publishing {
-        singleVariant("release") {}
-    }
+    publishing { singleVariant("release") {} }
 }
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(rootProject.ext["jvmTarget"] as String))
+        jvmTarget.set(
+            org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(
+                rootProject.ext["jvmTarget"] as String
+            )
+        )
     }
 }
 
@@ -52,13 +53,17 @@ afterEvaluate {
 }
 
 dependencies {
+    implementation(project(":sdk:digest"))
     api(project(":sdk:shared"))
     api(project(":sdk:trust"))
     api(libs.light.toolmanager.server)
     api(libs.light.backup)
+    // the keyboard settings live in system settings, which the keyboard reads too
+    implementation(libs.light.keyboard)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.kotlinx.coroutines)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
     ksp(libs.androidx.room.compiler)

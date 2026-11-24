@@ -82,6 +82,43 @@ class ManifestGeneratorTest {
     }
 
     @Test
+    fun `without the alerts capability no alert receiver or permissions are emitted`() {
+        val xml = render(permissions = listOf("android.permission.POST_NOTIFICATIONS"))
+
+        assertFalse(xml.contains("LightAlertReceiver"))
+        assertFalse(xml.contains("BOOT_COMPLETED"))
+        assertFalse(xml.contains("EXACT_ALARM"))
+        assertFalse(xml.contains("USE_FULL_SCREEN_INTENT"))
+    }
+
+    @Test
+    fun `alerts capability declares the alert receiver`() {
+        val xml = render(capabilities = listOf(LightToolPolicy.ALERTS))
+
+        assertTrue(xml.contains("android:name=\"com.thelightphone.sdk.LightAlertReceiver\""), xml)
+        assertTrue(xml.contains("<action android:name=\"android.intent.action.BOOT_COMPLETED\" />"))
+        assertTrue(xml.contains("<action android:name=\"android.intent.action.MY_PACKAGE_REPLACED\" />"))
+        assertTrue(xml.contains("<action android:name=\"com.thelightphone.sdk.action.FIRE_ALERT\" />"))
+        assertTrue(xml.contains("android:exported=\"false\""))
+        assertTrue(xml.contains("android:name=\"com.thelightphone.sdk.CAPABILITY_ALERTS\""))
+        // LightOS brings the tool forward, so no full-screen intent app op is needed.
+        assertFalse(xml.contains("USE_FULL_SCREEN_INTENT"))
+    }
+
+    @Test
+    fun `alerts capability generates its permissions once`() {
+        val xml = render(
+            permissions = listOf("android.permission.POST_NOTIFICATIONS"),
+            capabilities = listOf(LightToolPolicy.ALERTS),
+        )
+
+        for (perm in LightToolPolicy.CAPABILITY_IMPLIED_PERMISSIONS.getValue(LightToolPolicy.ALERTS)) {
+            val tag = "<uses-permission android:name=\"$perm\" />"
+            assertTrue(xml.split(tag).size == 2, "expected exactly one $tag; got:\n$xml")
+        }
+    }
+
+    @Test
     fun `camera permission emits a matching uses-feature`() {
         // Without this, lint trips PermissionImpliesUnsupportedChromeOsHardware.
         val xml = render(permissions = listOf("android.permission.CAMERA"))
