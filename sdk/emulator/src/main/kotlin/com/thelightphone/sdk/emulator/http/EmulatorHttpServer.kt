@@ -6,6 +6,10 @@ import com.thelightphone.sdk.emulator.EmulatorLocationHelper
 import com.thelightphone.sdk.server.BuildConfig
 import com.thelightphone.sdk.server.LightPushDistributor
 import com.thelightphone.sdk.server.LightPushRegistry
+import com.thelightphone.sdk.trust.LightTrustStore
+import com.thelightphone.sdk.trust.SignedTrustBundle
+import com.thelightphone.sdk.trust.TrustBundleCandidateStaging
+import com.thelightphone.sdk.trust.TrustResult
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -37,9 +41,11 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.utils.io.jvm.javaio.copyTo
 import androidx.core.content.edit
 import java.io.File
+import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -50,7 +56,11 @@ import kotlinx.serialization.json.put
 /**
  * A place to dump otherwise cloud-based features.
  */
-class EmulatorHttpServer(private val context: Context) {
+class EmulatorHttpServer(
+    private val context: Context,
+    private val trustStore: LightTrustStore?,
+    private val trustBundleCandidateStaging: TrustBundleCandidateStaging,
+) {
 
     companion object {
         private const val TAG = "EmulatorHttpServer"
@@ -233,6 +243,68 @@ class EmulatorHttpServer(private val context: Context) {
                         status = HttpStatusCode.Conflict
                     )
                 }
+            }
+
+            // dev-only: push a signed trust bundle candidate straight into the emulator's
+            // LightTrustStore, bypassing any real transport (09b's HTTP path is not this).
+            post("/trust/bundle") {
+                val store = trustStore
+                if (store == null) {
+                    call.respondText("Trust store unavailable", status = HttpStatusCode.ServiceUnavailable)
+                    return@post
+                }
+                val body = try {
+                    Json.parseToJsonElement(call.receiveText()).jsonObject
+                } catch (e: Exception) {
+                    call.respondText("Malformed JSON body", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                val bytes = body["bytesBase64"]?.jsonPrimitive?.content
+                val signature = body["signatureBase64"]?.jsonPrimitive?.content
+                if (bytes == null || signature == null) {
+                    call.respondText("Missing bytesBase64 or signatureBase64", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                val candidate = try {
+                    SignedTrustBundle(Base64.getDecoder().decode(bytes), Base64.getDecoder().decode(signature))
+                } catch (e: IllegalArgumentException) {
+                    call.respondText("bytesBase64/signatureBase64 is not valid base64", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                trustBundleCandidateStaging.stage(candidate)
+                when (val result = trustBundleCandidateStaging.submit(store, candidate)) {
+                    is TrustResult.Success -> call.respondText(
+                        buildJsonObject { put("version", result.value.version) }.toString(),
+                        ContentType.Application.Json
+                    )
+                    is TrustResult.Failure -> call.respondText(
+                        buildJsonObject { put("error", result.reason.toString()) }.toString(),
+                        ContentType.Application.Json,
+                        HttpStatusCode.BadRequest
+                    )
+                }
+            }
+
+            get("/trust/state") {
+                val state = trustStore?.state()
+                if (state == null) {
+                    call.respondText(
+                        buildJsonObject { put("available", false) }.toString(),
+                        ContentType.Application.Json,
+                        HttpStatusCode.ServiceUnavailable
+                    )
+                    return@get
+                }
+                call.respondText(
+                    buildJsonObject {
+                        put("available", true)
+                        put("version", state.version)
+                        put("trustedStampCerts", buildJsonArray { state.trustedStampCerts.forEach { add(it) } })
+                        put("allowCount", state.bundle?.allow?.size ?: 0)
+                        put("blockCount", state.bundle?.block?.size ?: 0)
+                    }.toString(),
+                    ContentType.Application.Json
+                )
             }
 
             get("/oauth/authorize") {

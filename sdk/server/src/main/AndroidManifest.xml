@@ -26,6 +26,16 @@
         <receiver
             android:name=".installer.LightApkUninstallResultReceiver"
             android:exported="false" />
+        <!-- Dev-only: adb shell am broadcast runs as shell/root, which already holds
+             android.permission.DUMP; ordinary third-party apps do not. -->
+        <receiver
+            android:name=".installer.TrustDevReloadReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" >
+            <intent-filter>
+                <action android:name="com.thelightphone.sdk.server.trust.RELOAD_DEV_BUNDLE" />
+            </intent-filter>
+        </receiver>
         <service android:name=".toolmanager.ToolManagerLifecycleWrapperService"
             android:exported="false"/>
         <service
