@@ -53,6 +53,11 @@ object LightPushRegistry {
         return existing
     }
 
+    /** Deletes every registration for [packageName] (host resource cleanup on disable/purge). */
+    suspend fun removePackage(context: Context, packageName: String) {
+        db(context).pushRegistrations().deleteByPackage(packageName)
+    }
+
     /** Finds the local-channel registration for [packageName], if any. */
     suspend fun findLocal(context: Context, packageName: String): PushRegistration? =
         db(context).pushRegistrations()

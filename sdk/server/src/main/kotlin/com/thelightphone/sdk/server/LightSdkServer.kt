@@ -89,6 +89,35 @@ object LightSdkServer {
             ToolTrustRuntime.unavailable(reason)
         }
 
+    val clientAuthorizations = SdkClientAuthorizations()
+    val toolResources = ToolResourceRegistry()
+    @Volatile var toolEnforcement: ToolEnforcementController? = null
+    @Volatile var toolEnforcementRequired: Boolean = false
+
+    var onRevokeToolResources: (Context, String) -> Unit = { _, _ ->
+        error("Host resource cleanup is not configured")
+    }
+    var onRevokeToolUid: (Int) -> Unit = {}
+
+    fun notifyToolTrustChanged() { toolEnforcement?.requestReconciliation() }
+
+    /**
+     * Allow requires both the fresh decision and (once a [toolEnforcement] controller is
+     * running) its own permit - a client that reconciliation has disabled/purged must not
+     * regain access just because a later ad hoc evaluation says Allow again. Before any
+     * controller exists, [toolEnforcementRequired] decides whether to fail open (legacy/dev
+     * hosts) or closed (hosts that require enforcement to be running before granting access).
+     */
+    private fun enforcementAllows(result: ToolEvaluation, packageName: String): Boolean =
+        result.decision == LightInstallDecision.Allow && when {
+            toolEnforcement != null -> toolEnforcement?.permitsAccess(packageName) == true
+            !toolEnforcementRequired -> true
+            else -> {
+                val exception = (result.outcome as? ToolEvaluationOutcome.Bypass)?.exception
+                exception == AdmissionException.AllowAll || exception == AdmissionException.DeveloperHash
+            }
+        }
+
     private const val TAG = "LightSdkServer"
     const val SCREEN_OFF_FLAG = "SCREEN_OFF"
     const val TOOL_MANAGER_PATH_EXTRA = "TOOL_MANAGER_PATH"
@@ -115,7 +144,7 @@ object LightSdkServer {
 
     /** checks whether a (already installed) package is allowed at [clientFilterLevel] */
     fun isPackageAllowed(clientFilterLevel: ClientFilterLevel, packageMeta: ApkMetadata): Boolean {
-        return evaluateTool(clientFilterLevel, packageMeta).decision == LightInstallDecision.Allow
+        return enforcementAllows(evaluateTool(clientFilterLevel, packageMeta), packageMeta.packageName)
     }
 
     /**
@@ -128,8 +157,7 @@ object LightSdkServer {
         context: Context,
         callingPackage: String,
     ): Boolean {
-        return evaluateTool(clientFilterLevel, context, callingPackage).decision ==
-            LightInstallDecision.Allow
+        return enforcementAllows(evaluateTool(clientFilterLevel, context, callingPackage), callingPackage)
     }
 
     /**

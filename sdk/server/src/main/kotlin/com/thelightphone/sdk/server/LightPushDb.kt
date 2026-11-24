@@ -56,6 +56,9 @@ internal interface PushRegistrationDao {
     @Query("DELETE FROM push_registrations WHERE token = :token")
     suspend fun deleteByToken(token: String): Int
 
+    @Query("DELETE FROM push_registrations WHERE packageName = :packageName")
+    suspend fun deleteByPackage(packageName: String): Int
+
     @Query("SELECT * FROM push_registrations WHERE packageName = :packageName AND channel = :channel LIMIT 1")
     suspend fun findByPackageAndChannel(packageName: String, channel: String): PushRegistration?
 }
