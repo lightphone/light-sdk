@@ -14,6 +14,8 @@ We expect contributions to come in the form of GitHub [issues](https://github.co
 
 We expect _all_ modules in this repository to compile, and _all_ tests to pass for each PR. We will have an automated check that runs on GitHub, but to save time/resources, **please** check that this is true before opening your PR. For this repo, you can run `./gradlew check` in the root directory.
 
+Run `git config core.hooksPath .githooks` once per clone to enable a pre-commit hook that formats staged Kotlin files with [ktfmt](https://github.com/facebook/ktfmt) (via the [ktfmt-gradle](https://github.com/cortinico/ktfmt-gradle) plugin) before each commit. You can also format everything by hand with `./gradlew ktfmtFormat`.
+
 Types of issues we are excited to receive:
 * **Bug Reports** (something does not work as it is intended to)
   * Please include the commit on which you are experiencing the issue, a description, and detailed reproduction steps.

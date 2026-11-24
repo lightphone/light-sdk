@@ -1,6 +1,7 @@
 package com.thelightphone.plugin
 
 import com.android.build.api.dsl.ApplicationExtension
+import java.io.File
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -8,19 +9,20 @@ import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ExternalModuleDependency
 import org.gradle.api.artifacts.FileCollectionDependency
 import org.gradle.api.artifacts.ProjectDependency
-import java.io.File
 
 class LightSdkPlugin : Plugin<Project> {
 
     companion object {
         val SDK_MODULES = setOf("client", "shared", "ui", "server", "emulator")
 
-        val ALLOWED_DEPENDENCIES: Set<String> = readResourceLines("allowed-dependencies.txt").toSet()
+        val ALLOWED_DEPENDENCIES: Set<String> =
+            readResourceLines("allowed-dependencies.txt").toSet()
         val SDK_VERSION: String = readResourceLines("sdk-version.txt").single()
 
         internal fun readResourceLines(name: String): List<String> {
-            val stream = LightSdkPlugin::class.java.getResourceAsStream(name)
-                ?: error("Light SDK plugin resource missing: $name")
+            val stream =
+                LightSdkPlugin::class.java.getResourceAsStream(name)
+                    ?: error("Light SDK plugin resource missing: $name")
             return stream.bufferedReader().useLines { lines ->
                 lines.map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.toList()
             }
@@ -42,10 +44,13 @@ class LightSdkPlugin : Plugin<Project> {
         fun isTestConfig(name: String): Boolean = name.startsWith("test") || "Test" in name
 
         /**
-         * Builds the failure message, or null when there is nothing to report.
-         * The allowlist is only useful next to dependency violations.
+         * Builds the failure message, or null when there is nothing to report. The allowlist is
+         * only useful next to dependency violations.
          */
-        fun formatViolations(violations: List<String>, dependencyViolations: List<String>): String? {
+        fun formatViolations(
+            violations: List<String>,
+            dependencyViolations: List<String>,
+        ): String? {
             if (violations.isEmpty() && dependencyViolations.isEmpty()) return null
             return buildString {
                 appendLine("Light SDK: build configuration violations detected:")
@@ -59,12 +64,12 @@ class LightSdkPlugin : Plugin<Project> {
             }
         }
 
-        private val DYNAMIC_VERSION_MARKERS =listOf("+", "[", "]", "(", ")", ",")
+        private val DYNAMIC_VERSION_MARKERS = listOf("+", "[", "]", "(", ")", ",")
 
         /**
-         * Returns why [version] is not an exact version, or null if it is (or
-         * absent, e.g. supplied by a BOM). Dynamic versions resolve to
-         * different code over time, so the builder refuses them.
+         * Returns why [version] is not an exact version, or null if it is (or absent, e.g. supplied
+         * by a BOM). Dynamic versions resolve to different code over time, so the builder refuses
+         * them.
          */
         fun findVersionViolation(version: String?): String? {
             if (version.isNullOrEmpty()) return null
@@ -82,107 +87,136 @@ class LightSdkPlugin : Plugin<Project> {
             }
         }
 
-        val ALLOWED_PLUGINS = setOf(
-            "com.android.application",
-            "com.android.library",
-            "org.jetbrains.kotlin.android",
-            "org.jetbrains.kotlin.jvm",
-            "org.jetbrains.kotlin.plugin.compose",
-            "org.jetbrains.kotlin.plugin.serialization",
-            "com.google.devtools.ksp",
-            "com.thelightphone.light-sdk",
-        )
+        val ALLOWED_PLUGINS =
+            setOf(
+                "com.android.application",
+                "com.android.library",
+                "org.jetbrains.kotlin.android",
+                "org.jetbrains.kotlin.jvm",
+                "org.jetbrains.kotlin.plugin.compose",
+                "org.jetbrains.kotlin.plugin.serialization",
+                "com.google.devtools.ksp",
+                "com.thelightphone.light-sdk",
+            )
 
-        val INTERNAL_CONFIG_PREFIXES = listOf(
-            "_internal-",
-            "androidJdk",
-            "composeMappingProducer",
-            "kotlin-extension",
-            "kotlinBuildTools",
-            "kotlinCompiler",
-            "kotlinKlib",
-            "kotlinNative",
-            "kotlinInternalAbi",
-            "kspPlugin",
-            "lintChecks",
-            "lintPublish",
-        )
+        val INTERNAL_CONFIG_PREFIXES =
+            listOf(
+                "_internal-",
+                "androidJdk",
+                "composeMappingProducer",
+                "kotlin-extension",
+                "kotlinBuildTools",
+                "kotlinCompiler",
+                "kotlinKlib",
+                "kotlinNative",
+                "kotlinInternalAbi",
+                "kspPlugin",
+                "ktfmt",
+                "lintChecks",
+                "lintPublish",
+            )
 
-        val ALLOWED_KSP_PROCESSORS = setOf(
-            "androidx.room:room-compiler",
-        )
+        val ALLOWED_KSP_PROCESSORS =
+            setOf(
+                "androidx.room:room-compiler",
+            )
 
-        val BLOCKED_IMPORTS = listOf(
-            "android.app.",
-            "android.content.Context",
-            "android.content.Intent",
-            "android.content.ComponentName",
-            "android.content.BroadcastReceiver",
-            "android.content.ContentProvider",
-            "android.content.ServiceConnection",
-            "androidx.compose.ui.platform.LocalContext",
-            "androidx.compose.ui.platform.LocalView",
-            "androidx.compose.ui.platform.LocalLifecycleOwner",
-            "androidx.lifecycle.compose.LocalLifecycleOwner",
-            "androidx.activity.",
-            "androidx.appcompat.",
-            "java.lang.reflect.",
-            "java.lang.invoke.",
-            "kotlin.reflect.",
-        )
+        val BLOCKED_IMPORTS =
+            listOf(
+                "android.app.",
+                "android.content.Context",
+                "android.content.Intent",
+                "android.content.ComponentName",
+                "android.content.BroadcastReceiver",
+                "android.content.ContentProvider",
+                "android.content.ServiceConnection",
+                "androidx.compose.ui.platform.LocalContext",
+                "androidx.compose.ui.platform.LocalView",
+                "androidx.compose.ui.platform.LocalLifecycleOwner",
+                "androidx.lifecycle.compose.LocalLifecycleOwner",
+                "androidx.activity.",
+                "androidx.appcompat.",
+                "java.lang.reflect.",
+                "java.lang.invoke.",
+                "kotlin.reflect.",
+            )
 
-        val BLOCKED_CODE_PATTERNS = listOf(
-            Regex("""\bLocalContext\b""") to "LocalContext is not allowed — use LightScreen APIs instead",
-            Regex("""\bLocalView\b""") to "LocalView is not allowed — use LightScreen APIs instead",
-            Regex("""\bLocalActivity\b""") to "LocalActivity is not allowed — use LightScreen APIs instead",
-            Regex("""\bLocalLifecycleOwner\b""") to "LocalLifecycleOwner is not allowed — use LightScreen APIs instead",
-            Regex("""\bas\??\s+(?:\w+\.)*\w*Activity\b""") to "Casting to Activity is not allowed",
-            Regex("""\bas\??\s+(?:\w+\.)*(?:Context|ContextWrapper|ContextThemeWrapper|Application|Service|ContentProvider|BroadcastReceiver)\b""") to "Casting to Android framework type is not allowed",
-            Regex("""\bstartActivity\s*\(""") to "startActivity() is not allowed — use LightScreen.navigateTo() instead",
-            Regex("""\bstartService\s*\(""") to "startService() is not allowed",
-            Regex("""\bbindService\s*\(""") to "bindService() is not allowed",
-            Regex("""\bregisterReceiver\s*\(""") to "registerReceiver() is not allowed",
-            Regex("""\bgetSystemService\s*\(""") to "getSystemService() is not allowed",
-            Regex("""\bcontentResolver\b""") to "contentResolver access is not allowed",
-            Regex("""\bgetBaseContext\s*\(""") to "getBaseContext() is not allowed",
-            Regex("""\battachBaseContext\s*\(""") to "attachBaseContext() is not allowed",
-            Regex("""\bcreatePackageContext\s*\(""") to "createPackageContext() is not allowed",
-            Regex("""\bcreateConfigurationContext\s*\(""") to "createConfigurationContext() is not allowed",
-            Regex("""\bcreateDeviceProtectedStorageContext\s*\(""") to "createDeviceProtectedStorageContext() is not allowed",
-            Regex("""\bcreateContextForSplit\s*\(""") to "createContextForSplit() is not allowed",
-            Regex("""\bcreateAttributionContext\s*\(""") to "createAttributionContext() is not allowed",
-            Regex("""\bcreateWindowContext\s*\(""") to "createWindowContext() is not allowed",
-            Regex("""\bcreateDisplayContext\s*\(""") to "createDisplayContext() is not allowed",
-            Regex("""\b\.javaClass\b""") to "Reflection is not allowed",
-            Regex("""\b\.java\s*\.\s*\w""") to "Reflection is not allowed",
-            Regex("""\bClass\s*\.\s*forName\s*\(""") to "Reflection is not allowed",
-            Regex("""\b\.getDeclaredMethod\s*\(""") to "Reflection is not allowed",
-            Regex("""\b\.getMethod\s*\(""") to "Reflection is not allowed",
-            Regex("""\b\.getDeclaredField\s*\(""") to "Reflection is not allowed",
-            Regex("""\b\.getField\s*\(""") to "Reflection is not allowed",
-            Regex("""\bMethodHandles\b""") to "java.lang.invoke.MethodHandles is not allowed",
-        )
+        val BLOCKED_CODE_PATTERNS =
+            listOf(
+                Regex("""\bLocalContext\b""") to
+                    "LocalContext is not allowed — use LightScreen APIs instead",
+                Regex("""\bLocalView\b""") to
+                    "LocalView is not allowed — use LightScreen APIs instead",
+                Regex("""\bLocalActivity\b""") to
+                    "LocalActivity is not allowed — use LightScreen APIs instead",
+                Regex("""\bLocalLifecycleOwner\b""") to
+                    "LocalLifecycleOwner is not allowed — use LightScreen APIs instead",
+                Regex("""\bas\??\s+(?:\w+\.)*\w*Activity\b""") to
+                    "Casting to Activity is not allowed",
+                Regex(
+                    """\bas\??\s+(?:\w+\.)*(?:Context|ContextWrapper|ContextThemeWrapper|Application|Service|ContentProvider|BroadcastReceiver)\b""",
+                ) to "Casting to Android framework type is not allowed",
+                Regex("""\bstartActivity\s*\(""") to
+                    "startActivity() is not allowed — use LightScreen.navigateTo() instead",
+                Regex("""\bstartService\s*\(""") to "startService() is not allowed",
+                Regex("""\bbindService\s*\(""") to "bindService() is not allowed",
+                Regex("""\bregisterReceiver\s*\(""") to "registerReceiver() is not allowed",
+                Regex("""\bgetSystemService\s*\(""") to "getSystemService() is not allowed",
+                Regex("""\bcontentResolver\b""") to "contentResolver access is not allowed",
+                Regex("""\bgetBaseContext\s*\(""") to "getBaseContext() is not allowed",
+                Regex("""\battachBaseContext\s*\(""") to "attachBaseContext() is not allowed",
+                Regex("""\bcreatePackageContext\s*\(""") to "createPackageContext() is not allowed",
+                Regex("""\bcreateConfigurationContext\s*\(""") to
+                    "createConfigurationContext() is not allowed",
+                Regex("""\bcreateDeviceProtectedStorageContext\s*\(""") to
+                    "createDeviceProtectedStorageContext() is not allowed",
+                Regex("""\bcreateContextForSplit\s*\(""") to
+                    "createContextForSplit() is not allowed",
+                Regex("""\bcreateAttributionContext\s*\(""") to
+                    "createAttributionContext() is not allowed",
+                Regex("""\bcreateWindowContext\s*\(""") to "createWindowContext() is not allowed",
+                Regex("""\bcreateDisplayContext\s*\(""") to "createDisplayContext() is not allowed",
+                Regex("""\b\.javaClass\b""") to "Reflection is not allowed",
+                Regex("""\b\.java\s*\.\s*\w""") to "Reflection is not allowed",
+                Regex("""\bClass\s*\.\s*forName\s*\(""") to "Reflection is not allowed",
+                Regex("""\b\.getDeclaredMethod\s*\(""") to "Reflection is not allowed",
+                Regex("""\b\.getMethod\s*\(""") to "Reflection is not allowed",
+                Regex("""\b\.getDeclaredField\s*\(""") to "Reflection is not allowed",
+                Regex("""\b\.getField\s*\(""") to "Reflection is not allowed",
+                Regex("""\bMethodHandles\b""") to "java.lang.invoke.MethodHandles is not allowed",
+            )
 
         /** Build-script patterns banned everywhere (SDK modules + consumer apps). */
-        val UNIVERSAL_BUILD_SCRIPT_PATTERNS = listOf(
-            Regex("""\bbuildscript\s*\{""") to "buildscript {} block not allowed",
-            Regex("""\bresolutionStrategy\b""") to "resolutionStrategy not allowed",
-            Regex("""\bdependencySubstitution\b""") to "dependencySubstitution not allowed",
-            Regex("""\bapply\s*\(\s*plugin""") to "apply(plugin = ...) not allowed — use the plugins {} block",
-            Regex("""\bapply\s*\(\s*from""") to "apply(from = ...) not allowed — external scripts are not permitted",
-            Regex("""\bapply\s*<""") to "apply<...>() not allowed — use the plugins {} block",
-            Regex("""\bpluginManager\s*\.\s*apply\b""") to "pluginManager.apply() not allowed — use the plugins {} block",
-            Regex("""(?<![.\w])apply\s*\{""") to "apply {} block not allowed — use the plugins {} block",
-            Regex("""\bsrcDirs?\s*\(""") to "custom source directories (srcDir/srcDirs) are not allowed",
-        )
+        val UNIVERSAL_BUILD_SCRIPT_PATTERNS =
+            listOf(
+                Regex("""\bbuildscript\s*\{""") to "buildscript {} block not allowed",
+                Regex("""\bresolutionStrategy\b""") to "resolutionStrategy not allowed",
+                Regex("""\bdependencySubstitution\b""") to "dependencySubstitution not allowed",
+                Regex("""\bapply\s*\(\s*plugin""") to
+                    "apply(plugin = ...) not allowed — use the plugins {} block",
+                Regex("""\bapply\s*\(\s*from""") to
+                    "apply(from = ...) not allowed — external scripts are not permitted",
+                Regex("""\bapply\s*<""") to "apply<...>() not allowed — use the plugins {} block",
+                Regex("""\bpluginManager\s*\.\s*apply\b""") to
+                    "pluginManager.apply() not allowed — use the plugins {} block",
+                Regex("""(?<![.\w])apply\s*\{""") to
+                    "apply {} block not allowed — use the plugins {} block",
+                Regex("""\bsrcDirs?\s*\(""") to
+                    "custom source directories (srcDir/srcDirs) are not allowed",
+            )
 
         /** Build-script patterns banned only on consumer (tool) modules. */
-        val CONSUMER_BUILD_SCRIPT_PATTERNS = listOf(
-            Regex("""\bapplicationId\s*=""") to "applicationId must be declared in lighttool.toml, not the build script",
-            Regex("""\bversionCode\s*=""") to "versionCode must be declared in lighttool.toml, not the build script",
-            Regex("""\bversionName\s*=""") to "versionName must be declared in lighttool.toml, not the build script",
-            Regex("""\bnamespace\s*=""") to "namespace is derived from tool.id in lighttool.toml and may not be set in the build script",
-        )
+        val CONSUMER_BUILD_SCRIPT_PATTERNS =
+            listOf(
+                Regex("""\bapplicationId\s*=""") to
+                    "applicationId must be declared in lighttool.toml, not the build script",
+                Regex("""\bversionCode\s*=""") to
+                    "versionCode must be declared in lighttool.toml, not the build script",
+                Regex("""\bversionName\s*=""") to
+                    "versionName must be declared in lighttool.toml, not the build script",
+                Regex("""\bnamespace\s*=""") to
+                    "namespace is derived from tool.id in lighttool.toml and may not be set in the build script",
+            )
 
         private val PLUGIN_ID_PATTERN = Regex("""id\s*\(\s*["']([^"']+)["']\s*\)""")
 
@@ -191,9 +225,10 @@ class LightSdkPlugin : Plugin<Project> {
          * Plugin entry point and by tests.
          */
         fun findBuildScriptViolations(content: String, isConsumer: Boolean): List<String> {
-            val stripped = content
-                .replace(Regex("//.*"), "")
-                .replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), "")
+            val stripped =
+                content
+                    .replace(Regex("//.*"), "")
+                    .replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), "")
 
             val violations = mutableListOf<String>()
 
@@ -216,8 +251,8 @@ class LightSdkPlugin : Plugin<Project> {
         }
 
         /**
-         * Pure-function form of the per-line source check. Returns one
-         * violation message per problem found in the line.
+         * Pure-function form of the per-line source check. Returns one violation message per
+         * problem found in the line.
          */
         fun findSourceLineViolations(line: String): List<String> {
             val violations = mutableListOf<String>()
@@ -232,7 +267,8 @@ class LightSdkPlugin : Plugin<Project> {
                     }
                     return@forEach
                 }
-                if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return@forEach
+                if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*"))
+                    return@forEach
                 BLOCKED_CODE_PATTERNS.forEach { (regex, msg) ->
                     if (regex.containsMatchIn(statement)) {
                         violations.add(msg)
@@ -242,16 +278,15 @@ class LightSdkPlugin : Plugin<Project> {
             return violations
         }
 
-        /**
-         * Returns one violation message per `.java` file under the given src dir.
-         */
+        /** Returns one violation message per `.java` file under the given src dir. */
         fun findJavaSourceViolations(srcDir: File, projectDir: File): List<String> {
             if (!srcDir.exists()) return emptyList()
-            return srcDir.walkTopDown()
+            return srcDir
+                .walkTopDown()
                 .filter { it.isFile && it.extension == "java" }
                 .map {
                     "${it.relativeTo(projectDir).path}: Java source files are not allowed " +
-                            "— Light SDK tools must be written in Kotlin"
+                        "— Light SDK tools must be written in Kotlin"
                 }
                 .toList()
         }
@@ -279,36 +314,35 @@ class LightSdkPlugin : Plugin<Project> {
     }
 
     /**
-     * Reads `lighttool.toml`, configures AGP's `defaultConfig` with the
-     * declared metadata, and points `sourceSets.main.manifest.srcFile` at a
-     * generated manifest. After this runs the dev does not need (and is not
-     * allowed) to provide their own AndroidManifest.xml or applicationId.
+     * Reads `lighttool.toml`, configures AGP's `defaultConfig` with the declared metadata, and
+     * points `sourceSets.main.manifest.srcFile` at a generated manifest. After this runs the dev
+     * does not need (and is not allowed) to provide their own AndroidManifest.xml or applicationId.
      *
-     * When `-DlightSdk.unsigned=true` is passed (the server-side builder
-     * does this), the variant API is used to disable APK signing for every
-     * scheme so the artifact comes out unsigned and ready for the signing
-     * service to apply the per-tool key. Locally devs run without the flag
+     * When `-DlightSdk.unsigned=true` is passed (the server-side builder does this), the variant
+     * API is used to disable APK signing for every scheme so the artifact comes out unsigned and
+     * ready for the signing service to apply the per-tool key. Locally devs run without the flag
      * and the dev keystore signs as normal.
      *
-     * `-DlightSdk.allowAltServerPackage=true` lets `tool.serverPackage` be
-     * something other than com.lightos, e.g. the emulator package. The
-     * builder never passes it.
+     * `-DlightSdk.allowAltServerPackage=true` lets `tool.serverPackage` be something other than
+     * com.lightos, e.g. the emulator package. The builder never passes it.
      */
     private fun applyToolMetadata(project: Project) {
         val tomlFile = File(project.projectDir, LightToolMetadata.FILE_NAME)
         val allowAltServerPackage = System.getProperty("lightSdk.allowAltServerPackage") == "true"
-        val metadata = try {
-            LightToolMetadata.parse(tomlFile, allowAltServerPackage)
-        } catch (e: LightToolMetadataException) {
-            throw GradleException("Light SDK: ${e.message}")
-        }
+        val metadata =
+            try {
+                LightToolMetadata.parse(tomlFile, allowAltServerPackage)
+            } catch (e: LightToolMetadataException) {
+                throw GradleException("Light SDK: ${e.message}")
+            }
 
-        // A warning, not an error: the bundled examples and Light's core tools use these namespaces.
+        // A warning, not an error: the bundled examples and Light's core tools use these
+        // namespaces.
         if (LightToolPolicy.isReservedToolId(metadata.toolId)) {
             project.logger.warn(
                 "Light SDK: tool.id '${metadata.toolId}' is in a namespace reserved for Light " +
-                        "(${LightToolPolicy.RESERVED_TOOL_ID_NAMESPACES.joinToString { "*.$it.*" }}). " +
-                        "Change it in lighttool.toml (e.g. com.example.mytool) before registering your tool."
+                    "(${LightToolPolicy.RESERVED_TOOL_ID_NAMESPACES.joinToString { "*.$it.*" }}). " +
+                    "Change it in lighttool.toml (e.g. com.example.mytool) before registering your tool.",
             )
         }
 
@@ -318,7 +352,8 @@ class LightSdkPlugin : Plugin<Project> {
 
         // Generated manifest path. Anchored under build/ so a clean rebuild
         // always regenerates from current metadata.
-        val generatedManifestDir = File(project.layout.buildDirectory.asFile.get(), "generated/light-sdk")
+        val generatedManifestDir =
+            File(project.layout.buildDirectory.asFile.get(), "generated/light-sdk")
         val generatedManifest = File(generatedManifestDir, "AndroidManifest.xml")
 
         val app = project.extensions.getByType(ApplicationExtension::class.java)
@@ -335,9 +370,10 @@ class LightSdkPlugin : Plugin<Project> {
         generatedManifestDir.mkdirs()
         generatedManifest.writeText(ManifestGenerator.render(metadata))
 
-        val ac = project.extensions.getByType(
-            com.android.build.api.variant.ApplicationAndroidComponentsExtension::class.java
-        )
+        val ac =
+            project.extensions.getByType(
+                com.android.build.api.variant.ApplicationAndroidComponentsExtension::class.java,
+            )
         // finalizeDsl runs after the dev's build script body has evaluated
         // but before AGP creates variants from the DSL, so these settings win
         // over anything the script set. Doing this in afterEvaluate is too
@@ -353,7 +389,7 @@ class LightSdkPlugin : Plugin<Project> {
             if (declared != null && declared.toString() != SDK_VERSION) {
                 project.logger.warn(
                     "Light SDK: overriding manifestPlaceholders[\"sdkVersion\"] = $declared " +
-                            "with the SDK version this tool compiles against ($SDK_VERSION)"
+                        "with the SDK version this tool compiles against ($SDK_VERSION)",
                 )
             }
             placeholders["sdkVersion"] = SDK_VERSION
@@ -361,9 +397,12 @@ class LightSdkPlugin : Plugin<Project> {
             // The server-side builder passes the ABIs Light devices run
             // (-DlightSdk.abiFilters=arm64-v8a). Local builds keep every ABI
             // so x86_64 emulators still work.
-            val abiFilters = System.getProperty("lightSdk.abiFilters")
-                ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
-                .orEmpty()
+            val abiFilters =
+                System.getProperty("lightSdk.abiFilters")
+                    ?.split(',')
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    .orEmpty()
             if (abiFilters.isNotEmpty()) {
                 ext.defaultConfig.ndk.abiFilters.clear()
                 ext.defaultConfig.ndk.abiFilters.addAll(abiFilters)
@@ -376,7 +415,7 @@ class LightSdkPlugin : Plugin<Project> {
                 ext.buildTypes.configureEach { bt ->
                     if (bt.signingConfig != null) {
                         project.logger.info(
-                            "Light SDK: clearing signingConfig on buildType ${bt.name}"
+                            "Light SDK: clearing signingConfig on buildType ${bt.name}",
                         )
                         bt.signingConfig = null
                     }
@@ -397,7 +436,9 @@ class LightSdkPlugin : Plugin<Project> {
             validateNoJavaSources(project, violations)
         }
 
-        formatViolations(violations, dependencyViolations.lines())?.let { throw GradleException(it) }
+        formatViolations(violations, dependencyViolations.lines())?.let {
+            throw GradleException(it)
+        }
 
         registerResolvedDependencyCheck(project)
     }
@@ -416,28 +457,27 @@ class LightSdkPlugin : Plugin<Project> {
     }
 
     /**
-     * The plugin generates the AndroidManifest.xml from lighttool.toml. A
-     * hand-written src/main/AndroidManifest.xml would be silently overridden,
-     * so reject it loudly instead of letting devs think their edits matter.
+     * The plugin generates the AndroidManifest.xml from lighttool.toml. A hand-written
+     * src/main/AndroidManifest.xml would be silently overridden, so reject it loudly instead of
+     * letting devs think their edits matter.
      */
     private fun validateNoUserManifest(project: Project, violations: MutableList<String>) {
         val manifest = project.projectDir.resolve("src/main/AndroidManifest.xml")
         if (manifest.isFile) {
             violations.add(
                 "  src/main/AndroidManifest.xml is not allowed — declare your tool's" +
-                        " metadata and permissions in lighttool.toml"
+                    " metadata and permissions in lighttool.toml",
             )
         }
     }
 
     private fun validateNoJavaSources(project: Project, violations: MutableList<String>) {
-        findJavaSourceViolations(project.projectDir.resolve("src"), project.projectDir)
-            .forEach { violations.add("  $it") }
+        findJavaSourceViolations(project.projectDir.resolve("src"), project.projectDir).forEach {
+            violations.add("  $it")
+        }
     }
 
-    /**
-     * Scan user source files for blocked imports and code patterns.
-     */
+    /** Scan user source files for blocked imports and code patterns. */
     private fun validateSourceFiles(project: Project, violations: MutableList<String>) {
         // Only scan consumer projects, not the SDK itself
         if (project.name in SDK_MODULES) return
@@ -445,7 +485,8 @@ class LightSdkPlugin : Plugin<Project> {
         val srcDirs = project.projectDir.resolve("src")
         if (!srcDirs.exists()) return
 
-        srcDirs.walkTopDown()
+        srcDirs
+            .walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .forEach { file ->
                 val relativePath = file.relativeTo(project.projectDir).path
@@ -462,28 +503,29 @@ class LightSdkPlugin : Plugin<Project> {
     }
 
     /**
-     * KSP exposes one declarable + many variant configurations (ksp,
-     * kspDebug, kspRelease, kspAndroidTest, ...). All of them feed
-     * generated Kotlin into the APK and need the processor allowlist.
-     * KSP's own internal classpath uses `kspPlugin*` and is excluded by
+     * KSP exposes one declarable + many variant configurations (ksp, kspDebug, kspRelease,
+     * kspAndroidTest, ...). All of them feed generated Kotlin into the APK and need the processor
+     * allowlist. KSP's own internal classpath uses `kspPlugin*` and is excluded by
      * [INTERNAL_CONFIG_PREFIXES].
      */
     private fun isKspConfig(name: String): Boolean = name.startsWith("ksp")
 
     /**
-     * Returns the on-disk location of this plugin jar (or classes dir during
-     * dev/test). Used to allowlist the file dep we self-add to `ksp(...)`.
+     * Returns the on-disk location of this plugin jar (or classes dir during dev/test). Used to
+     * allowlist the file dep we self-add to `ksp(...)`.
      */
-    private fun ownPluginJar(): File? = try {
-        this::class.java.protectionDomain?.codeSource?.location
-            ?.let { File(it.toURI()).canonicalFile }
-    } catch (_: Throwable) {
-        null
-    }
+    private fun ownPluginJar(): File? =
+        try {
+            this::class.java.protectionDomain?.codeSource?.location?.let {
+                File(it.toURI()).canonicalFile
+            }
+        } catch (_: Throwable) {
+            null
+        }
 
     /**
-     * Check all declarable configurations for disallowed dependencies.
-     * Catches: direct disallowed deps, file/jar deps, custom configurations.
+     * Check all declarable configurations for disallowed dependencies. Catches: direct disallowed
+     * deps, file/jar deps, custom configurations.
      */
     private fun validateDeclaredDependencies(project: Project, violations: DependencyViolations) {
         val pluginJar = ownPluginJar()
@@ -497,12 +539,17 @@ class LightSdkPlugin : Plugin<Project> {
                         // We self-add the plugin jar to `ksp` for the registry
                         // processor. Allow exactly that file; reject anything
                         // else, since file deps bypass coordinate validation.
-                        if (isKsp && pluginJar != null &&
-                            dep.files.files.all { it.canonicalFile == pluginJar }
+                        if (
+                            isKsp &&
+                                pluginJar != null &&
+                                dep.files.files.all { it.canonicalFile == pluginJar }
                         ) {
                             return@forEach
                         }
-                        violations.add(config.name, "file dependency not allowed (${dep.files.files.joinToString { it.name }})")
+                        violations.add(
+                            config.name,
+                            "file dependency not allowed (${dep.files.files.joinToString { it.name }})",
+                        )
                         return@forEach
                     }
 
@@ -511,11 +558,17 @@ class LightSdkPlugin : Plugin<Project> {
                     val group = dep.group ?: return@forEach
                     if (isKsp) {
                         if (!isAllowedKspProcessor(group, dep.name)) {
-                            violations.add(config.name, "${group}:${dep.name}:${dep.version ?: "?"} (KSP processor not allowed)")
+                            violations.add(
+                                config.name,
+                                "${group}:${dep.name}:${dep.version ?: "?"} (KSP processor not allowed)",
+                            )
                         }
                     } else {
                         if (!isAllowedCoordinate(group, dep.name)) {
-                            violations.add(config.name, "${group}:${dep.name}:${dep.version ?: "?"}")
+                            violations.add(
+                                config.name,
+                                "${group}:${dep.name}:${dep.version ?: "?"}",
+                            )
                         }
                     }
 
@@ -534,19 +587,24 @@ class LightSdkPlugin : Plugin<Project> {
         }
 
     /**
-     * Validate resolved dependency graphs to detect substitution attacks.
-     * Runs as a task so resolution happens at execution time, not while
-     * configuring. Test configurations never reach the APK and are skipped.
+     * Validate resolved dependency graphs to detect substitution attacks. Runs as a task so
+     * resolution happens at execution time, not while configuring. Test configurations never reach
+     * the APK and are skipped.
      */
     private fun registerResolvedDependencyCheck(project: Project) {
-        val task = project.tasks.register(
-            "lightSdkValidateDependencies",
-            ValidateResolvedDependenciesTask::class.java,
-        ) { task ->
-            project.configurations
-                .filter { it.isCanBeResolved && !isInternalConfig(it.name) && !isTestConfig(it.name) }
-                .forEach { task.resolutionRoots[it.name] = it.incoming.resolutionResult.rootComponent }
-        }
+        val task =
+            project.tasks.register(
+                "lightSdkValidateDependencies",
+                ValidateResolvedDependenciesTask::class.java,
+            ) { task ->
+                project.configurations
+                    .filter {
+                        it.isCanBeResolved && !isInternalConfig(it.name) && !isTestConfig(it.name)
+                    }
+                    .forEach {
+                        task.resolutionRoots[it.name] = it.incoming.resolutionResult.rootComponent
+                    }
+            }
         project.tasks.matching { it.name == "preBuild" }.configureEach { it.dependsOn(task) }
     }
 }

@@ -15,6 +15,7 @@ bouncycastle = "1.86"
 sol4k = "0.7.0"
 zxing = "3.5.4"
 toolmanager = "0.0.18"
+ktfmt = "0.28.0"
 
 [libraries]
 unifiedpush-connector = { module = "org.unifiedpush.android:connector", version.ref = "connector" }
@@ -84,3 +85,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 light-sdk = { id = "com.thelightphone.light-sdk" }
+ktfmt = { id = "com.ncorti.ktfmt.gradle", version.ref = "ktfmt" }

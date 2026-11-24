@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ksp) apply false
+    alias(libs.plugins.ktfmt) apply false
 }
 
 group = "com.thelightphone"
@@ -23,6 +24,15 @@ val localProperties = java.util.Properties().apply {
 subprojects {
     tasks.matching { it.name == "check" }.configureEach {
         dependsOn(gradle.includedBuild("plugin").task(":check"))
+    }
+
+    plugins.withId("org.jetbrains.kotlin.jvm") { apply(plugin = "com.ncorti.ktfmt.gradle") }
+    plugins.withId("org.jetbrains.kotlin.android") { apply(plugin = "com.ncorti.ktfmt.gradle") }
+
+    plugins.withId("com.ncorti.ktfmt.gradle") {
+        extensions.configure<com.ncorti.ktfmt.gradle.KtfmtExtension> {
+            kotlinLangStyle()
+        }
     }
 
     afterEvaluate {
