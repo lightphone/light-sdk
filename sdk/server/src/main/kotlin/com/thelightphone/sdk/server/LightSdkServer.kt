@@ -204,15 +204,17 @@ object LightSdkServer {
 
     var provideTrustBundleCandidateStaging: (Context) -> TrustBundleCandidateStaging = {
         TrustBundleCandidateStaging(
-            FileTrustPersistence(File(it.applicationContext.filesDir, "trust/bundle-candidate.dat").toPath())
+            FileTrustPersistence(
+                File(it.applicationContext.filesDir, "trust/bundle-candidate.dat").toPath()
+            )
         )
     }
 
     /**
      * No pins configured: every bundle fails closed (`TrustFailure.InvalidKey`) rather than
-     * crashing, until the host injects the real pinned bundle-signing key(s). Unlike the
-     * stamp cert pin below, this key has not been generated yet — it is still an open
-     * decision, not merely an unwired one.
+     * crashing, until the host injects the real pinned bundle-signing key(s). Unlike the stamp cert
+     * pin below, this key has not been generated yet — it is still an open decision, not merely an
+     * unwired one.
      */
     var provideTrustBundleVerifier: (Context) -> LightTrustBundleVerifier = {
         LightTrustBundleVerifier(emptyList())
@@ -229,11 +231,11 @@ object LightSdkServer {
 
     /**
      * Call this exactly once per process and cache the result (e.g. behind `by lazy`).
-     * [LightTrustStore] tracks the last accepted version in memory; two instances opened
-     * against the same persistence backend could each accept a bundle the other doesn't
-     * know about, and a version check against stale in-memory state would then wrongly
-     * allow a replay. This factory shape only exists so a host can override the verifier/
-     * pins/image-bundle inputs; it is not safe to invoke repeatedly as a lookup.
+     * [LightTrustStore] tracks the last accepted version in memory; two instances opened against
+     * the same persistence backend could each accept a bundle the other doesn't know about, and a
+     * version check against stale in-memory state would then wrongly allow a replay. This factory
+     * shape only exists so a host can override the verifier/ pins/image-bundle inputs; it is not
+     * safe to invoke repeatedly as a lookup.
      */
     var provideLightTrustStore: (Context) -> TrustResult<LightTrustStore> = {
         LightTrustStore.open(
@@ -245,9 +247,9 @@ object LightSdkServer {
     }
 
     /**
-     * The host's single opened [LightTrustStore], if [provideLightTrustStore] succeeded.
-     * Set once at startup by whoever calls [provideLightTrustStore]; consumers (dev reload,
-     * HTTP routes) that need the store read this rather than opening their own.
+     * The host's single opened [LightTrustStore], if [provideLightTrustStore] succeeded. Set once
+     * at startup by whoever calls [provideLightTrustStore]; consumers (dev reload, HTTP routes)
+     * that need the store read this rather than opening their own.
      */
     var currentTrustStore: LightTrustStore? = null
 

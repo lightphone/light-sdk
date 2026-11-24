@@ -16,18 +16,26 @@ import java.security.MessageDigest
 
 /**
  * Dedicated private file; never point this backend at an admission or stamp cache file.
- * [LightTrustStore] treats any read/write failure here (including a thrown exception from
- * corrupt data, surfaced below rather than silently dropped) as trust-unavailable, not as
- * first boot or an empty bundle.
+ * [LightTrustStore] treats any read/write failure here (including a thrown exception from corrupt
+ * data, surfaced below rather than silently dropped) as trust-unavailable, not as first boot or an
+ * empty bundle.
  */
 class FileTrustPersistence(private val path: Path) : TrustPersistence {
     override fun read(): SignedTrustBundle? {
-        val bytes = try { Files.readAllBytes(path) } catch (_: java.nio.file.NoSuchFileException) {
-            return null
-        }
+        val bytes =
+            try {
+                Files.readAllBytes(path)
+            } catch (_: java.nio.file.NoSuchFileException) {
+                return null
+            }
         require(bytes.size >= 40) { "Truncated trust bundle data" }
         val payload = bytes.copyOfRange(32, bytes.size)
-        require(MessageDigest.isEqual(bytes.copyOfRange(0, 32), MessageDigest.getInstance("SHA-256").digest(payload))) {
+        require(
+            MessageDigest.isEqual(
+                bytes.copyOfRange(0, 32),
+                MessageDigest.getInstance("SHA-256").digest(payload),
+            )
+        ) {
             "Corrupt trust bundle data"
         }
         return DataInputStream(ByteArrayInputStream(payload)).use { input ->
@@ -42,15 +50,19 @@ class FileTrustPersistence(private val path: Path) : TrustPersistence {
     }
 
     override fun write(bundle: SignedTrustBundle) {
-        val bytes = ByteArrayOutputStream().also { buffer ->
-            DataOutputStream(buffer).use { output ->
-                output.writeInt(0x4c414433)
-                output.writeInt(bundle.bytes.size)
-                output.write(bundle.bytes)
-                output.writeInt(bundle.signature.size)
-                output.write(bundle.signature)
-            }
-        }.toByteArray().let { payload -> MessageDigest.getInstance("SHA-256").digest(payload) + payload }
+        val bytes =
+            ByteArrayOutputStream()
+                .also { buffer ->
+                    DataOutputStream(buffer).use { output ->
+                        output.writeInt(0x4c414433)
+                        output.writeInt(bundle.bytes.size)
+                        output.write(bundle.bytes)
+                        output.writeInt(bundle.signature.size)
+                        output.write(bundle.signature)
+                    }
+                }
+                .toByteArray()
+                .let { payload -> MessageDigest.getInstance("SHA-256").digest(payload) + payload }
         val parent = path.toAbsolutePath().parent
         Files.createDirectories(parent)
         val temporary = Files.createTempFile(parent, ".trust-bundle-", ".tmp")

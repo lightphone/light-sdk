@@ -4,15 +4,18 @@ import java.nio.file.Files
 import kotlin.test.*
 
 class FileTrustPersistenceTest {
-    @Test fun `missing file reads as no bundle`() {
+    @Test
+    fun `missing file reads as no bundle`() {
         val path = Files.createTempDirectory("trust-persistence-test").resolve("bundle.dat")
         assertNull(FileTrustPersistence(path).read())
     }
 
-    @Test fun `round trips bytes and detached signature exactly`() {
+    @Test
+    fun `round trips bytes and detached signature exactly`() {
         val path = Files.createTempDirectory("trust-persistence-test").resolve("bundle.dat")
         val persistence = FileTrustPersistence(path)
-        val bundle = SignedTrustBundle(ByteArray(5000) { it.toByte() }, ByteArray(64) { (it * 3).toByte() })
+        val bundle =
+            SignedTrustBundle(ByteArray(5000) { it.toByte() }, ByteArray(64) { (it * 3).toByte() })
 
         persistence.write(bundle)
         val read = FileTrustPersistence(path).read()
@@ -22,7 +25,8 @@ class FileTrustPersistenceTest {
         assertContentEquals(bundle.signature, read.signature)
     }
 
-    @Test fun `a later write replaces the earlier bundle`() {
+    @Test
+    fun `a later write replaces the earlier bundle`() {
         val path = Files.createTempDirectory("trust-persistence-test").resolve("bundle.dat")
         val persistence = FileTrustPersistence(path)
         persistence.write(SignedTrustBundle(byteArrayOf(1), byteArrayOf(1)))
@@ -34,7 +38,8 @@ class FileTrustPersistenceTest {
         assertContentEquals(byteArrayOf(2, 2), read.bytes)
     }
 
-    @Test fun `tampered file is rejected rather than silently truncated`() {
+    @Test
+    fun `tampered file is rejected rather than silently truncated`() {
         val path = Files.createTempDirectory("trust-persistence-test").resolve("bundle.dat")
         val persistence = FileTrustPersistence(path)
         persistence.write(SignedTrustBundle(byteArrayOf(1, 2, 3), byteArrayOf(4, 5, 6)))
