@@ -7,6 +7,9 @@ class SignedTrustBundle(bytes: ByteArray, signature: ByteArray) {
     private val detached = signature.copyOf()
     val bytes: ByteArray get() = payload.copyOf()
     val signature: ByteArray get() = detached.copyOf()
+
+    internal fun hasSameContent(other: SignedTrustBundle): Boolean =
+        payload.contentEquals(other.payload) && detached.contentEquals(other.detached)
 }
 
 /**

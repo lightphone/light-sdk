@@ -1,5 +1,6 @@
 package com.thelightphone.sdk.trust
 
+import java.nio.file.Files
 import java.util.Base64
 import kotlin.test.*
 
@@ -54,9 +55,10 @@ class TrustBundleCandidateStagingTest {
         val accepted = Memory()
         val store = openStore(accepted)
         val staging = TrustBundleCandidateStaging(Memory())
-        staging.stage(fixture("valid"))
+        val candidate = fixture("valid")
+        staging.stage(candidate)
 
-        val result = staging.submit(store)
+        val result = staging.submit(store, candidate)
 
         assertIs<TrustResult.Success<TrustState>>(result)
         assertNotNull(accepted.record)
@@ -68,9 +70,10 @@ class TrustBundleCandidateStagingTest {
         val accepted = Memory()
         val store = openStore(accepted)
         val staging = TrustBundleCandidateStaging(Memory())
-        staging.stage(fixture("foreign-key"))
+        val candidate = fixture("foreign-key")
+        staging.stage(candidate)
 
-        val result = staging.submit(store)
+        val result = staging.submit(store, candidate)
 
         assertEquals(TrustFailure.InvalidSignature, (result as TrustResult.Failure).reason)
         assertNull(accepted.record)
@@ -82,9 +85,48 @@ class TrustBundleCandidateStagingTest {
         val store = openStore()
         val staging = TrustBundleCandidateStaging(Memory())
 
-        val result = staging.submit(store)
+        val result = staging.submit(store, fixture("valid"))
 
         assertEquals(TrustFailure.PersistenceFailed, (result as TrustResult.Failure).reason)
+    }
+
+    @Test
+    fun `one staging instance cannot submit a replacement written by another`() {
+        val directory = Files.createTempDirectory("trust-candidate-race")
+        val path = directory.resolve("candidate.dat")
+        try {
+            val store = openStore()
+            val first = TrustBundleCandidateStaging(FileTrustPersistence(path))
+            val second = TrustBundleCandidateStaging(FileTrustPersistence(path))
+            val valid = fixture("valid")
+            val alteredPayload = valid.bytes.apply { this[0] = 0 }
+            val alteredSignature =
+                valid.signature.apply { this[0] = (this[0].toInt() xor 1).toByte() }
+            val candidates =
+                listOf(
+                    SignedTrustBundle(alteredPayload, valid.signature),
+                    SignedTrustBundle(valid.bytes, alteredSignature),
+                )
+
+            for (candidate in candidates) {
+                first.stage(candidate)
+                second.stage(valid)
+
+                val result = first.submit(store, candidate)
+                assertEquals(
+                    TrustFailure.CandidateChanged,
+                    assertIs<TrustResult.Failure>(result).reason,
+                )
+                assertNull(store.state().version)
+            }
+            assertEquals(
+                42L,
+                assertIs<TrustResult.Success<TrustState>>(second.submit(store, valid)).value.version,
+            )
+        } finally {
+            Files.deleteIfExists(path)
+            Files.deleteIfExists(directory)
+        }
     }
 
     @Test
@@ -93,8 +135,9 @@ class TrustBundleCandidateStagingTest {
         val store = openStore(accepted)
         val candidateBackend = Memory()
         val staging = TrustBundleCandidateStaging(candidateBackend)
-        staging.stage(fixture("valid"))
-        staging.submit(store)
+        val candidate = fixture("valid")
+        staging.stage(candidate)
+        staging.submit(store, candidate)
 
         // the candidate backend still holds what was staged; the store's own backend holds
         // what was accepted. Neither was reused as the other's storage.

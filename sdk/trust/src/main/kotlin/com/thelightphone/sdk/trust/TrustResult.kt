@@ -13,6 +13,7 @@ sealed interface TrustFailure {
     data object InvalidSignature : TrustFailure
     data class VersionNotNewer(val incoming: Long, val floor: Long) : TrustFailure
     data object PersistenceFailed : TrustFailure
+    data object CandidateChanged : TrustFailure
 
     /** This verified version reached the live file. Its survival after a crash is uncertain. */
     data class PersistenceDurabilityUnknown(val version: Long) : TrustFailure
