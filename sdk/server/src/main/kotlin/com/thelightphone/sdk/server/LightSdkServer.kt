@@ -237,9 +237,6 @@ object LightSdkServer {
         )
     }
 
-    /** Set this after opening the store so dev reload and HTTP handlers can reuse it. */
-    var currentTrustStore: LightTrustStore? = null
-
     var getToolManagerKeyCipher: () -> KeyCipher = { AndroidKeystoreKeyCipher() }
 
     var provideSdkSettings: (Context) -> LightSdkServerSettings = {
