@@ -1,8 +1,12 @@
 package com.thelightphone.sdk.trust
 
-import java.time.Instant
+import kotlin.time.Instant
 
-enum class AdmissionException { AllowAll, DeveloperHash, EmulatorDevelopmentKey }
+enum class AdmissionException {
+    AllowAll,
+    DeveloperHash,
+    EmulatorDevelopmentKey,
+}
 
 /** Supplementary continuity evidence, not a unique platform installation ID. */
 data class InstallationFingerprint(
@@ -42,6 +46,7 @@ data class AdmissionRecord(
 /** One owner per backend. Failed reads must throw, never return an empty replacement. */
 interface AdmissionPersistence {
     fun read(): List<AdmissionRecord>
+
     fun write(records: List<AdmissionRecord>)
 }
 
@@ -50,31 +55,48 @@ data class AdmissionEvaluation(val decision: LightInstallDecision, val record: A
 
 sealed interface AdmissionOutcome {
     data class Admitted(val record: AdmissionRecord) : AdmissionOutcome
+
     data class Refused(val decision: LightInstallDecision) : AdmissionOutcome
+
     data object PersistenceFailed : AdmissionOutcome
+
     data object EvaluationFailed : AdmissionOutcome
 }
 
-enum class AdmissionRemovalOutcome { Removed, PersistenceFailed }
+enum class AdmissionRemovalOutcome {
+    Removed,
+    PersistenceFailed,
+}
 
 class AdmissionStore(persistence: AdmissionPersistence) {
     private val persistence = persistence
     private var available = true
-    private var records = persistence.read().also { values ->
-        require(values.map { it.packageName }.distinct().size == values.size)
-    }.associateBy { it.packageName }
+    private var records =
+        persistence
+            .read()
+            .also { values ->
+                require(values.map { it.packageName }.distinct().size == values.size)
+            }
+            .associateBy { it.packageName }
 
-    @Synchronized fun hasAdmissionRecord(
+    @Synchronized
+    fun hasAdmissionRecord(
         packageName: String,
         apkSha256: String,
         installationFingerprint: InstallationFingerprint? = null,
-    ): Boolean = available && installationFingerprint != null && records[packageName]?.let {
-        it.apkSha256 == apkSha256 && it.installationFingerprint == installationFingerprint
-    } == true
+    ): Boolean =
+        available &&
+            installationFingerprint != null &&
+            records[packageName]?.let {
+                it.apkSha256 == apkSha256 && it.installationFingerprint == installationFingerprint
+            } == true
 
-    @Synchronized fun admissionOf(packageName: String): AdmissionRecord? = if (available) records[packageName] else null
+    @Synchronized
+    fun admissionOf(packageName: String): AdmissionRecord? =
+        if (available) records[packageName] else null
 
-    @Synchronized fun removeAdmission(packageName: String): AdmissionRemovalOutcome {
+    @Synchronized
+    fun removeAdmission(packageName: String): AdmissionRemovalOutcome {
         if (!available) return AdmissionRemovalOutcome.PersistenceFailed
         if (packageName !in records) return AdmissionRemovalOutcome.Removed
         val replacement = records - packageName
@@ -89,9 +111,11 @@ class AdmissionStore(persistence: AdmissionPersistence) {
     }
 
     /** Call after successful installation, using the captured successful admission evaluation. */
-    @Synchronized fun recordSuccessfulInstall(evaluation: AdmissionEvaluation): AdmissionOutcome {
+    @Synchronized
+    fun recordSuccessfulInstall(evaluation: AdmissionEvaluation): AdmissionOutcome {
         if (!available) return AdmissionOutcome.PersistenceFailed
-        if (evaluation.decision != LightInstallDecision.Allow) return AdmissionOutcome.Refused(evaluation.decision)
+        if (evaluation.decision != LightInstallDecision.Allow)
+            return AdmissionOutcome.Refused(evaluation.decision)
         val record = evaluation.record ?: return AdmissionOutcome.EvaluationFailed
         if (record.installationFingerprint == null) return AdmissionOutcome.EvaluationFailed
         val replacement = records + (record.packageName to record)
@@ -105,8 +129,12 @@ class AdmissionStore(persistence: AdmissionPersistence) {
         return AdmissionOutcome.Admitted(record)
     }
 
-    /** Shared lazy migration/crash fallback. This establishes admission, not current runtime authorization. */
-    @Synchronized fun admitInstalled(
+    /**
+     * Shared lazy migration/crash fallback. This establishes admission, not current runtime
+     * authorization.
+     */
+    @Synchronized
+    fun admitInstalled(
         packageName: String,
         apkSha256: String,
         installationFingerprint: InstallationFingerprint? = null,
@@ -114,17 +142,25 @@ class AdmissionStore(persistence: AdmissionPersistence) {
     ): AdmissionOutcome {
         if (!available) return AdmissionOutcome.PersistenceFailed
         if (installationFingerprint == null) return AdmissionOutcome.EvaluationFailed
-        records[packageName]?.takeIf {
-            it.apkSha256 == apkSha256 && it.installationFingerprint == installationFingerprint
-        }?.let {
-            return AdmissionOutcome.Admitted(it)
-        }
-        val evaluation = try { evaluateCurrent() } catch (_: Exception) {
-            return AdmissionOutcome.EvaluationFailed
-        }
+        records[packageName]
+            ?.takeIf {
+                it.apkSha256 == apkSha256 && it.installationFingerprint == installationFingerprint
+            }
+            ?.let {
+                return AdmissionOutcome.Admitted(it)
+            }
+        val evaluation =
+            try {
+                evaluateCurrent()
+            } catch (_: Exception) {
+                return AdmissionOutcome.EvaluationFailed
+            }
         if (evaluation.decision == LightInstallDecision.Allow) {
-            require(evaluation.record?.packageName == packageName && evaluation.record.apkSha256 == apkSha256 &&
-                evaluation.record.installationFingerprint == installationFingerprint)
+            require(
+                evaluation.record?.packageName == packageName &&
+                    evaluation.record.apkSha256 == apkSha256 &&
+                    evaluation.record.installationFingerprint == installationFingerprint
+            )
         }
         return recordSuccessfulInstall(evaluation)
     }

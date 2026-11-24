@@ -6,9 +6,9 @@ import com.thelightphone.sdk.trust.LightInstallDecision.Kill
 
 /**
  * Local mirror of the Android-owned `ClientFilterLevel`, which this module cannot import:
- * `:sdk:server` is an Android library, and Gradle will not hand an `androidJvm` variant to
- * a `jvm` consumer. `:sdk:server` is expected to depend on this module, so the reverse edge
- * would be a cycle.
+ * `:sdk:server` is an Android library, and Gradle will not hand an `androidJvm` variant to a `jvm`
+ * consumer. `:sdk:server` is expected to depend on this module, so the reverse edge would be a
+ * cycle.
  *
  * The constants are named identically so the mapping between them stays a rename-free `when`.
  * Collapsing the two into one enum in `:sdk:shared` is deferred — it touches published API.
@@ -22,13 +22,18 @@ enum class LightTrustFilterLevel {
 
 /** Closed so callers assert on *why* an APK was refused and render a stable UI key. */
 enum class DenyReason {
-    /** The stamp verifies, but its certificate is not a trusted Light stamp cert (untrusted or revoked). */
+    /**
+     * The stamp verifies, but its certificate is not a trusted Light stamp cert (untrusted or
+     * revoked).
+     */
     UntrustedStampCert,
 
     /** The trust statement is present but malformed and could not be parsed. */
     MalformedStatement,
 
-    /** Trust inputs (bundle or stamp verifier) are unavailable, so the APK could not be evaluated. */
+    /**
+     * Trust inputs (bundle or stamp verifier) are unavailable, so the APK could not be evaluated.
+     */
     TrustUnavailable,
 
     /** The APK artifact could not be read or hashed. */
@@ -64,7 +69,9 @@ enum class DenyReason {
 
 sealed interface LightInstallDecision {
     data object Allow : LightInstallDecision
+
     data class Deny(val reason: DenyReason) : LightInstallDecision
+
     data class Kill(val action: BlockAction, val reason: String) : LightInstallDecision
 }
 
@@ -72,19 +79,18 @@ object LightInstallPolicy {
     /**
      * Pure method that answers "can this APK be installed?"
      *
-     * `AllowAllApks` installs anything without consulting the rules.
-     * To tell a user what a stricter level would have done with the same APK,
-     * call this again with that level.
-     * The reason is in the returned `Deny` or `Kill`.
+     * `AllowAllApks` installs anything without consulting the rules. To tell a user what a stricter
+     * level would have done with the same APK, call this again with that level. The reason is in
+     * the returned `Deny` or `Kill`.
      */
     fun decide(
-            stamp: StampResult,
-            statement: LightTrustStatement?,
-            signerSha256: String,
-            apkSha256: () -> String,
-            manifestVersionCode: Long,
-            bundle: LightTrustBundle?,
-            level: LightTrustFilterLevel,
+        stamp: StampResult,
+        statement: LightTrustStatement?,
+        signerSha256: String,
+        apkSha256: () -> String,
+        manifestVersionCode: Long,
+        bundle: LightTrustBundle?,
+        level: LightTrustFilterLevel,
     ): LightInstallDecision {
         // hashing the APK is the most expensive computation in this method,
         // and it's used for both block and approve logic
@@ -132,16 +138,16 @@ object LightInstallPolicy {
             LightTrustFilterLevel.AllowLightSignedApks -> Allow
             LightTrustFilterLevel.ExcludeAllApks -> Deny(DenyReason.FilteredOut)
             LightTrustFilterLevel.AllowLightApprovedApks ->
-                    checkApproval(statement, signerSha256, lazyApkSha256, bundle)
+                checkApproval(statement, signerSha256, lazyApkSha256, bundle)
             LightTrustFilterLevel.AllowAllApks -> Allow
         }
     }
 
     private fun checkApproval(
-            statement: LightTrustStatement,
-            signerSha256: String,
-            apkSha256: Lazy<String>,
-            bundle: LightTrustBundle?,
+        statement: LightTrustStatement,
+        signerSha256: String,
+        apkSha256: Lazy<String>,
+        bundle: LightTrustBundle?,
     ): LightInstallDecision {
         val approval = bundle?.allow?.firstOrNull { it.toolId == statement.tool.id }
         if (approval == null) {
@@ -172,40 +178,48 @@ object LightInstallPolicy {
     }
 
     /**
-     * Checks on the trust bundle if an apk is blocked.
-     * The trust bundle can match on different parameters, and we just need one of them to match.
-     **/
+     * Checks on the trust bundle if an apk is blocked. The trust bundle can match on different
+     * parameters, and we just need one of them to match.
+     */
     private fun blockMatching(
-            bundle: LightTrustBundle?,
-            statement: LightTrustStatement?,
-            signerSha256: String,
-            apkSha256: Lazy<String>,
+        bundle: LightTrustBundle?,
+        statement: LightTrustStatement?,
+        signerSha256: String,
+        apkSha256: Lazy<String>,
     ): TrustBlock? {
         val blocks = bundle?.block.orEmpty()
         val toolId = statement?.tool?.id
         val versionCode = statement?.tool?.versionCode
 
         // purge outranks block; equal action ties break on reason, lexicographically
-        val severity = compareBy<TrustBlock> { if (it.action == BlockAction.Purge) 0 else 1 }
-            .thenBy { it.reason }
+        val severity =
+            compareBy<TrustBlock> { if (it.action == BlockAction.Purge) 0 else 1 }
+                .thenBy { it.reason }
 
         // Strongest match among the identity (non-hash) forms — never needs the hash.
-        val strongestIdentityMatchingBlock = blocks.asSequence().filter {
-            when (val match = it.match) {
-                is BlockMatch.SignerSha256 -> match.value == signerSha256
-                is BlockMatch.ToolId -> match.value == toolId
-                is BlockMatch.ToolVersion -> match.toolId == toolId && match.versionCode == versionCode
-                is BlockMatch.ApkSha256 -> false
-            }
-        }.minWithOrNull(severity)
+        val strongestIdentityMatchingBlock =
+            blocks
+                .asSequence()
+                .filter {
+                    when (val match = it.match) {
+                        is BlockMatch.SignerSha256 -> match.value == signerSha256
+                        is BlockMatch.ToolId -> match.value == toolId
+                        is BlockMatch.ToolVersion ->
+                            match.toolId == toolId && match.versionCode == versionCode
+                        is BlockMatch.ApkSha256 -> false
+                    }
+                }
+                .minWithOrNull(severity)
 
         // A hash entry can only win if even its strongest possible (action, reason)
         // beats the identity winner. Otherwise the hash is never needed.
         val hashBlocks = blocks.filter { it.match is BlockMatch.ApkSha256 }
         val strongestHashCandidate = hashBlocks.minWithOrNull(severity)
-        if (strongestIdentityMatchingBlock != null &&
-            (strongestHashCandidate == null ||
-             severity.compare(strongestHashCandidate, strongestIdentityMatchingBlock) >= 0)) {
+        if (
+            strongestIdentityMatchingBlock != null &&
+                (strongestHashCandidate == null ||
+                    severity.compare(strongestHashCandidate, strongestIdentityMatchingBlock) >= 0)
+        ) {
             return strongestIdentityMatchingBlock
         }
 
@@ -213,8 +227,10 @@ object LightInstallPolicy {
         var winner = strongestIdentityMatchingBlock
         for (block in hashBlocks) {
             val hashBlock = block.match as BlockMatch.ApkSha256
-            if (hashBlock.value == apkSha256.value &&
-                (winner == null || severity.compare(block, winner) < 0)) {
+            if (
+                hashBlock.value == apkSha256.value &&
+                    (winner == null || severity.compare(block, winner) < 0)
+            ) {
                 winner = block
             }
         }

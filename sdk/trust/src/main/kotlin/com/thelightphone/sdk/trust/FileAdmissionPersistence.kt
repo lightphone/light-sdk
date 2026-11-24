@@ -1,16 +1,5 @@
 package com.thelightphone.sdk.trust
 
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.long
-import kotlinx.serialization.json.put
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
@@ -19,14 +8,24 @@ import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.nio.file.StandardOpenOption.READ
 import java.nio.file.StandardOpenOption.WRITE
 import java.security.MessageDigest
-import java.time.Instant
+import kotlin.time.Instant
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
+import kotlinx.serialization.json.put
 
 /**
  * Persists [AdmissionRecord]s to a dedicated private file, one record per package.
  *
- * File format is a JSON document `{"records": [...]}` prefixed by the 32-byte SHA-256
- * checksum of the JSON bytes. Records are written sorted by package
- * name, so a given snapshot always serializes to the same bytes.
+ * File format is a JSON document `{"records": [...]}` prefixed by the 32-byte SHA-256 checksum of
+ * the JSON bytes. Records are written sorted by package name, so a given snapshot always serializes
+ * to the same bytes.
  */
 class FileAdmissionPersistence(private val path: Path) : AdmissionPersistence {
     init {
@@ -40,13 +39,21 @@ class FileAdmissionPersistence(private val path: Path) : AdmissionPersistence {
     }
 
     override fun read(): List<AdmissionRecord> {
-        val bytes = try { Files.readAllBytes(path) } catch (_: java.nio.file.NoSuchFileException) {
-            return emptyList()
-        }
+        val bytes =
+            try {
+                Files.readAllBytes(path)
+            } catch (_: java.nio.file.NoSuchFileException) {
+                return emptyList()
+            }
         require(bytes.size >= 32) { "Truncated admission data" }
         val payload = bytes.copyOfRange(32, bytes.size)
         // the checksum is unkeyed and meant to detect accidental corruption, not tampering.
-        require(MessageDigest.isEqual(bytes.copyOfRange(0, 32), MessageDigest.getInstance("SHA-256").digest(payload))) {
+        require(
+            MessageDigest.isEqual(
+                bytes.copyOfRange(0, 32),
+                MessageDigest.getInstance("SHA-256").digest(payload),
+            )
+        ) {
             "Corrupt admission data"
         }
         val root = Json.parseToJsonElement(payload.decodeToString()).jsonObject
@@ -60,9 +67,10 @@ class FileAdmissionPersistence(private val path: Path) : AdmissionPersistence {
         require(records.size <= 100_000)
         require(records.map { it.packageName }.distinct().size == records.size)
         val document = buildJsonObject {
-            put("records", buildJsonArray {
-                records.sortedBy { it.packageName }.forEach { add(it.toJson()) }
-            })
+            put(
+                "records",
+                buildJsonArray { records.sortedBy { it.packageName }.forEach { add(it.toJson()) } },
+            )
         }
         val payload = document.toString().encodeToByteArray()
         val bytes = MessageDigest.getInstance("SHA-256").digest(payload) + payload
@@ -81,7 +89,8 @@ class FileAdmissionPersistence(private val path: Path) : AdmissionPersistence {
                 directory.force(true)
             }
         } finally {
-            // only delete after the whole operation is done, so that the previous snapshot can be used for recovery
+            // only delete after the whole operation is done, so that the previous snapshot can be
+            // used for recovery
             Files.deleteIfExists(temporary)
         }
     }
@@ -99,8 +108,8 @@ private fun AdmissionRecord.toJson(): JsonObject = buildJsonObject {
     put("versionCode", versionCode)
     admittedUnderBundleVersion?.let { put("admittedUnderBundleVersion", it) }
     put("admittedUnderLevel", admittedUnderLevel.name)
-    put("admittedAtEpochSecond", admittedAt.epochSecond)
-    put("admittedAtNano", admittedAt.nano)
+    put("admittedAtEpochSecond", admittedAt.epochSeconds)
+    put("admittedAtNano", admittedAt.nanosecondsOfSecond)
     exception?.let { put("exception", it.name) }
     installationFingerprint?.let {
         put("fingerprintBaseApkPath", it.baseApkPath)
@@ -110,12 +119,16 @@ private fun AdmissionRecord.toJson(): JsonObject = buildJsonObject {
 }
 
 private fun JsonObject.requiredString(name: String): String =
-    (getValue(name) as JsonPrimitive).let { require(it.isString); it.content }
+    (getValue(name) as JsonPrimitive).let {
+        require(it.isString)
+        it.content
+    }
 
 private fun JsonObject.optionalString(name: String): String? =
     (this[name] as? JsonPrimitive)?.also { require(it.isString) }?.content
 
 private fun JsonObject.requiredLong(name: String): Long = getValue(name).jsonPrimitive.long
+
 private fun JsonObject.optionalLong(name: String): Long? = this[name]?.jsonPrimitive?.long
 
 private fun JsonObject.toAdmissionRecord(): AdmissionRecord {
@@ -128,14 +141,19 @@ private fun JsonObject.toAdmissionRecord(): AdmissionRecord {
         versionCode = requiredLong("versionCode"),
         admittedUnderBundleVersion = optionalLong("admittedUnderBundleVersion"),
         admittedUnderLevel = LightTrustFilterLevel.valueOf(requiredString("admittedUnderLevel")),
-        admittedAt = Instant.ofEpochSecond(requiredLong("admittedAtEpochSecond"), requiredLong("admittedAtNano")),
+        admittedAt =
+            Instant.fromEpochSeconds(
+                requiredLong("admittedAtEpochSecond"),
+                requiredLong("admittedAtNano"),
+            ),
         exception = optionalString("exception")?.let { AdmissionException.valueOf(it) },
-        installationFingerprint = fingerprintPath?.let {
-            InstallationFingerprint(
-                it,
-                requiredLong("fingerprintFirstInstallTimeMillis"),
-                requiredLong("fingerprintLastUpdateTimeMillis"),
-            )
-        },
+        installationFingerprint =
+            fingerprintPath?.let {
+                InstallationFingerprint(
+                    it,
+                    requiredLong("fingerprintFirstInstallTimeMillis"),
+                    requiredLong("fingerprintLastUpdateTimeMillis"),
+                )
+            },
     )
 }

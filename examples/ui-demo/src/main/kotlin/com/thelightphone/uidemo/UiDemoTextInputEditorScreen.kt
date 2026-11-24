@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 data class EditorRequest(
     val title: String,
     val initialValue: String,
-    val initialCaps: Boolean = false,
+    val autoCapitalize: Boolean = true,
 )
 
 class UiDemoTextInputEditorScreen(
@@ -56,7 +56,7 @@ private fun ContentInner(
             onSubmit = { result -> goBack(result.toString()) },
             onBack = { goBack(null) },
             modifier = Modifier.background(LightThemeTokens.colors.background),
-            initialCaps = editorRequest.initialCaps,
+            autoCapitalize = editorRequest.autoCapitalize,
         )
     }
 }

@@ -5,6 +5,10 @@ import android.content.Context.MODE_PRIVATE
 import android.content.SharedPreferences
 import android.provider.Settings
 import android.util.Log
+import com.thelightphone.lp3Keyboard.ui.keyboardEmojis
+import com.thelightphone.lp3Keyboard.ui.keyboardEnableKeyAnimation
+import com.thelightphone.lp3Keyboard.ui.keyboardEnableSwipe
+import com.thelightphone.lp3Keyboard.ui.keyboardShowVoice
 import com.thelightphone.sdk.shared.LightServiceMethod
 
 enum class ClientFilterLevel {
@@ -53,10 +57,6 @@ class DefaultLightSdkServerSettings(context: Context) : LightSdkServerSettings {
         private const val CLIENT_FILTER_LEVEL = "client_filter_level"
         private const val FORCE_FOCUS_LEVEL = "light_force_focus_level"
         private const val USER_PREFERENCES_HAPTICS = "user_preferences_haptics_enabled"
-        private const val KEYBOARD_EMOJIS = "lp3_keyboard_emojis"
-        private const val KEYBOARD_SHOW_VOICE = "lp3_keyboard_show_voice"
-        private const val KEYBOARD_ENABLE_KEY_ANIMATION = "lp3_keyboard_enable_key_animation"
-        private const val KEYBOARD_ENABLE_SWIPE = "lp3_keyboard_enable_swipe"
     }
 
     private val contentResolver = context.contentResolver
@@ -101,32 +101,19 @@ class DefaultLightSdkServerSettings(context: Context) : LightSdkServerSettings {
             preferences.edit().putBoolean(USER_PREFERENCES_HAPTICS, value.hapticsEnabled).apply()
         }
 
-    // store in system settings for now so readable from apps that can't talk to server
+    // in system settings (shared with the keyboard app) so apps that can't talk to the server can read them
     override var keyboardOptions: LightServiceMethod.GetKeyboardOptions.Response
-        get() {
-            return LightServiceMethod.GetKeyboardOptions.Response(
-                emojisAsString = Settings.System.getString(contentResolver, KEYBOARD_EMOJIS),
-                displayVoice = Settings.System.getInt(contentResolver, KEYBOARD_SHOW_VOICE, 1) == 1,
-                swipeEnabled = Settings.System.getInt(contentResolver, KEYBOARD_ENABLE_SWIPE, 1) == 1,
-                enableKeyAnimation = Settings.System.getInt(
-                    contentResolver,
-                    KEYBOARD_ENABLE_KEY_ANIMATION,
-                    1
-                ) == 1,
-            )
-        }
+        get() = LightServiceMethod.GetKeyboardOptions.Response(
+            emojisAsString = contentResolver.keyboardEmojis,
+            displayVoice = contentResolver.keyboardShowVoice,
+            enableKeyAnimation = contentResolver.keyboardEnableKeyAnimation,
+            swipeEnabled = contentResolver.keyboardEnableSwipe,
+        )
         set(value) {
-            Settings.System.putString(contentResolver, KEYBOARD_EMOJIS, value.emojisAsString)
-            Settings.System.putInt(
-                contentResolver,
-                KEYBOARD_SHOW_VOICE,
-                if (value.displayVoice) 1 else 0
-            )
-            Settings.System.putInt(
-                contentResolver,
-                KEYBOARD_ENABLE_KEY_ANIMATION,
-                if (value.enableKeyAnimation) 1 else 0
-            )
+            contentResolver.keyboardEmojis = value.emojisAsString
+            contentResolver.keyboardShowVoice = value.displayVoice
+            contentResolver.keyboardEnableKeyAnimation = value.enableKeyAnimation
+            // older callers leave it out: keep what's there
+            value.swipeEnabled?.let { contentResolver.keyboardEnableSwipe = it }
         }
-
 }
