@@ -1,5 +1,6 @@
 package com.thelightphone.sdk.server.toolmanager
 
+import com.thelightphone.toolmanager.TetherEndpoint
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -61,7 +62,7 @@ sealed class UsbTetherStatus {
     /**
      * A computer is on the tether network and the tool manager is serving there.
      */
-    data class ComputerConnected(val authenticatedIpUrl: String) : UsbTetherStatus()
+    data class ComputerConnected(val endpoint: TetherEndpoint) : UsbTetherStatus()
 
     /** USB tethering couldn't be set up. */
     data class Error(val code: Int, val message: String) : UsbTetherStatus()
