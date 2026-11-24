@@ -50,7 +50,7 @@ class LightToolEvaluatorTest {
             7,
             3,
             LightTrustFilterLevel.AllowLightSignedApks,
-            Instant.EPOCH,
+            Instant.fromEpochSeconds(0),
             installationFingerprint = fingerprint,
         )
 
