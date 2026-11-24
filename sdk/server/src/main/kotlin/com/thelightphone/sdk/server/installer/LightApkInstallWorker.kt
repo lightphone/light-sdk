@@ -3,18 +3,23 @@ package com.thelightphone.sdk.server.installer
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
-import android.content.pm.PackageManager
-import android.content.pm.Signature
 import android.util.Log
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.thelightphone.sdk.server.LightSdkServer
 import java.io.File
 import java.io.FileInputStream
-import java.security.MessageDigest
 
+/**
+ * Gates installation on [LightSdkServer.isPackageInstallable] (the real evaluator, as of the
+ * runtime evaluation slice), then hands the staged bytes to [PackageInstaller] unchanged.
+ *
+ * Known, accepted gap: [apkFile] is read once for the gate and again when [installApk] opens
+ * it, with no immutable staging copy in between - a writer with access to the inbox path
+ * could in principle swap the bytes between those two reads. Closing that gap was explicitly
+ * deferred rather than implemented here; this is not a claim that the window is closed.
+ */
 class LightApkInstallWorker(context: Context, params: WorkerParameters) :
     Worker(context, params) {
 

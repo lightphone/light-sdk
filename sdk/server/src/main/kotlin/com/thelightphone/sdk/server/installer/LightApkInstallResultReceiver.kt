@@ -21,6 +21,9 @@ class LightApkInstallResultReceiver : BroadcastReceiver() {
 
         when (status) {
             PackageInstaller.STATUS_SUCCESS -> {
+                // Admission itself is written by fresh evaluation during reconciliation
+                // (requestReconciliation -> evaluateTool per installed client), not here -
+                // never from a decision captured before the install completed.
                 LightSdkServer.onApkInstalled(apkPath)
                 apkPath?.let { File(it).delete() }
             }
