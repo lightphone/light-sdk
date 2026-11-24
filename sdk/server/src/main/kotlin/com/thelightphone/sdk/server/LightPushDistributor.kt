@@ -5,9 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 class LightPushDistributor : BroadcastReceiver() {
@@ -26,7 +29,13 @@ class LightPushDistributor : BroadcastReceiver() {
 
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+        private fun isAllowed(context: Context, packageName: String): Boolean =
+            LightSdkServer.isPackageAllowed(
+                LightSdkServer.provideSdkSettings(context).clientFilterLevel, context, packageName,
+            )
+
         fun sendMessage(context: Context, packageName: String, token: String, message: ByteArray) {
+            if (!isAllowed(context, packageName)) return
             val intent = Intent(ACTION_MESSAGE).apply {
                 setPackage(packageName)
                 putExtra("token", token)
@@ -98,6 +107,22 @@ class LightPushDistributor : BroadcastReceiver() {
             return
         }
 
+        try {
+            LightSdkServer.toolResources.withResource(callerPackage) {
+                if (!isAllowed(context, callerPackage)) throw SecurityException("Push registration refused")
+                registerWhileAllowed(context, intent, callerPackage, token)
+            }
+        } catch (_: SecurityException) {
+            sendRegistrationFailed(context, callerPackage, token)
+        }
+    }
+
+    private suspend fun registerWhileAllowed(
+        context: Context,
+        intent: Intent,
+        callerPackage: String,
+        token: String,
+    ) {
         val channel = intent.getStringExtra("message")
         val vapid = intent.getStringExtra("vapid")
 
@@ -112,10 +137,15 @@ class LightPushDistributor : BroadcastReceiver() {
         }
 
         // TODO move everything here into a worker?
-        val endpoint = existing?.endpoint ?: runCatching {
+        val endpoint = existing?.endpoint ?: try {
             LightSdkServer.pushEndpointFetcher.invoke(callerPackage, token, vapid)
-        }.getOrNull()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
 
+        currentCoroutineContext().ensureActive()
         if (endpoint == null) {
             Log.e(TAG, "Failed to fetch endpoint for token=${token.forLog()}")
             sendRegistrationFailed(context, callerPackage, token)

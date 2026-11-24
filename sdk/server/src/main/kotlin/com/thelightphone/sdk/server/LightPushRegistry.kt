@@ -3,11 +3,19 @@ package com.thelightphone.sdk.server
 import android.content.Context
 import androidx.room.Room
 import com.thelightphone.sdk.shared.LightConstants
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Persistent store of UnifiedPush registrations, keyed by token.
  */
 object LightPushRegistry {
+
+    private val writes = PushRegistrationWrites(LightSdkServer.toolResources)
 
     @Volatile private var db: LightPushDb? = null
 
@@ -28,6 +36,13 @@ object LightPushRegistry {
         endpoint: String,
         channel: String? = null,
         vapid: String? = null,
+    ) = writes.register(
+        packageName,
+        isAllowed = {
+            LightSdkServer.isPackageAllowed(
+                LightSdkServer.provideSdkSettings(context).clientFilterLevel, context, packageName,
+            )
+        },
     ) {
         db(context).pushRegistrations().upsert(
             token = token,
@@ -55,11 +70,30 @@ object LightPushRegistry {
 
     /** Deletes every registration for [packageName] (host resource cleanup on disable/purge). */
     suspend fun removePackage(context: Context, packageName: String) {
-        db(context).pushRegistrations().deleteByPackage(packageName)
+        writes.remove { db(context).pushRegistrations().deleteByPackage(packageName) }
     }
 
     /** Finds the local-channel registration for [packageName], if any. */
     suspend fun findLocal(context: Context, packageName: String): PushRegistration? =
         db(context).pushRegistrations()
             .findByPackageAndChannel(packageName, LightConstants.PUSH_CHANNEL_LOCAL)
+}
+
+
+internal class PushRegistrationWrites(private val resources: ToolResourceRegistry) {
+    private val mutex = Mutex()
+
+    suspend fun register(packageName: String, isAllowed: () -> Boolean, write: suspend () -> Unit) {
+        currentCoroutineContext().ensureActive()
+        resources.withResource(packageName) {
+            if (!isAllowed()) throw SecurityException("Push registration refused")
+            mutex.withLock {
+                currentCoroutineContext().ensureActive()
+                // Let the database write settle before package cleanup can acquire the lock.
+                withContext(NonCancellable) { write() }
+            }
+        }
+    }
+
+    suspend fun remove(delete: suspend () -> Unit) = mutex.withLock { delete() }
 }
