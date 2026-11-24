@@ -7,21 +7,17 @@ import android.content.pm.PackageInstaller
 import android.util.Log
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.thelightphone.sdk.server.ClientFilterLevel
 import com.thelightphone.sdk.server.LightSdkServer
 import java.io.File
 import java.io.FileInputStream
 
 /**
- * Gates installation on [LightSdkServer.isPackageInstallable] (the real evaluator, as of the
- * runtime evaluation slice), then hands the staged bytes to [PackageInstaller] unchanged.
- *
- * Known, accepted gap: [apkFile] is read once for the gate and again when [installApk] opens
- * it, with no immutable staging copy in between - a writer with access to the inbox path
- * could in principle swap the bytes between those two reads. Closing that gap was explicitly
- * deferred rather than implemented here; this is not a claim that the window is closed.
+ * Gates installation through [LightSdkServer.isPackageInstallable] before passing the APK to
+ * [PackageInstaller]. The trust runtime is used when configured by the host; otherwise the gate
+ * denies parsed APKs except at [ClientFilterLevel.AllowAllApks].
  */
-class LightApkInstallWorker(context: Context, params: WorkerParameters) :
-    Worker(context, params) {
+class LightApkInstallWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
 
     companion object {
         private const val TAG = "LightOSApkInstallWorker"
@@ -29,8 +25,7 @@ class LightApkInstallWorker(context: Context, params: WorkerParameters) :
     }
 
     override fun doWork(): Result {
-        val apkPath = inputData.getString(KEY_APK_PATH)
-            ?: return Result.failure()
+        val apkPath = inputData.getString(KEY_APK_PATH) ?: return Result.failure()
 
         val apkFile = File(apkPath)
         if (!apkFile.exists() || apkFile.length() == 0L) {
@@ -39,23 +34,28 @@ class LightApkInstallWorker(context: Context, params: WorkerParameters) :
             return Result.failure()
         }
 
-        val sdkSettings = LightSdkServer.provideSdkSettings(applicationContext)
-        if (!LightSdkServer.isPackageInstallable(
-                sdkSettings.clientFilterLevel,
-                applicationContext,
-                apkFile
-            )
-        ) {
-            Log.e(TAG, "Current client filter settings prevented install for: $apkPath")
-            apkFile.delete()
-            return Result.failure()
-        }
-
         return try {
-            installApk(apkFile)
-            // apkFile is deleted by LightApkInstallResultReceiver once the async
-            // PackageInstaller result (success or failure) comes back.
-            Result.success()
+            val allowed =
+                installFromPrivateCopy(
+                    source = apkFile,
+                    stagingDirectory = applicationContext.cacheDir,
+                    isAllowed = { staged ->
+                        val settings = LightSdkServer.provideSdkSettings(applicationContext)
+                        LightSdkServer.isPackageInstallable(
+                            settings.clientFilterLevel,
+                            applicationContext,
+                            staged,
+                        )
+                    },
+                    install = { staged -> installApk(staged, apkPath) },
+                )
+            if (allowed) {
+                Result.success()
+            } else {
+                Log.e(TAG, "Current client filter settings prevented install for: $apkPath")
+                apkFile.delete()
+                Result.failure()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to install APK: $apkPath", e)
             if (runAttemptCount < 3) {
@@ -67,11 +67,12 @@ class LightApkInstallWorker(context: Context, params: WorkerParameters) :
         }
     }
 
-    private fun installApk(apkFile: File) {
+    private fun installApk(apkFile: File, originalApkPath: String) {
         val packageInstaller = applicationContext.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(
-            PackageInstaller.SessionParams.MODE_FULL_INSTALL
-        )
+        val params =
+            PackageInstaller.SessionParams(
+                PackageInstaller.SessionParams.MODE_FULL_INSTALL,
+            )
 
         val sessionId = packageInstaller.createSession(params)
         val session = packageInstaller.openSession(sessionId)
@@ -84,17 +85,19 @@ class LightApkInstallWorker(context: Context, params: WorkerParameters) :
                 }
             }
 
-            val intent = Intent(
-                applicationContext,
-                LightApkInstallResultReceiver::class.java
-            )
-            intent.putExtra(KEY_APK_PATH, apkFile.absolutePath)
-            val pi = PendingIntent.getBroadcast(
-                applicationContext,
-                sessionId,
-                intent,
-                PendingIntent.FLAG_MUTABLE
-            )
+            val intent =
+                Intent(
+                    applicationContext,
+                    LightApkInstallResultReceiver::class.java,
+                )
+            intent.putExtra(KEY_APK_PATH, originalApkPath)
+            val pi =
+                PendingIntent.getBroadcast(
+                    applicationContext,
+                    sessionId,
+                    intent,
+                    PendingIntent.FLAG_MUTABLE,
+                )
 
             s.commit(pi.intentSender)
         }
