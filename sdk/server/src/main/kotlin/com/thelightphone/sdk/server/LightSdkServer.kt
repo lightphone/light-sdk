@@ -211,10 +211,8 @@ object LightSdkServer {
     }
 
     /**
-     * No pins configured: every bundle fails closed (`TrustFailure.InvalidKey`) rather than
-     * crashing, until the host injects the real pinned bundle-signing key(s). Unlike the stamp cert
-     * pin below, this key has not been generated yet — it is still an open decision, not merely an
-     * unwired one.
+     * Set this before opening the store to supply the bundle-signing public keys. The default
+     * verifier rejects every bundle with [TrustFailure.InvalidKey].
      */
     var provideTrustBundleVerifier: (Context) -> LightTrustBundleVerifier = {
         LightTrustBundleVerifier(emptyList())
@@ -230,12 +228,9 @@ object LightSdkServer {
     var provideImageBundle: (Context) -> SignedTrustBundle? = { null }
 
     /**
-     * Call this exactly once per process and cache the result (e.g. behind `by lazy`).
-     * [LightTrustStore] tracks the last accepted version in memory; two instances opened against
-     * the same persistence backend could each accept a bundle the other doesn't know about, and a
-     * version check against stale in-memory state would then wrongly allow a replay. This factory
-     * shape only exists so a host can override the verifier/ pins/image-bundle inputs; it is not
-     * safe to invoke repeatedly as a lookup.
+     * Open one store per persistence backend and reuse it for the life of the process. Each store
+     * keeps the last accepted version in memory. A second store can use an older version for its
+     * checks and overwrite a newer bundle.
      */
     var provideLightTrustStore: (Context) -> TrustResult<LightTrustStore> = {
         LightTrustStore.open(
@@ -246,11 +241,7 @@ object LightSdkServer {
         )
     }
 
-    /**
-     * The host's single opened [LightTrustStore], if [provideLightTrustStore] succeeded. Set once
-     * at startup by whoever calls [provideLightTrustStore]; consumers (dev reload, HTTP routes)
-     * that need the store read this rather than opening their own.
-     */
+    /** Set this after opening the store so dev reload and HTTP handlers can reuse it. */
     var currentTrustStore: LightTrustStore? = null
 
     var getToolManagerKeyCipher: () -> KeyCipher = { AndroidKeystoreKeyCipher() }
