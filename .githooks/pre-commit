@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Formats staged Kotlin files with ktfmt before committing.
+#
+# ktfmt-gradle has no per-file granularity: ktfmtFormat reformats every
+# Kotlin file in a module, not just the staged ones. To limit the blast
+# radius, this only runs it for modules that own a staged .kt/.kts file.
+# The first commit touching a given module may therefore leave other,
+# now-reformatted files unstaged in the working tree - review and either
+# commit or discard them separately. Only files that were already staged
+# get re-added to this commit.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+staged_kt="$(git diff --cached --name-only --diff-filter=ACMR -- '*.kt' '*.kts')"
+if [ -z "$staged_kt" ]; then
+  exit 0
+fi
+
+module_dir() {
+  local dir
+  dir="$(dirname "$1")"
+  while [ "$dir" != "." ]; do
+    if [ -f "$dir/build.gradle.kts" ] || [ -f "$dir/build.gradle" ]; then
+      echo "$dir"
+      return
+    fi
+    dir="$(dirname "$dir")"
+  done
+}
+
+tasks=()
+while IFS= read -r file; do
+  dir="$(module_dir "$file")"
+  [ -n "$dir" ] || continue
+  task=":$(echo "$dir" | tr '/' ':'):ktfmtFormat"
+  if [[ ! " ${tasks[*]-} " == *" $task "* ]]; then
+    tasks+=("$task")
+  fi
+done <<< "$staged_kt"
+
+if [ "${#tasks[@]}" -gt 0 ]; then
+  ./gradlew "${tasks[@]}" -q
+fi
+
+while IFS= read -r file; do
+  [ -f "$file" ] && git add "$file"
+done <<< "$staged_kt"
