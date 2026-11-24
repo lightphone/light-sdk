@@ -82,6 +82,7 @@ kotlin {
 }
 
 dependencies {
+    testImplementation(libs.kotlin.test)
     implementation(project(":sdk:server"))
     implementation(project(":sdk:ui"))
     implementation(platform(libs.compose.bom))

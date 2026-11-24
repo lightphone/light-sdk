@@ -7,7 +7,6 @@ import com.thelightphone.sdk.server.BuildConfig
 import com.thelightphone.sdk.server.LightPushDistributor
 import com.thelightphone.sdk.server.LightPushRegistry
 import com.thelightphone.sdk.trust.LightTrustStore
-import com.thelightphone.sdk.trust.SignedTrustBundle
 import com.thelightphone.sdk.trust.TrustBundleCandidateStaging
 import com.thelightphone.sdk.trust.TrustResult
 import io.ktor.http.ContentType
@@ -41,7 +40,6 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.utils.io.jvm.javaio.copyTo
 import androidx.core.content.edit
 import java.io.File
-import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.serialization.json.Json
@@ -253,22 +251,11 @@ class EmulatorHttpServer(
                     call.respondText("Trust store unavailable", status = HttpStatusCode.ServiceUnavailable)
                     return@post
                 }
-                val body = try {
-                    Json.parseToJsonElement(call.receiveText()).jsonObject
-                } catch (e: Exception) {
-                    call.respondText("Malformed JSON body", status = HttpStatusCode.BadRequest)
-                    return@post
-                }
-                val bytes = body["bytesBase64"]?.jsonPrimitive?.content
-                val signature = body["signatureBase64"]?.jsonPrimitive?.content
-                if (bytes == null || signature == null) {
-                    call.respondText("Missing bytesBase64 or signatureBase64", status = HttpStatusCode.BadRequest)
-                    return@post
-                }
+                val request = call.receiveText()
                 val candidate = try {
-                    SignedTrustBundle(Base64.getDecoder().decode(bytes), Base64.getDecoder().decode(signature))
+                    parseTrustBundleUpload(request)
                 } catch (e: IllegalArgumentException) {
-                    call.respondText("bytesBase64/signatureBase64 is not valid base64", status = HttpStatusCode.BadRequest)
+                    call.respondText(e.message ?: "Invalid candidate", status = HttpStatusCode.BadRequest)
                     return@post
                 }
                 trustBundleCandidateStaging.stage(candidate)
