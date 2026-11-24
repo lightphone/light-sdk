@@ -218,12 +218,8 @@ object LightSdkServer {
         LightTrustBundleVerifier(emptyList())
     }
 
-    // SHA-256 of the production tool stamp-signing certificate (the same key
-    // `apksigner --stamp-signer` already uses to stamp third-party tools).
-    private const val PRODUCTION_STAMP_CERT_SHA256 =
-        "854fa7c053d7038cca62873d8e103a00f93f0961fa25e3004b9d04a1a1330089"
-
-    var provideImagePins: (Context) -> Set<String> = { setOf(PRODUCTION_STAMP_CERT_SHA256) }
+    /** Set this before opening the store to trust the host's source-stamp certificates. */
+    var provideImagePins: (Context) -> Set<String> = { emptySet() }
 
     var provideImageBundle: (Context) -> SignedTrustBundle? = { null }
 
