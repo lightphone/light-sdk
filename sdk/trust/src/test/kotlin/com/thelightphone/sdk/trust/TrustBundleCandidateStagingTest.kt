@@ -91,6 +91,25 @@ class TrustBundleCandidateStagingTest {
     }
 
     @Test
+    fun `submitting an unreadable candidate returns a persistence failure`() {
+        val path = Files.createTempFile("trust-corrupt-candidate", ".dat")
+        try {
+            val store = openStore()
+            val staging = TrustBundleCandidateStaging(FileTrustPersistence(path))
+            val candidate = fixture("valid")
+            staging.stage(candidate)
+            Files.write(path, byteArrayOf(1))
+
+            val result = assertIs<TrustResult.Failure>(staging.submit(store, candidate))
+
+            assertEquals(TrustFailure.PersistenceFailed, result.reason)
+            assertNull(store.state().version)
+        } finally {
+            Files.deleteIfExists(path)
+        }
+    }
+
+    @Test
     fun `one staging instance cannot submit a replacement written by another`() {
         val directory = Files.createTempDirectory("trust-candidate-race")
         val path = directory.resolve("candidate.dat")

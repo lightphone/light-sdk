@@ -39,6 +39,27 @@ class FileTrustPersistenceTest {
     }
 
     @Test
+    fun `oversized signature is rejected before replacing the previous record`() {
+        val path = Files.createTempFile("trust-signature-size", ".dat")
+        try {
+            val persistence = FileTrustPersistence(path)
+            val signature = ByteArray(100_000) { it.toByte() }
+            persistence.write(SignedTrustBundle(byteArrayOf(1), signature))
+            assertContentEquals(signature, assertNotNull(persistence.read()).signature)
+
+            assertFailsWith<IllegalArgumentException> {
+                persistence.write(SignedTrustBundle(byteArrayOf(2), ByteArray(100_001)))
+            }
+
+            val saved = assertNotNull(FileTrustPersistence(path).read())
+            assertContentEquals(byteArrayOf(1), saved.bytes)
+            assertContentEquals(signature, saved.signature)
+        } finally {
+            Files.deleteIfExists(path)
+        }
+    }
+
+    @Test
     fun `tampered file is rejected rather than silently truncated`() {
         val path = Files.createTempDirectory("trust-persistence-test").resolve("bundle.dat")
         val persistence = FileTrustPersistence(path)

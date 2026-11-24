@@ -16,8 +16,11 @@ class TrustBundleCandidateStaging(private val candidatePersistence: TrustPersist
     @Synchronized
     fun submit(store: LightTrustStore, expected: SignedTrustBundle): TrustResult<TrustState> {
         val candidate =
-            candidatePersistence.read()
-                ?: return TrustResult.Failure(TrustFailure.PersistenceFailed)
+            try {
+                candidatePersistence.read()
+            } catch (_: Exception) {
+                return TrustResult.Failure(TrustFailure.PersistenceFailed)
+            } ?: return TrustResult.Failure(TrustFailure.PersistenceFailed)
         if (!candidate.hasSameContent(expected)) {
             return TrustResult.Failure(TrustFailure.CandidateChanged)
         }
