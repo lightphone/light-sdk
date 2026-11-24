@@ -23,8 +23,6 @@ class LightSdkService : Service() {
         private const val TAG = "LightSdkService"
     }
 
-    // TODO something more robust
-    private val tokensByUid = mutableMapOf<Int, String>()
     private val settings by lazy { LightSdkServer.provideSdkSettings(this) }
 
     private fun verifyCallerIsInstalledClient(callingId: Int): Boolean {
@@ -37,7 +35,7 @@ class LightSdkService : Service() {
             )
             return false
         }
-        return packages.any { packageName ->
+        return packages.isNotEmpty() && packages.all { packageName ->
             val hasMarker = packageManager.queryBroadcastReceivers(
                 Intent(LightConstants.ACTION_SDK_MARKER).setPackage(packageName),
                 PackageManager.GET_META_DATA
@@ -47,13 +45,13 @@ class LightSdkService : Service() {
     }
 
     private fun issueToken(uid: Int): String {
-        val token = java.util.UUID.randomUUID().toString()
-        synchronized(tokensByUid) { tokensByUid[uid] = token }
-        return token
+        return LightSdkServer.clientAuthorizations.issue(uid)
     }
 
     private fun validateToken(uid: Int, token: String?): Boolean {
-        return token != null && synchronized(tokensByUid) { tokensByUid[uid] } == token
+        return LightSdkServer.clientAuthorizations.validate(uid, token) {
+            verifyCallerIsInstalledClient(uid)
+        }
     }
 
     private val binder = object : Binder() {

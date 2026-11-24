@@ -72,6 +72,29 @@ class ToolResourceRegistryTest {
         assertEquals(1, reads)
     }
 
+    @Test fun `server revocation invalidates only tokens issued for the revoked UID`() {
+        val authorizations = LightSdkServer.clientAuthorizations
+        val revokedUid = 42001
+        val allowedUid = 42002
+        try {
+            val revokedToken = authorizations.issue(revokedUid)
+            val allowedToken = authorizations.issue(allowedUid)
+            assertTrue(authorizations.validate(revokedUid, revokedToken) { true })
+            assertFalse(authorizations.validate(allowedUid, revokedToken) { true })
+
+            LightSdkServer.clientAuthorizations.revoke(revokedUid)
+
+            assertFalse(authorizations.validate(revokedUid, revokedToken) { true })
+            assertTrue(authorizations.validate(allowedUid, allowedToken) { true })
+            val replacement = authorizations.issue(revokedUid)
+            assertFalse(authorizations.validate(revokedUid, revokedToken) { true })
+            assertTrue(authorizations.validate(revokedUid, replacement) { true })
+        } finally {
+            authorizations.revoke(revokedUid)
+            authorizations.revoke(allowedUid)
+        }
+    }
+
     @Test fun `revoked token never revives when eligibility returns or changes during validation`() {
         val tokens = SdkClientAuthorizations()
         val old = tokens.issue(42)
