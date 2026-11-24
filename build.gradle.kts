@@ -21,6 +21,27 @@ val localProperties = java.util.Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
+// Points git at .githooks (see .githooks/pre-commit) so the ktfmt pre-commit
+// hook is active without a manual setup step. Runs on every Gradle
+// invocation, but only shells out to `git config` when the value is wrong.
+if (rootProject.file(".git").exists()) {
+    fun git(vararg args: String): String =
+        ProcessBuilder("git", *args)
+            .directory(rootProject.projectDir)
+            .redirectErrorStream(true)
+            .start()
+            .let { process ->
+                val output = process.inputStream.bufferedReader().readText()
+                process.waitFor()
+                output.trim()
+            }
+
+    val desiredHooksPath = ".githooks"
+    if (git("config", "--get", "core.hooksPath") != desiredHooksPath) {
+        git("config", "core.hooksPath", desiredHooksPath)
+    }
+}
+
 subprojects {
     tasks.matching { it.name == "check" }.configureEach {
         dependsOn(gradle.includedBuild("plugin").task(":check"))
