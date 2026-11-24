@@ -7,13 +7,15 @@ import android.content.pm.PackageInstaller
 import android.util.Log
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.thelightphone.sdk.server.ClientFilterLevel
 import com.thelightphone.sdk.server.LightSdkServer
 import java.io.File
 import java.io.FileInputStream
 
 /**
- * Gates installation on [LightSdkServer.isPackageInstallable] (the real evaluator, as of the
- * runtime evaluation slice), then hands the staged bytes to [PackageInstaller] unchanged.
+ * Gates installation through [LightSdkServer.isPackageInstallable] before passing the APK to
+ * [PackageInstaller]. The trust runtime is used when configured by the host; otherwise the gate
+ * denies parsed APKs except at [ClientFilterLevel.AllowAllApks].
  *
  * Known, accepted gap: [apkFile] is read once for the gate and again when [installApk] opens
  * it, with no immutable staging copy in between - a writer with access to the inbox path
