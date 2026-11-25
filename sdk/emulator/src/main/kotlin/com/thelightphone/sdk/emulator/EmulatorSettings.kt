@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.thelightphone.sdk.emulator.backup.BackupSettings
 import com.thelightphone.sdk.server.ClientFilterLevel
 import com.thelightphone.sdk.server.ForceFocusLevel
+import com.thelightphone.sdk.server.LightSdkServer
 import com.thelightphone.sdk.server.LightSdkServerSettings
 import com.thelightphone.sdk.server.backup.BackupSettingsViewModel
 import com.thelightphone.sdk.shared.LightServiceMethod
@@ -191,7 +192,10 @@ fun ClientFilterLevelSettings(settings: LightSdkServerSettings, onBackPressed: (
                     Modifier
                         .fillMaxWidth()
                         .clickable {
-                            settings.clientFilterLevel = clientFilterLevel
+                            if (settings.clientFilterLevel != clientFilterLevel) {
+                                settings.clientFilterLevel = clientFilterLevel
+                                LightSdkServer.notifyToolTrustChanged()
+                            }
                             onBackPressed()
                         }
                         .padding(16.dp)
