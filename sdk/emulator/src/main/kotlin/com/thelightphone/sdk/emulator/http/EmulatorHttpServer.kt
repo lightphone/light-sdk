@@ -6,9 +6,11 @@ import com.thelightphone.sdk.emulator.EmulatorLocationHelper
 import com.thelightphone.sdk.server.BuildConfig
 import com.thelightphone.sdk.server.LightPushDistributor
 import com.thelightphone.sdk.server.LightPushRegistry
+import com.thelightphone.sdk.trust.SignedTrustBundle
 import com.thelightphone.sdk.trust.TrustBundleCandidateStaging
 import com.thelightphone.sdk.trust.TrustFailure
 import com.thelightphone.sdk.trust.TrustResult
+import com.thelightphone.sdk.trust.TrustState
 import com.thelightphone.sdk.trust.TrustStore
 import io.ktor.http.HttpHeaders
 import io.ktor.http.ContentType
@@ -61,6 +63,7 @@ class EmulatorHttpServer(
     private val context: Context,
     private val trustStore: TrustStore,
     private val trustBundleCandidateStaging: TrustBundleCandidateStaging,
+    private val onTrustChanged: () -> Unit,
 ) {
 
     companion object {
@@ -285,7 +288,9 @@ class EmulatorHttpServer(
                     call.respondText(e.message ?: "Invalid candidate", status = HttpStatusCode.BadRequest)
                     return@post
                 }
-                when (val result = trustBundleCandidateStaging.stageAndSubmit(trustStore, candidate)) {
+                when (val result = submitTrustBundle(
+                    trustBundleCandidateStaging, trustStore, candidate, onTrustChanged,
+                )) {
                     is TrustResult.Success -> call.respondText(
                         buildJsonObject { put("version", result.value.version) }.toString(),
                         ContentType.Application.Json
@@ -521,4 +526,21 @@ class EmulatorHttpServer(
         server.stop(1000, 2000)
         Log.i(TAG, "HTTP server stopped")
     }
+}
+
+internal fun submitTrustBundle(
+    staging: TrustBundleCandidateStaging,
+    store: TrustStore,
+    candidate: SignedTrustBundle,
+    onTrustChanged: () -> Unit,
+): TrustResult<TrustState> = synchronized(staging) {
+    val result = staging.stageAndSubmit(store, candidate)
+    when (result) {
+        is TrustResult.Success -> onTrustChanged()
+        is TrustResult.Failure -> {
+            // The store retains the new in-memory policy when durability is uncertain.
+            if (result.reason is TrustFailure.PersistenceDurabilityUnknown) onTrustChanged()
+        }
+    }
+    result
 }

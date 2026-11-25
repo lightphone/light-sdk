@@ -248,6 +248,7 @@ class EmulatorApplication : Application(), Configuration.Provider {
             trustBundleCandidateStaging = TrustBundleCandidateStaging(
                 FileTrustPersistence(File(filesDir, "trust/bundle-candidate.dat").toPath()),
             ),
+            onTrustChanged = LightSdkServer::notifyToolTrustChanged,
         ).start()
 
         val backupScheduleSyncer = BackupScheduleSyncer(this, backupObservablePreferences)
