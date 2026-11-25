@@ -23,7 +23,6 @@ class ToolEnforcementController(
     private val status = ToolEnforcementStatus()
     val snapshot = status.snapshot
     private val executor = Executors.newSingleThreadExecutor { task -> Thread(task, "tool-enforcement").apply { isDaemon = true } }
-    val lastResults: List<ToolEnforcementResult> get() = snapshot.value.results
     @Volatile private var lastUids: Map<String, Int> = emptyMap()
 
     private val backend = JournaledToolRestrictionBackend(platform, store,
