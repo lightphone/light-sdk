@@ -57,13 +57,18 @@ import java.io.File
 import java.util.Base64
 
 // SHA-256 fingerprint of sdk/keys/lightsdk-dev.jks (alias: lightsdk-dev).
-private const val LIGHTSDK_DEV_CERT_SHA256 =
-    "B9C33E29B0CCAD2BFF11ACAB55F65A3C517EF4BC92CD9C77785366FA353D5F28"
+internal const val LIGHTSDK_DEV_CERT_SHA256 =
+    "b9c33e29b0ccad2bff11acab55f65a3c517ef4bc92cd9c77785366fa353d5f28"
 
 // Base64 DER SubjectPublicKeyInfo of sdk/emulator/dev-keys/INSECURE-trust-bundle-public.pem.
 // Throwaway, emulator-only trust bundle key; see that directory's README.
 private const val EMULATOR_DEV_TRUST_BUNDLE_PUBLIC_KEY =
     "MCowBQYDK2VwAyEAzOvW4GDLmhLQuFHyo+r6xrvQGxyAyZgabdwOAg3PSBc="
+
+private val SIGNER_FINGERPRINT = Regex("[0-9a-f]{64}")
+
+internal fun canonicalSignerFingerprint(value: String): String? =
+    value.trim().lowercase().takeIf(SIGNER_FINGERPRINT::matches)
 
 private const val BACKUP_ROOT_PATH = "backup"
 
@@ -272,7 +277,7 @@ class EmulatorApplication : Application(), Configuration.Provider {
         val userAdded =
             LightSdkServer.getApkInboxSignaturesDirectory(this)
                 .listFiles { file -> file.isFile }
-                ?.mapNotNull { it.readSigningKeyHash() }
+                ?.mapNotNull { it.readSigningKeyHash()?.let(::canonicalSignerFingerprint) }
                 .orEmpty()
         validSignatures = listOf(LIGHTSDK_DEV_CERT_SHA256) + userAdded
     }
