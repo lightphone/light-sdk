@@ -11,13 +11,29 @@ from __future__ import annotations
 import re
 
 ALLOWED_SOURCE_EXTENSIONS: frozenset[str] = frozenset({".kt", ".java"})
-ALLOWED_RES_EXTENSIONS: frozenset[str] = frozenset(
-    {".xml", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".json", ".ttf", ".otf"}
-)
-ALLOWED_ASSET_EXTENSIONS: frozenset[str] = frozenset(
-    {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".json", ".txt", ".md",
-     ".ttf", ".otf", ".bin", ".dat", ".csv", ".html", ".css"}
-)
+ALLOWED_RES_EXTENSIONS: frozenset[str] = frozenset({
+    ".xml",  # layouts, values, manifests fragments
+    # image
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg",
+    # audio
+    ".wav", ".mp3",
+    # font
+    ".ttf", ".otf",
+    # document / data
+    ".json",
+})
+ALLOWED_ASSET_EXTENSIONS: frozenset[str] = frozenset({
+    # image
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg",
+    # audio
+    ".wav", ".mp3",
+    # font
+    ".ttf", ".otf",
+    # document / data
+    ".json", ".txt", ".md", ".csv", ".html", ".css",
+    # binary / opaque data
+    ".bin", ".dat",
+})
 
 # Subdirectories of tool/src/main that the extractor reads from. Each maps
 # to its extension allowlist.

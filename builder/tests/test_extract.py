@@ -106,6 +106,23 @@ def test_apply_from_in_build_script_rejected(tmp_path: Path) -> None:
         extract(dev, dst)
 
 
+def test_audio_assets_copied(tmp_path: Path) -> None:
+    dev = _make_dev_repo(tmp_path / "dev")
+    assets = dev / "tool" / "src" / "main" / "assets" / "sounds"
+    assets.mkdir(parents=True)
+    (assets / "ding.wav").write_bytes(b"RIFF....WAVEfmt ")
+    (assets / "chime.mp3").write_bytes(b"ID3\x03\x00\x00\x00")
+    dst = tmp_path / "workspace" / "tool"
+    dst.mkdir(parents=True)
+
+    report = extract(dev, dst)
+
+    assert (dst / "src/main/assets/sounds/ding.wav").is_file()
+    assert (dst / "src/main/assets/sounds/chime.mp3").is_file()
+    assert "assets/sounds/ding.wav" in report.files_copied
+    assert "assets/sounds/chime.mp3" in report.files_copied
+
+
 def test_disallowed_source_extension_rejected(tmp_path: Path) -> None:
     dev = _make_dev_repo(tmp_path / "dev")
     bad = dev / "tool" / "src" / "main" / "kotlin" / "evil.groovy"
