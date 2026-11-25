@@ -62,7 +62,7 @@ internal const val LIGHTSDK_DEV_CERT_SHA256 =
 
 // Base64 DER SubjectPublicKeyInfo of sdk/emulator/dev-keys/INSECURE-trust-bundle-public.pem.
 // Throwaway, emulator-only trust bundle key; see that directory's README.
-private const val EMULATOR_DEV_TRUST_BUNDLE_PUBLIC_KEY =
+internal const val EMULATOR_DEV_TRUST_BUNDLE_PUBLIC_KEY =
     "MCowBQYDK2VwAyEAzOvW4GDLmhLQuFHyo+r6xrvQGxyAyZgabdwOAg3PSBc="
 
 private val SIGNER_FINGERPRINT = Regex("[0-9a-f]{64}")
