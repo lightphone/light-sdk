@@ -42,8 +42,8 @@ class AndroidToolRestrictionPlatform(context: Context) : ToolRestrictionPlatform
         }
     }
 
-    override fun requestPurge(packageName: String) {
+    override fun requestPurge(packageName: String): String {
         requireExternalTool(packageName)
-        LightToolPurgeWorker.enqueue(context, packageName)
+        return LightToolPurgeWorker.enqueue(context, packageName)
     }
 }

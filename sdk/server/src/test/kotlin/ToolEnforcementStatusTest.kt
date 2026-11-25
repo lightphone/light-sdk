@@ -24,16 +24,28 @@ class ToolEnforcementStatusTest {
         assertTrue(status.snapshot.value.results.isEmpty())
     }
 
-    @Test fun `purge failure updates only matching current pending removal`() {
+    @Test fun `pre-callback purge failure survives checking and is attached to its attempt`() {
         val status = ToolEnforcementStatus()
-        status.complete(status.request(), listOf(result(ToolContainment.PurgeRequested)))
-        status.purgeFailed("tool", 3, 1)
-        assertEquals(ToolContainment.PurgeRequested, status.snapshot.value.results.single().containment)
-        status.purgeFailed("tool", 4, 1)
-        assertEquals(ToolContainment.Failed, status.snapshot.value.results.single().containment)
-        status.request()
-        status.purgeFailed("tool", 4, 1)
-        assertTrue(status.snapshot.value.results.isEmpty())
+        val revision = status.request()
+        status.purgeFinished("tool", "attempt", ToolPurgeOutcome.Failed("Uninstall request failed"))
+        status.purgeFinished("tool", "older", ToolPurgeOutcome.Failed("Late callback"))
+        status.complete(revision, listOf(result(ToolContainment.PurgeRequested).copy(purgeAttemptId = "attempt")))
+        val failed = status.snapshot.value.results.single()
+        assertEquals(ToolContainment.Failed, failed.containment)
+        assertEquals(listOf("Uninstall request failed"), failed.failures)
+    }
+
+    @Test fun `same-bundle late failure cannot overwrite a newer attempt and skip has its own status`() {
+        val status = ToolEnforcementStatus()
+        val pending = result(ToolContainment.PurgeRequested).copy(purgeAttemptId = "new")
+        status.complete(status.request(), listOf(pending))
+        status.purgeFinished("tool", "old", ToolPurgeOutcome.Failed("Late callback"))
+        assertEquals(pending, status.snapshot.value.results.single())
+
+        status.purgeFinished("tool", "new", ToolPurgeOutcome.Skipped)
+        val skipped = status.snapshot.value.results.single()
+        assertEquals(ToolContainment.PurgeSkipped, skipped.containment)
+        assertEquals("Removal skipped", skipped.describeStatus().state)
     }
 
     @Test fun `policy text remains visible but failure never claims successful disable or removal`() {

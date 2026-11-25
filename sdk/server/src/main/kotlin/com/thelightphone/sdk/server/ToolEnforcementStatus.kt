@@ -10,7 +10,13 @@ data class ToolEnforcementSnapshot(
     val failed: Boolean = false,
 )
 
+internal sealed interface ToolPurgeOutcome {
+    data class Failed(val reason: String) : ToolPurgeOutcome
+    data object Skipped : ToolPurgeOutcome
+}
+
 internal class ToolEnforcementStatus {
+    private val finishedPurges = mutableMapOf<Pair<String, String>, ToolPurgeOutcome>()
     private val current = MutableStateFlow(ToolEnforcementSnapshot())
     val snapshot = current.asStateFlow()
 
@@ -21,8 +27,12 @@ internal class ToolEnforcementStatus {
     }
 
     @Synchronized fun complete(revision: Long, results: List<ToolEnforcementResult>) {
-        if (revision == current.value.revision)
-            current.value = ToolEnforcementSnapshot(revision, checking = false, results = results.toList())
+        if (revision != current.value.revision) return
+        val currentAttempts = results.associate { it.packageName to it.purgeAttemptId }
+        finishedPurges.keys.removeAll { (packageName, attemptId) ->
+            currentAttempts[packageName] != attemptId
+        }
+        current.value = ToolEnforcementSnapshot(revision, checking = false, results = results.map(::withPurgeOutcome))
     }
 
     @Synchronized fun fail(revision: Long) {
@@ -30,12 +40,25 @@ internal class ToolEnforcementStatus {
             current.value = ToolEnforcementSnapshot(revision, checking = false, failed = true)
     }
 
-    @Synchronized fun purgeFailed(packageName: String, bundleVersion: Long, status: Int) {
-        current.value = current.value.copy(results = current.value.results.map {
-            if (it.packageName == packageName && it.containment == ToolContainment.PurgeRequested &&
-                it.evaluation.bundleVersion == bundleVersion)
-                it.copy(containment = ToolContainment.Failed, failures = it.failures + "Uninstall failed: status=$status")
-            else it
-        })
+    @Synchronized fun purgeFinished(packageName: String, attemptId: String, outcome: ToolPurgeOutcome) {
+        val before = current.value
+        val result = before.results.firstOrNull { it.packageName == packageName }
+        if (result?.purgeAttemptId == attemptId || before.checking) {
+            finishedPurges[packageName to attemptId] = outcome
+            current.value = before.copy(results = before.results.map(::withPurgeOutcome))
+        }
+    }
+
+    private fun withPurgeOutcome(result: ToolEnforcementResult): ToolEnforcementResult {
+        val attemptId = result.purgeAttemptId ?: return result
+        if (result.containment != ToolContainment.PurgeRequested) return result
+        return when (val outcome = finishedPurges[result.packageName to attemptId]) {
+            null -> result
+            is ToolPurgeOutcome.Failed -> result.copy(
+                containment = ToolContainment.Failed,
+                failures = result.failures + outcome.reason,
+            )
+            ToolPurgeOutcome.Skipped -> result.copy(containment = ToolContainment.PurgeSkipped)
+        }
     }
 }

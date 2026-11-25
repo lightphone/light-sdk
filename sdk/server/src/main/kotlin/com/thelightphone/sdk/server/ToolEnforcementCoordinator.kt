@@ -22,17 +22,18 @@ interface ToolRestrictionBackend {
     fun disable(packageName: String)
     fun restrictionStillOwned(record: OwnedToolRestriction): Boolean
     fun restore(record: OwnedToolRestriction)
-    fun purge(packageName: String)
+    fun purge(packageName: String): String
     fun allowSdkAuthorization(packageName: String) {}
 }
 
-enum class ToolContainment { Allowed, Disabled, PurgeRequested, OwnershipConflict, Failed }
+enum class ToolContainment { Allowed, Disabled, PurgeRequested, PurgeSkipped, OwnershipConflict, Failed }
 
 data class ToolEnforcementResult(
     val packageName: String,
     val evaluation: ToolEvaluation,
     val containment: ToolContainment,
     val failures: List<String> = emptyList(),
+    val purgeAttemptId: String? = null,
 )
 
 /** Gate changes precede potentially slow cleanup/platform operations. */
@@ -97,9 +98,10 @@ class ToolEnforcementCoordinator(private val backend: ToolRestrictionBackend) {
         if (kill?.action == BlockAction.Purge && !purge) {
             failures += "purge lacks matching accepted policy evidence"
         }
+        var purgeAttemptId: String? = null
         val platformSucceeded = if (purge) {
             val disabled = attempt("disable pending purge") { backend.disable(packageName) }
-            val requested = attempt("purge") { backend.purge(packageName) }
+            val requested = attempt("purge") { purgeAttemptId = backend.purge(packageName) }
             disabled && requested
         } else attempt("disable") { backend.disable(packageName) }
         val containment = when {
@@ -107,6 +109,6 @@ class ToolEnforcementCoordinator(private val backend: ToolRestrictionBackend) {
             purge -> ToolContainment.PurgeRequested
             else -> ToolContainment.Disabled
         }
-        return ToolEnforcementResult(packageName, evaluation, containment, failures.toList())
+        return ToolEnforcementResult(packageName, evaluation, containment, failures.toList(), purgeAttemptId)
     }
 }

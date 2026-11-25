@@ -24,7 +24,7 @@ class ToolEnforcementCoordinatorTest {
         }
         override fun restrictionStillOwned(record: OwnedToolRestriction) = !ownerChanged && owned == record
         override fun restore(record: OwnedToolRestriction) { events += "restore"; owned = null }
-        override fun purge(packageName: String) { events += "purge" }
+        override fun purge(packageName: String): String { events += "purge"; return "attempt" }
     }
 
     @Test fun `all denials revoke and clean before reversible disabling`() {

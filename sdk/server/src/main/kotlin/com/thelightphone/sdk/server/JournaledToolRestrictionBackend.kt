@@ -9,7 +9,7 @@ interface ToolRestrictionPlatform {
     fun state(packageName: String): ToolPackageState
     fun setEnabledState(packageName: String, enabledState: Int)
     fun stopProcesses(packageName: String)
-    fun requestPurge(packageName: String)
+    fun requestPurge(packageName: String): String
 }
 
 class JournaledToolRestrictionBackend(

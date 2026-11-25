@@ -131,9 +131,9 @@ class ToolEnforcementController(
         requestReconciliation()
     }
 
-    fun onPurgeFailed(packageName: String, bundleVersion: Long, status: Int) {
+    internal fun onPurgeOutcome(packageName: String, attemptId: String, outcome: ToolPurgeOutcome) {
         executor.execute {
-            this.status.purgeFailed(packageName, bundleVersion, status)
+            status.purgeFinished(packageName, attemptId, outcome)
         }
     }
 

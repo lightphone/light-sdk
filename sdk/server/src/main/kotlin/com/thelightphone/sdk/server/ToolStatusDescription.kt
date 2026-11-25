@@ -37,6 +37,7 @@ fun ToolEnforcementResult.describeStatus(): ToolStatusDescription {
             ToolContainment.Allowed -> "Allowed"
             ToolContainment.Disabled -> "Disabled"
             ToolContainment.PurgeRequested -> "Removal requested"
+            ToolContainment.PurgeSkipped -> "Removal skipped"
             ToolContainment.OwnershipConflict, ToolContainment.Failed -> "Needs attention"
         },
         reason = reason,

@@ -28,7 +28,7 @@ class JournaledToolRestrictionBackendTest {
             snapshot = snapshot.copy(enabledState = enabledState)
         }
         override fun stopProcesses(packageName: String) { operations += "stop" }
-        override fun requestPurge(packageName: String) { operations += "purge" }
+        override fun requestPurge(packageName: String): String { operations += "purge"; return "attempt" }
     }
     private fun backend(platform: Platform, store: ToolRestrictionStore) =
         JournaledToolRestrictionBackend(platform, store, {}, {}, {})
