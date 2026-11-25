@@ -42,13 +42,13 @@ class LightTrustStore private constructor(
     private val persistence: TrustPersistence,
     imagePins: Set<String>,
     initial: LightTrustBundle?,
-) {
+) : TrustStore {
     private val pins = frozenSet(imagePins)
     private var accepted = stateFor(initial)
 
-    @Synchronized fun state(): TrustState = accepted
+    @Synchronized override fun state(): TrustState = accepted
 
-    @Synchronized fun accept(input: SignedTrustBundle): TrustResult<TrustState> {
+    @Synchronized override fun accept(input: SignedTrustBundle): TrustResult<TrustState> {
         val result = verifier.verify(input.bytes, input.signature)
         if (result is TrustResult.Failure) return result
 

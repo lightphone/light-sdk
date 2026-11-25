@@ -33,10 +33,12 @@ import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.trust.AdmissionStore
 import com.thelightphone.sdk.trust.FileAdmissionPersistence
+import com.thelightphone.sdk.trust.FileTrustPersistence
 import com.thelightphone.sdk.trust.LightTrustBundleVerifier
 import com.thelightphone.sdk.trust.LightTrustStore
+import com.thelightphone.sdk.trust.TrustBundleCandidateStaging
 import com.thelightphone.sdk.trust.TrustResult
-import com.thelightphone.sdk.trust.TrustState
+import com.thelightphone.sdk.trust.UnavailableTrustStore
 import com.thelightphone.sdk.trust.apksig.ApkSigStampVerifier
 import com.thelightphone.sdk.ui.LightModalManager
 import com.thelightphone.toolmanager.BranchView
@@ -97,8 +99,15 @@ class EmulatorApplication : Application(), Configuration.Provider {
     // the dev cert plus any hash a developer has dropped into the apk inbox signatures dir.
     @Volatile private var validSignatures: List<String> = listOf(LIGHTSDK_DEV_CERT_SHA256)
 
-    private val trustStoreResult by lazy { LightSdkServer.provideLightTrustStore(this) }
-    val trustStore: LightTrustStore? get() = (trustStoreResult as? TrustResult.Success)?.value
+    private val trustStoreResult by lazy {
+        LightTrustStore.open(
+            verifier = LightTrustBundleVerifier(
+                listOf(Base64.getDecoder().decode(EMULATOR_DEV_TRUST_BUNDLE_PUBLIC_KEY)),
+            ),
+            persistence = FileTrustPersistence(File(filesDir, "trust/bundle.dat").toPath()),
+            imagePins = emptySet(),
+        )
+    }
 
     val backupSettingsViewModel by lazy {
         object :
@@ -151,15 +160,11 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 "$pushDomain/push/$token"
             }
             provideSdkSettings = { settings }
-            provideTrustBundleVerifier = {
-                LightTrustBundleVerifier(
-                    listOf(Base64.getDecoder().decode(EMULATOR_DEV_TRUST_BUNDLE_PUBLIC_KEY))
-                )
-            }
+            trustStore = (trustStoreResult as? TrustResult.Success)?.value ?: UnavailableTrustStore
             toolTrustRuntime =
                 ToolTrustRuntime(
                     verifier = ApkSigStampVerifier(),
-                    trustState = { trustStore?.state() },
+                    trustState = trustStore::state,
                     admissionStore =
                         AdmissionStore(
                             FileAdmissionPersistence(
@@ -234,8 +239,10 @@ class EmulatorApplication : Application(), Configuration.Provider {
         ToolEnforcementController.start(this) { _installedToolsRefreshCount.value++ }
         EmulatorHttpServer(
             context = this,
-            trustStore = trustStore,
-            trustBundleCandidateStaging = LightSdkServer.provideTrustBundleCandidateStaging(this),
+            trustStore = LightSdkServer.trustStore,
+            trustBundleCandidateStaging = TrustBundleCandidateStaging(
+                FileTrustPersistence(File(filesDir, "trust/bundle-candidate.dat").toPath()),
+            ),
         ).start()
 
         val backupScheduleSyncer = BackupScheduleSyncer(this, backupObservablePreferences)

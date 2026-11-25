@@ -1,9 +1,8 @@
 # INSECURE dev trust-bundle key
 
 A throwaway Ed25519 keypair, generated purely so the emulator can exercise
-`LightTrustStore.accept()` locally. It pins `provideTrustBundleVerifier`'s
-default in `EmulatorApplication`, which only ever runs on the local emulator
-build — never shipped to a device, never used for anything production.
+`LightTrustStore.accept()` locally. `EmulatorApplication` pins the public key
+when it opens the store in the emulator build.
 
 Never use this for anything but local emulator testing. It carries no real
 trust and is safe to delete and regenerate at any time:

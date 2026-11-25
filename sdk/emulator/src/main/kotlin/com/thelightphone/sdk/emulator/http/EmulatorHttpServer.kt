@@ -6,10 +6,10 @@ import com.thelightphone.sdk.emulator.EmulatorLocationHelper
 import com.thelightphone.sdk.server.BuildConfig
 import com.thelightphone.sdk.server.LightPushDistributor
 import com.thelightphone.sdk.server.LightPushRegistry
-import com.thelightphone.sdk.trust.LightTrustStore
 import com.thelightphone.sdk.trust.TrustBundleCandidateStaging
 import com.thelightphone.sdk.trust.TrustFailure
 import com.thelightphone.sdk.trust.TrustResult
+import com.thelightphone.sdk.trust.TrustStore
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -57,7 +57,7 @@ import kotlinx.serialization.json.put
  */
 class EmulatorHttpServer(
     private val context: Context,
-    private val trustStore: LightTrustStore?,
+    private val trustStore: TrustStore,
     private val trustBundleCandidateStaging: TrustBundleCandidateStaging,
 ) {
 
@@ -244,11 +244,9 @@ class EmulatorHttpServer(
                 }
             }
 
-            // dev-only: push a signed trust bundle candidate straight into the emulator's
-            // LightTrustStore, bypassing any real transport (09b's HTTP path is not this).
+            // Dev-only: submit a signed trust bundle directly to the emulator's store.
             post("/trust/bundle") {
-                val store = trustStore
-                if (store == null) {
+                if (trustStore.state() == null) {
                     call.respondText("Trust store unavailable", status = HttpStatusCode.ServiceUnavailable)
                     return@post
                 }
@@ -263,7 +261,7 @@ class EmulatorHttpServer(
                     call.respondText(e.message ?: "Invalid candidate", status = HttpStatusCode.BadRequest)
                     return@post
                 }
-                when (val result = trustBundleCandidateStaging.stageAndSubmit(store, candidate)) {
+                when (val result = trustBundleCandidateStaging.stageAndSubmit(trustStore, candidate)) {
                     is TrustResult.Success -> call.respondText(
                         buildJsonObject { put("version", result.value.version) }.toString(),
                         ContentType.Application.Json
@@ -272,6 +270,7 @@ class EmulatorHttpServer(
                         buildJsonObject { put("error", result.reason.toString()) }.toString(),
                         ContentType.Application.Json,
                         when (result.reason) {
+                            TrustFailure.Unavailable -> HttpStatusCode.ServiceUnavailable
                             TrustFailure.PersistenceFailed,
                             is TrustFailure.PersistenceDurabilityUnknown -> HttpStatusCode.InternalServerError
                             else -> HttpStatusCode.BadRequest
@@ -281,7 +280,7 @@ class EmulatorHttpServer(
             }
 
             get("/trust/state") {
-                val state = trustStore?.state()
+                val state = trustStore.state()
                 if (state == null) {
                     call.respondText(
                         buildJsonObject { put("available", false) }.toString(),
