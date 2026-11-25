@@ -15,7 +15,10 @@ class TrustBundleSubmissionTest {
     @Test
     fun publishedPoliciesNotifyBeforeReturning() {
         verify(TrustResult.Success(TrustState(null, emptySet())), expectedNotifications = 1)
-        verify(TrustResult.Failure(TrustFailure.PersistenceDurabilityUnknown(2)), expectedNotifications = 1)
+        verify(
+            TrustResult.Failure(TrustFailure.PersistenceDurabilityUnknown(2)),
+            expectedNotifications = 1,
+        )
     }
 
     @Test
@@ -28,24 +31,32 @@ class TrustBundleSubmissionTest {
     private fun verify(
         result: TrustResult<TrustState>,
         expectedNotifications: Int,
-        store: TrustStore = object : TrustStore {
-            override fun state(): TrustState? = null
-            override fun accept(input: SignedTrustBundle) = result
-        },
+        store: TrustStore =
+            object : TrustStore {
+                override fun state(): TrustState? = null
+
+                override fun accept(input: SignedTrustBundle) = result
+            },
     ) {
-        val persistence = object : TrustPersistence {
-            private var candidate: SignedTrustBundle? = null
-            override fun read() = candidate
-            override fun write(bundle: SignedTrustBundle) {
-                candidate = bundle
+        val persistence =
+            object : TrustPersistence {
+                private var candidate: SignedTrustBundle? = null
+
+                override fun read() = candidate
+
+                override fun write(bundle: SignedTrustBundle) {
+                    candidate = bundle
+                }
             }
-        }
         var notifications = 0
-        val actual = submitTrustBundle(
-            TrustBundleCandidateStaging(persistence),
-            store,
-            SignedTrustBundle(byteArrayOf(1), byteArrayOf(2)),
-        ) { notifications++ }
+        val actual =
+            submitTrustBundle(
+                TrustBundleCandidateStaging(persistence),
+                store,
+                SignedTrustBundle(byteArrayOf(1), byteArrayOf(2)),
+            ) {
+                notifications++
+            }
 
         assertEquals(result, actual)
         assertEquals(expectedNotifications, notifications)

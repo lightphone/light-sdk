@@ -2,6 +2,7 @@ package com.thelightphone.sdk.emulator.http
 
 import android.content.Context
 import android.util.Log
+import androidx.core.content.edit
 import com.thelightphone.sdk.emulator.EmulatorLocationHelper
 import com.thelightphone.sdk.server.BuildConfig
 import com.thelightphone.sdk.server.LightPushDistributor
@@ -12,10 +13,11 @@ import com.thelightphone.sdk.trust.TrustFailure
 import com.thelightphone.sdk.trust.TrustResult
 import com.thelightphone.sdk.trust.TrustState
 import com.thelightphone.sdk.trust.TrustStore
-import io.ktor.http.HttpHeaders
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
 import io.ktor.server.auth.Authentication
 import io.ktor.server.auth.UserIdPrincipal
@@ -39,14 +41,12 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
-import kotlin.time.Clock
-import io.ktor.server.application.ApplicationCall
 import io.ktor.utils.io.jvm.javaio.copyTo
-import androidx.core.content.edit
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
@@ -56,9 +56,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 
-/**
- * A place to dump otherwise cloud-based features.
- */
+/** A place to dump otherwise cloud-based features. */
 class EmulatorHttpServer(
     private val context: Context,
     private val trustStore: TrustStore,
@@ -83,41 +81,49 @@ class EmulatorHttpServer(
     }
 
     private data class IssuedCode(val redirectUri: String, val expiresAt: Long)
+
     private data class IssuedToken(val expiresAt: Long)
 
     private val tokenPrefs = context.getSharedPreferences(TOKENS_PREFS_NAME, Context.MODE_PRIVATE)
 
     private val authCodes = ConcurrentHashMap<String, IssuedCode>()
-    private val accessTokens = ConcurrentHashMap<String, IssuedToken>().apply {
-        loadTokenMap(PREF_ACCESS_TOKENS).forEach { (token, expiresAt) -> put(token, IssuedToken(expiresAt)) }
-    }
-    private val refreshTokens = ConcurrentHashMap<String, Long>().apply {
-        putAll(loadTokenMap(PREF_REFRESH_TOKENS))
-    }
+    private val accessTokens =
+        ConcurrentHashMap<String, IssuedToken>().apply {
+            loadTokenMap(PREF_ACCESS_TOKENS).forEach { (token, expiresAt) ->
+                put(token, IssuedToken(expiresAt))
+            }
+        }
+    private val refreshTokens =
+        ConcurrentHashMap<String, Long>().apply { putAll(loadTokenMap(PREF_REFRESH_TOKENS)) }
 
     private fun loadTokenMap(key: String): Map<String, Long> {
         val raw = tokenPrefs.getString(key, null) ?: return emptyMap()
         return runCatching {
-            Json.parseToJsonElement(raw).jsonObject.mapValues { it.value.jsonPrimitive.long }
-        }.getOrDefault(emptyMap())
+                Json.parseToJsonElement(raw).jsonObject.mapValues { it.value.jsonPrimitive.long }
+            }
+            .getOrDefault(emptyMap())
     }
 
     private fun persistTokens() {
         tokenPrefs.edit {
             putString(
                 PREF_ACCESS_TOKENS,
-                buildJsonObject { accessTokens.forEach { (token, issued) -> put(token, issued.expiresAt) } }.toString()
+                buildJsonObject {
+                        accessTokens.forEach { (token, issued) -> put(token, issued.expiresAt) }
+                    }
+                    .toString(),
             )
             putString(
                 PREF_REFRESH_TOKENS,
-                buildJsonObject { refreshTokens.forEach { (token, expiresAt) -> put(token, expiresAt) } }.toString()
+                buildJsonObject {
+                        refreshTokens.forEach { (token, expiresAt) -> put(token, expiresAt) }
+                    }
+                    .toString(),
             )
         }
     }
 
-    private val filesRoot: File by lazy {
-        File(context.filesDir, "fileserver").apply { mkdirs() }
-    }
+    private val filesRoot: File by lazy { File(context.filesDir, "fileserver").apply { mkdirs() } }
 
     private fun resolveFile(relativePath: String): File {
         val root = filesRoot.canonicalPath
@@ -133,7 +139,8 @@ class EmulatorHttpServer(
     private fun String.htmlEscape(): String =
         replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;")
 
-    private fun passwordPageHtml(redirectUri: String, state: String?, error: Boolean): String = """
+    private fun passwordPageHtml(redirectUri: String, state: String?, error: Boolean): String =
+        """
         <!DOCTYPE html>
         <html>
         <head><title>Emulator Login</title></head>
@@ -149,318 +156,375 @@ class EmulatorHttpServer(
             </form>
         </body>
         </html>
-    """.trimIndent()
+    """
+            .trimIndent()
 
     private val trustUploadCredential =
-        if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+        if (
+            context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE !=
+                0
+        ) {
             File(context.filesDir, "trust/upload-token").takeIf(File::isFile)?.let { file ->
-                runCatching { file.readText().trim() }.getOrNull()
+                runCatching { file.readText().trim() }
+                    .getOrNull()
                     ?.takeIf { it.matches(Regex("[a-f0-9]{64}")) }
             }
         } else null
 
-    private val server = embeddedServer(Netty, port = PORT) {
-        install(ContentNegotiation) { json() }
+    private val server =
+        embeddedServer(Netty, port = PORT) {
+            install(ContentNegotiation) { json() }
 
-        // Ktor's own unhandled-exception logging goes through SLF4J, which has no Android
-        // backend configured here, so it silently no-ops - nothing shows up in logcat by
-        // default. This makes sure a route handler crash is both visible in logcat and
-        // surfaced in the response body, instead of Ktor's default bare 500 with no detail.
-        install(StatusPages) {
-            exception<Throwable> { call, cause ->
-                Log.e(TAG, "Unhandled exception handling ${call.request.httpMethod.value} ${call.request.uri}", cause)
-                call.respondText(
-                    cause.stackTraceToString(),
-                    status = HttpStatusCode.InternalServerError
-                )
+            // Ktor's own unhandled-exception logging goes through SLF4J, which has no Android
+            // backend configured here, so it silently no-ops - nothing shows up in logcat by
+            // default. This makes sure a route handler crash is both visible in logcat and
+            // surfaced in the response body, instead of Ktor's default bare 500 with no detail.
+            install(StatusPages) {
+                exception<Throwable> { call, cause ->
+                    Log.e(
+                        TAG,
+                        "Unhandled exception handling ${call.request.httpMethod.value} ${call.request.uri}",
+                        cause,
+                    )
+                    call.respondText(
+                        cause.stackTraceToString(),
+                        status = HttpStatusCode.InternalServerError,
+                    )
+                }
             }
-        }
 
-        install(Authentication) {
-            bearer("files-auth") {
-                realm = "Emulator File Server"
-                authenticate { credentials ->
-                    val now = System.currentTimeMillis()
-                    val issued = accessTokens[credentials.token]
-                    if (issued != null && issued.expiresAt > now) {
-                        UserIdPrincipal(credentials.token)
-                    } else {
-                        null
+            install(Authentication) {
+                bearer("files-auth") {
+                    realm = "Emulator File Server"
+                    authenticate { credentials ->
+                        val now = System.currentTimeMillis()
+                        val issued = accessTokens[credentials.token]
+                        if (issued != null && issued.expiresAt > now) {
+                            UserIdPrincipal(credentials.token)
+                        } else {
+                            null
+                        }
                     }
                 }
             }
-        }
 
-        routing {
-            get("/version") {
-                call.respondText(BuildConfig.SDK_VERSION, status = HttpStatusCode.OK)
-            }
-            post("/push/{token}") {
-                val token = call.parameters["token"]
-                if (token == null) {
-                    call.respondText("Missing token", status = HttpStatusCode.BadRequest)
-                    return@post
+            routing {
+                get("/version") {
+                    call.respondText(BuildConfig.SDK_VERSION, status = HttpStatusCode.OK)
                 }
-                val registration = LightPushRegistry.getByToken(context, token)
-                if (registration == null) {
-                    call.respondText("Unknown token", status = HttpStatusCode.NotFound)
-                    return@post
-                }
-                val body = call.receiveText()
-                Log.d(TAG, "Received push for ${registration.packageName}: $body")
-                LightPushDistributor.sendMessage(
-                    context,
-                    registration.packageName,
-                    token,
-                    body.toByteArray()
-                )
-                call.respondText("OK", status = HttpStatusCode.OK)
-            }
-            post("/location/default") {
-                val latitude = call.request.queryParameters["latitude"]?.toDoubleOrNull()
-                val longitude = call.request.queryParameters["longitude"]?.toDoubleOrNull()
-                if (latitude == null || longitude == null) {
-                    EmulatorLocationHelper.updateDefaultLocation(null)
-                    call.respondText("Cleared default location", status = HttpStatusCode.OK)
-                    return@post
-                }
-                EmulatorLocationHelper.updateDefaultLocation(
-                    EmulatorLocationHelper.Location(latitude, longitude)
-                )
-                call.respondText("OK", status = HttpStatusCode.OK)
-            }
-            post("/location/current") {
-                val latitude = call.request.queryParameters["latitude"]?.toDoubleOrNull()
-                val longitude = call.request.queryParameters["longitude"]?.toDoubleOrNull()
-                if (latitude == null || longitude == null) {
-                    EmulatorLocationHelper.updateCurrentLocation(null)
-                    call.respondText("Cleared current location", status = HttpStatusCode.OK)
-                    return@post
-                }
-                val accuracyMeters =
-                    call.request.queryParameters["accuracyMeters"]?.toDoubleOrNull() ?: 0.0
-                val updated = EmulatorLocationHelper.updateCurrentLocation(
-                    EmulatorLocationHelper.CurrentLocation(
-                        latitude,
-                        longitude,
-                        accuracyMeters,
-                        Clock.System.now()
+                post("/push/{token}") {
+                    val token = call.parameters["token"]
+                    if (token == null) {
+                        call.respondText("Missing token", status = HttpStatusCode.BadRequest)
+                        return@post
+                    }
+                    val registration = LightPushRegistry.getByToken(context, token)
+                    if (registration == null) {
+                        call.respondText("Unknown token", status = HttpStatusCode.NotFound)
+                        return@post
+                    }
+                    val body = call.receiveText()
+                    Log.d(TAG, "Received push for ${registration.packageName}: $body")
+                    LightPushDistributor.sendMessage(
+                        context,
+                        registration.packageName,
+                        token,
+                        body.toByteArray(),
                     )
-                )
-                if (updated) {
                     call.respondText("OK", status = HttpStatusCode.OK)
-                } else {
-                    call.respondText(
-                        "No tools are currently polling for location updates",
-                        status = HttpStatusCode.Conflict
-                    )
                 }
-            }
+                post("/location/default") {
+                    val latitude = call.request.queryParameters["latitude"]?.toDoubleOrNull()
+                    val longitude = call.request.queryParameters["longitude"]?.toDoubleOrNull()
+                    if (latitude == null || longitude == null) {
+                        EmulatorLocationHelper.updateDefaultLocation(null)
+                        call.respondText("Cleared default location", status = HttpStatusCode.OK)
+                        return@post
+                    }
+                    EmulatorLocationHelper.updateDefaultLocation(
+                        EmulatorLocationHelper.Location(latitude, longitude)
+                    )
+                    call.respondText("OK", status = HttpStatusCode.OK)
+                }
+                post("/location/current") {
+                    val latitude = call.request.queryParameters["latitude"]?.toDoubleOrNull()
+                    val longitude = call.request.queryParameters["longitude"]?.toDoubleOrNull()
+                    if (latitude == null || longitude == null) {
+                        EmulatorLocationHelper.updateCurrentLocation(null)
+                        call.respondText("Cleared current location", status = HttpStatusCode.OK)
+                        return@post
+                    }
+                    val accuracyMeters =
+                        call.request.queryParameters["accuracyMeters"]?.toDoubleOrNull() ?: 0.0
+                    val updated =
+                        EmulatorLocationHelper.updateCurrentLocation(
+                            EmulatorLocationHelper.CurrentLocation(
+                                latitude,
+                                longitude,
+                                accuracyMeters,
+                                Clock.System.now(),
+                            )
+                        )
+                    if (updated) {
+                        call.respondText("OK", status = HttpStatusCode.OK)
+                    } else {
+                        call.respondText(
+                            "No tools are currently polling for location updates",
+                            status = HttpStatusCode.Conflict,
+                        )
+                    }
+                }
 
-            // Dev-only: submit a signed trust bundle directly to the emulator's store.
-            post("/trust/bundle") {
-                val credential = trustUploadCredential
-                if (credential == null) {
-                    call.respondText("Not found", status = HttpStatusCode.NotFound)
-                    return@post
+                // Dev-only: submit a signed trust bundle directly to the emulator's store.
+                post("/trust/bundle") {
+                    val credential = trustUploadCredential
+                    if (credential == null) {
+                        call.respondText("Not found", status = HttpStatusCode.NotFound)
+                        return@post
+                    }
+                    val authorization = call.request.headers[HttpHeaders.Authorization]
+                    if (
+                        authorization == null ||
+                            !MessageDigest.isEqual(
+                                "Bearer $credential".encodeToByteArray(),
+                                authorization.encodeToByteArray(),
+                            )
+                    ) {
+                        call.respondText("Unauthorized", status = HttpStatusCode.Unauthorized)
+                        return@post
+                    }
+                    if (trustStore.state() == null) {
+                        call.respondText(
+                            "Trust store unavailable",
+                            status = HttpStatusCode.ServiceUnavailable,
+                        )
+                        return@post
+                    }
+                    val request = readTrustBundleUpload(call.receiveChannel())
+                    if (request == null) {
+                        call.respondText(
+                            "Trust bundle upload is too large",
+                            status = HttpStatusCode.PayloadTooLarge,
+                        )
+                        return@post
+                    }
+                    val candidate =
+                        try {
+                            parseTrustBundleUpload(request)
+                        } catch (e: IllegalArgumentException) {
+                            call.respondText(
+                                e.message ?: "Invalid candidate",
+                                status = HttpStatusCode.BadRequest,
+                            )
+                            return@post
+                        }
+                    when (
+                        val result =
+                            submitTrustBundle(
+                                trustBundleCandidateStaging,
+                                trustStore,
+                                candidate,
+                                onTrustChanged,
+                            )
+                    ) {
+                        is TrustResult.Success ->
+                            call.respondText(
+                                buildJsonObject { put("version", result.value.version) }.toString(),
+                                ContentType.Application.Json,
+                            )
+                        is TrustResult.Failure ->
+                            call.respondText(
+                                buildJsonObject { put("error", result.reason.toString()) }
+                                    .toString(),
+                                ContentType.Application.Json,
+                                when (result.reason) {
+                                    TrustFailure.Unavailable -> HttpStatusCode.ServiceUnavailable
+                                    TrustFailure.PersistenceFailed,
+                                    is TrustFailure.PersistenceDurabilityUnknown ->
+                                        HttpStatusCode.InternalServerError
+                                    else -> HttpStatusCode.BadRequest
+                                },
+                            )
+                    }
                 }
-                val authorization = call.request.headers[HttpHeaders.Authorization]
-                if (authorization == null || !MessageDigest.isEqual(
-                        "Bearer $credential".encodeToByteArray(),
-                        authorization.encodeToByteArray(),
-                    )
-                ) {
-                    call.respondText("Unauthorized", status = HttpStatusCode.Unauthorized)
-                    return@post
-                }
-                if (trustStore.state() == null) {
-                    call.respondText("Trust store unavailable", status = HttpStatusCode.ServiceUnavailable)
-                    return@post
-                }
-                val request = readTrustBundleUpload(call.receiveChannel())
-                if (request == null) {
-                    call.respondText("Trust bundle upload is too large", status = HttpStatusCode.PayloadTooLarge)
-                    return@post
-                }
-                val candidate = try {
-                    parseTrustBundleUpload(request)
-                } catch (e: IllegalArgumentException) {
-                    call.respondText(e.message ?: "Invalid candidate", status = HttpStatusCode.BadRequest)
-                    return@post
-                }
-                when (val result = submitTrustBundle(
-                    trustBundleCandidateStaging, trustStore, candidate, onTrustChanged,
-                )) {
-                    is TrustResult.Success -> call.respondText(
-                        buildJsonObject { put("version", result.value.version) }.toString(),
-                        ContentType.Application.Json
-                    )
-                    is TrustResult.Failure -> call.respondText(
-                        buildJsonObject { put("error", result.reason.toString()) }.toString(),
+
+                get("/trust/state") {
+                    val state = trustStore.state()
+                    if (state == null) {
+                        call.respondText(
+                            buildJsonObject { put("available", false) }.toString(),
+                            ContentType.Application.Json,
+                            HttpStatusCode.ServiceUnavailable,
+                        )
+                        return@get
+                    }
+                    call.respondText(
+                        buildJsonObject {
+                                put("available", true)
+                                put("version", state.version)
+                                put(
+                                    "trustedStampCerts",
+                                    buildJsonArray { state.trustedStampCerts.forEach { add(it) } },
+                                )
+                                put("allowCount", state.bundle?.allow?.size ?: 0)
+                                put("blockCount", state.bundle?.block?.size ?: 0)
+                            }
+                            .toString(),
                         ContentType.Application.Json,
-                        when (result.reason) {
-                            TrustFailure.Unavailable -> HttpStatusCode.ServiceUnavailable
-                            TrustFailure.PersistenceFailed,
-                            is TrustFailure.PersistenceDurabilityUnknown -> HttpStatusCode.InternalServerError
-                            else -> HttpStatusCode.BadRequest
-                        },
                     )
                 }
-            }
 
-            get("/trust/state") {
-                val state = trustStore.state()
-                if (state == null) {
+                get("/oauth/authorize") {
+                    val redirectUri = call.request.queryParameters["redirect_uri"]
+                    if (redirectUri == null) {
+                        call.respondText("Missing redirect_uri", status = HttpStatusCode.BadRequest)
+                        return@get
+                    }
+                    val state = call.request.queryParameters["state"]
                     call.respondText(
-                        buildJsonObject { put("available", false) }.toString(),
-                        ContentType.Application.Json,
-                        HttpStatusCode.ServiceUnavailable
-                    )
-                    return@get
-                }
-                call.respondText(
-                    buildJsonObject {
-                        put("available", true)
-                        put("version", state.version)
-                        put("trustedStampCerts", buildJsonArray { state.trustedStampCerts.forEach { add(it) } })
-                        put("allowCount", state.bundle?.allow?.size ?: 0)
-                        put("blockCount", state.bundle?.block?.size ?: 0)
-                    }.toString(),
-                    ContentType.Application.Json
-                )
-            }
-
-            get("/oauth/authorize") {
-                val redirectUri = call.request.queryParameters["redirect_uri"]
-                if (redirectUri == null) {
-                    call.respondText("Missing redirect_uri", status = HttpStatusCode.BadRequest)
-                    return@get
-                }
-                val state = call.request.queryParameters["state"]
-                call.respondText(passwordPageHtml(redirectUri, state, error = false), ContentType.Text.Html)
-            }
-
-            post("/oauth/authorize") {
-                val params = call.receiveParameters()
-                val redirectUri = params["redirect_uri"]
-                if (redirectUri == null) {
-                    call.respondText("Missing redirect_uri", status = HttpStatusCode.BadRequest)
-                    return@post
-                }
-                val state = params["state"]
-                if (params["password"] != OAUTH_PASSWORD) {
-                    call.respondText(
-                        passwordPageHtml(redirectUri, state, error = true),
+                        passwordPageHtml(redirectUri, state, error = false),
                         ContentType.Text.Html,
-                        HttpStatusCode.Unauthorized
                     )
-                    return@post
                 }
-                val now = System.currentTimeMillis()
-                authCodes.entries.removeAll { it.value.expiresAt < now }
-                val code = generateOpaqueToken()
-                authCodes[code] = IssuedCode(redirectUri, now + AUTH_CODE_TTL_MS)
-                val separator = if (redirectUri.contains("?")) "&" else "?"
-                val location = buildString {
-                    append(redirectUri)
-                    append(separator)
-                    append("code=").append(code)
-                    if (!state.isNullOrEmpty()) append("&state=").append(state)
-                }
-                call.respondRedirect(location)
-            }
 
-            post("/oauth/token") {
-                val params = call.receiveParameters()
-                val now = System.currentTimeMillis()
-                when (params["grant_type"]) {
-                    "authorization_code" -> {
-                        val code = params["code"]
-                        if (code == null) {
-                            call.respondOAuthError(HttpStatusCode.BadRequest, "invalid_request")
-                            return@post
-                        }
-                        val issued = authCodes.remove(code)
-                        if (issued == null || issued.expiresAt < now || issued.redirectUri != params["redirect_uri"]) {
-                            call.respondOAuthError(HttpStatusCode.BadRequest, "invalid_grant")
-                            return@post
-                        }
-                        call.respondTokenResponse(issueAccessToken(now))
+                post("/oauth/authorize") {
+                    val params = call.receiveParameters()
+                    val redirectUri = params["redirect_uri"]
+                    if (redirectUri == null) {
+                        call.respondText("Missing redirect_uri", status = HttpStatusCode.BadRequest)
+                        return@post
                     }
-                    "refresh_token" -> {
-                        val refreshToken = params["refresh_token"]
-                        val expiresAt = refreshToken?.let { refreshTokens[it] }
-                        if (refreshToken == null || expiresAt == null || expiresAt < now) {
-                            call.respondOAuthError(HttpStatusCode.BadRequest, "invalid_grant")
-                            return@post
-                        }
-                        call.respondTokenResponse(issueAccessToken(now, existingRefreshToken = refreshToken))
+                    val state = params["state"]
+                    if (params["password"] != OAUTH_PASSWORD) {
+                        call.respondText(
+                            passwordPageHtml(redirectUri, state, error = true),
+                            ContentType.Text.Html,
+                            HttpStatusCode.Unauthorized,
+                        )
+                        return@post
                     }
-                    else -> call.respondOAuthError(HttpStatusCode.BadRequest, "invalid_request")
+                    val now = System.currentTimeMillis()
+                    authCodes.entries.removeAll { it.value.expiresAt < now }
+                    val code = generateOpaqueToken()
+                    authCodes[code] = IssuedCode(redirectUri, now + AUTH_CODE_TTL_MS)
+                    val separator = if (redirectUri.contains("?")) "&" else "?"
+                    val location = buildString {
+                        append(redirectUri)
+                        append(separator)
+                        append("code=").append(code)
+                        if (!state.isNullOrEmpty()) append("&state=").append(state)
+                    }
+                    call.respondRedirect(location)
                 }
-            }
 
-            // acts as a cloud storage provider to test backups
-            authenticate("files-auth") {
-                route("/files") {
-                    get {
-                        handleGetFiles(call, "")
+                post("/oauth/token") {
+                    val params = call.receiveParameters()
+                    val now = System.currentTimeMillis()
+                    when (params["grant_type"]) {
+                        "authorization_code" -> {
+                            val code = params["code"]
+                            if (code == null) {
+                                call.respondOAuthError(HttpStatusCode.BadRequest, "invalid_request")
+                                return@post
+                            }
+                            val issued = authCodes.remove(code)
+                            if (
+                                issued == null ||
+                                    issued.expiresAt < now ||
+                                    issued.redirectUri != params["redirect_uri"]
+                            ) {
+                                call.respondOAuthError(HttpStatusCode.BadRequest, "invalid_grant")
+                                return@post
+                            }
+                            call.respondTokenResponse(issueAccessToken(now))
+                        }
+                        "refresh_token" -> {
+                            val refreshToken = params["refresh_token"]
+                            val expiresAt = refreshToken?.let { refreshTokens[it] }
+                            if (refreshToken == null || expiresAt == null || expiresAt < now) {
+                                call.respondOAuthError(HttpStatusCode.BadRequest, "invalid_grant")
+                                return@post
+                            }
+                            call.respondTokenResponse(
+                                issueAccessToken(now, existingRefreshToken = refreshToken)
+                            )
+                        }
+                        else -> call.respondOAuthError(HttpStatusCode.BadRequest, "invalid_request")
                     }
-                    get("/{path...}") {
-                        handleGetFiles(call, call.parameters.getAll("path")?.joinToString("/") ?: "")
-                    }
-                    post("/{path...}") {
-                        val relativePath = call.parameters.getAll("path")?.joinToString("/") ?: ""
-                        val file = try {
-                            resolveFile(relativePath)
-                        } catch (e: SecurityException) {
-                            call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
-                            return@post
+                }
+
+                // acts as a cloud storage provider to test backups
+                authenticate("files-auth") {
+                    route("/files") {
+                        get { handleGetFiles(call, "") }
+                        get("/{path...}") {
+                            handleGetFiles(
+                                call,
+                                call.parameters.getAll("path")?.joinToString("/") ?: "",
+                            )
                         }
-                        if (file.isFile) {
-                            call.respondText("A file already exists at this path", status = HttpStatusCode.Conflict)
-                            return@post
+                        post("/{path...}") {
+                            val relativePath =
+                                call.parameters.getAll("path")?.joinToString("/") ?: ""
+                            val file =
+                                try {
+                                    resolveFile(relativePath)
+                                } catch (e: SecurityException) {
+                                    call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
+                                    return@post
+                                }
+                            if (file.isFile) {
+                                call.respondText(
+                                    "A file already exists at this path",
+                                    status = HttpStatusCode.Conflict,
+                                )
+                                return@post
+                            }
+                            file.mkdirs()
+                            call.respondText("OK")
                         }
-                        file.mkdirs()
-                        call.respondText("OK")
-                    }
-                    put("/{path...}") {
-                        val relativePath = call.parameters.getAll("path")?.joinToString("/") ?: ""
-                        val file = try {
-                            resolveFile(relativePath)
-                        } catch (e: SecurityException) {
-                            call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
-                            return@put
+                        put("/{path...}") {
+                            val relativePath =
+                                call.parameters.getAll("path")?.joinToString("/") ?: ""
+                            val file =
+                                try {
+                                    resolveFile(relativePath)
+                                } catch (e: SecurityException) {
+                                    call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
+                                    return@put
+                                }
+                            file.parentFile?.mkdirs()
+                            file.outputStream().use { output ->
+                                call.receiveChannel().copyTo(output)
+                            }
+                            call.respondText("OK")
                         }
-                        file.parentFile?.mkdirs()
-                        file.outputStream().use { output ->
-                            call.receiveChannel().copyTo(output)
+                        delete("/{path...}") {
+                            val relativePath =
+                                call.parameters.getAll("path")?.joinToString("/") ?: ""
+                            val file =
+                                try {
+                                    resolveFile(relativePath)
+                                } catch (e: SecurityException) {
+                                    call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
+                                    return@delete
+                                }
+                            if (file.isFile) file.delete()
+                            call.respondText("OK")
                         }
-                        call.respondText("OK")
-                    }
-                    delete("/{path...}") {
-                        val relativePath = call.parameters.getAll("path")?.joinToString("/") ?: ""
-                        val file = try {
-                            resolveFile(relativePath)
-                        } catch (e: SecurityException) {
-                            call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
-                            return@delete
-                        }
-                        if (file.isFile) file.delete()
-                        call.respondText("OK")
                     }
                 }
             }
         }
-    }
 
     private suspend fun handleGetFiles(call: ApplicationCall, relativePath: String) {
-        val file = try {
-            resolveFile(relativePath)
-        } catch (e: SecurityException) {
-            call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
-            return
-        }
+        val file =
+            try {
+                resolveFile(relativePath)
+            } catch (e: SecurityException) {
+                call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
+                return
+            }
         if (!file.exists()) {
             call.respondText("Not found", status = HttpStatusCode.NotFound)
             return
@@ -483,14 +547,17 @@ class EmulatorHttpServer(
         }
     }
 
-    private fun issueAccessToken(now: Long, existingRefreshToken: String? = null): Pair<String, String> {
+    private fun issueAccessToken(
+        now: Long,
+        existingRefreshToken: String? = null,
+    ): Pair<String, String> {
         accessTokens.entries.removeAll { it.value.expiresAt < now }
         refreshTokens.entries.removeAll { it.value < now }
         val accessToken = generateOpaqueToken()
         accessTokens[accessToken] = IssuedToken(now + ACCESS_TOKEN_TTL_MS)
-        val refreshToken = existingRefreshToken ?: generateOpaqueToken().also {
-            refreshTokens[it] = now + REFRESH_TOKEN_TTL_MS
-        }
+        val refreshToken =
+            existingRefreshToken
+                ?: generateOpaqueToken().also { refreshTokens[it] = now + REFRESH_TOKEN_TTL_MS }
         persistTokens()
         return accessToken to refreshToken
     }
@@ -499,13 +566,14 @@ class EmulatorHttpServer(
         val (accessToken, refreshToken) = tokens
         respondText(
             buildJsonObject {
-                put("access_token", accessToken)
-                put("token_type", "Bearer")
-                put("expires_in", ACCESS_TOKEN_TTL_MS / 1000)
-                put("refresh_token", refreshToken)
-                put("scope", "files")
-            }.toString(),
-            ContentType.Application.Json
+                    put("access_token", accessToken)
+                    put("token_type", "Bearer")
+                    put("expires_in", ACCESS_TOKEN_TTL_MS / 1000)
+                    put("refresh_token", refreshToken)
+                    put("scope", "files")
+                }
+                .toString(),
+            ContentType.Application.Json,
         )
     }
 
@@ -513,7 +581,7 @@ class EmulatorHttpServer(
         respondText(
             buildJsonObject { put("error", error) }.toString(),
             ContentType.Application.Json,
-            status
+            status,
         )
     }
 
@@ -533,14 +601,15 @@ internal fun submitTrustBundle(
     store: TrustStore,
     candidate: SignedTrustBundle,
     onTrustChanged: () -> Unit,
-): TrustResult<TrustState> = synchronized(staging) {
-    val result = staging.stageAndSubmit(store, candidate)
-    when (result) {
-        is TrustResult.Success -> onTrustChanged()
-        is TrustResult.Failure -> {
-            // The store retains the new in-memory policy when durability is uncertain.
-            if (result.reason is TrustFailure.PersistenceDurabilityUnknown) onTrustChanged()
+): TrustResult<TrustState> =
+    synchronized(staging) {
+        val result = staging.stageAndSubmit(store, candidate)
+        when (result) {
+            is TrustResult.Success -> onTrustChanged()
+            is TrustResult.Failure -> {
+                // The store retains the new in-memory policy when durability is uncertain.
+                if (result.reason is TrustFailure.PersistenceDurabilityUnknown) onTrustChanged()
+            }
         }
+        result
     }
-    result
-}

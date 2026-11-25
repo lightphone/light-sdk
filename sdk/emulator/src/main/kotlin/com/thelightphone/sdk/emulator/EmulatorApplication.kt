@@ -18,6 +18,8 @@ import com.thelightphone.sdk.emulator.backup.dummyCloudBackupLeafView
 import com.thelightphone.sdk.emulator.http.EmulatorHttpServer
 import com.thelightphone.sdk.server.DefaultLightSdkServerSettings
 import com.thelightphone.sdk.server.LightSdkServer
+import com.thelightphone.sdk.server.ToolEnforcementController
+import com.thelightphone.sdk.server.ToolTrustRuntime
 import com.thelightphone.sdk.server.backup.BackupPackageAllowList
 import com.thelightphone.sdk.server.backup.BackupScheduleSyncer
 import com.thelightphone.sdk.server.backup.DefaultBackupSettingsViewModel
@@ -27,8 +29,6 @@ import com.thelightphone.sdk.server.backup.webDavBackupLeafView
 import com.thelightphone.sdk.server.toolmanager.developerModeDataView
 import com.thelightphone.sdk.server.toolmanager.getApkInboxSignaturesDirectory
 import com.thelightphone.sdk.server.toolmanager.readSigningKeyHash
-import com.thelightphone.sdk.server.ToolEnforcementController
-import com.thelightphone.sdk.server.ToolTrustRuntime
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.trust.AdmissionStore
@@ -47,14 +47,14 @@ import com.thelightphone.toolmanager.Logger
 import com.thelightphone.toolmanager.RootViewSpec
 import com.thelightphone.toolmanager.datatree.RootDataTree
 import com.thelightphone.toolmanager.datatree.StaticBranchProvider
+import java.io.File
+import java.util.Base64
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.io.File
-import java.util.Base64
 
 // SHA-256 fingerprint of sdk/keys/lightsdk-dev.jks (alias: lightsdk-dev).
 internal const val LIGHTSDK_DEV_CERT_SHA256 =
@@ -106,9 +106,10 @@ class EmulatorApplication : Application(), Configuration.Provider {
 
     private val trustStoreResult by lazy {
         LightTrustStore.open(
-            verifier = LightTrustBundleVerifier(
-                listOf(Base64.getDecoder().decode(EMULATOR_DEV_TRUST_BUNDLE_PUBLIC_KEY)),
-            ),
+            verifier =
+                LightTrustBundleVerifier(
+                    listOf(Base64.getDecoder().decode(EMULATOR_DEV_TRUST_BUNDLE_PUBLIC_KEY))
+                ),
             persistence = FileTrustPersistence(File(filesDir, "trust/bundle.dat").toPath()),
             imagePins = emptySet(),
         )
@@ -172,18 +173,13 @@ class EmulatorApplication : Application(), Configuration.Provider {
                     trustState = trustStore::state,
                     admissionStore =
                         AdmissionStore(
-                            FileAdmissionPersistence(
-                                File(filesDir, "trust/admission.dat").toPath()
-                            )
+                            FileAdmissionPersistence(File(filesDir, "trust/admission.dat").toPath())
                         ),
                     developerSignerBypass = { _, signer -> signer in validSignatures },
                     emulatorDevelopmentSigner = { it == LIGHTSDK_DEV_CERT_SHA256 },
                 )
             onRevokeToolResources = { context, packageName ->
-                val uid =
-                    context.packageManager
-                        .getApplicationInfo(packageName, 0)
-                        .uid
+                val uid = context.packageManager.getApplicationInfo(packageName, 0).uid
                 EmulatorLocationHelper.revokeUid(uid)
             }
             onRevokeToolUid = EmulatorLocationHelper::revokeUid
@@ -238,18 +234,22 @@ class EmulatorApplication : Application(), Configuration.Provider {
         }
         updateValidSignatures()
         when (val result = trustStoreResult) {
-            is TrustResult.Success -> Log.i("LightEmulator", "Trust store opened: ${result.value.state()}")
-            is TrustResult.Failure -> Log.e("LightEmulator", "Trust store unavailable: ${result.reason}")
+            is TrustResult.Success ->
+                Log.i("LightEmulator", "Trust store opened: ${result.value.state()}")
+            is TrustResult.Failure ->
+                Log.e("LightEmulator", "Trust store unavailable: ${result.reason}")
         }
         ToolEnforcementController.start(this) { _installedToolsRefreshCount.value++ }
         EmulatorHttpServer(
-            context = this,
-            trustStore = LightSdkServer.trustStore,
-            trustBundleCandidateStaging = TrustBundleCandidateStaging(
-                FileTrustPersistence(File(filesDir, "trust/bundle-candidate.dat").toPath()),
-            ),
-            onTrustChanged = LightSdkServer::notifyToolTrustChanged,
-        ).start()
+                context = this,
+                trustStore = LightSdkServer.trustStore,
+                trustBundleCandidateStaging =
+                    TrustBundleCandidateStaging(
+                        FileTrustPersistence(File(filesDir, "trust/bundle-candidate.dat").toPath())
+                    ),
+                onTrustChanged = LightSdkServer::notifyToolTrustChanged,
+            )
+            .start()
 
         val backupScheduleSyncer = BackupScheduleSyncer(this, backupObservablePreferences)
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch { backupScheduleSyncer.run() }

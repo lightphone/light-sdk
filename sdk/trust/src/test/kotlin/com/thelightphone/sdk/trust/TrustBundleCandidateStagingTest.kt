@@ -166,16 +166,19 @@ class TrustBundleCandidateStagingTest {
     fun `failed staging write stops submission`() {
         val store = openStore()
         var readAttempted = false
-        val staging = TrustBundleCandidateStaging(object : TrustPersistence {
-            override fun read(): SignedTrustBundle? {
-                readAttempted = true
-                return null
-            }
+        val staging =
+            TrustBundleCandidateStaging(
+                object : TrustPersistence {
+                    override fun read(): SignedTrustBundle? {
+                        readAttempted = true
+                        return null
+                    }
 
-            override fun write(bundle: SignedTrustBundle) {
-                throw IOException("staging write failed")
-            }
-        })
+                    override fun write(bundle: SignedTrustBundle) {
+                        throw IOException("staging write failed")
+                    }
+                }
+            )
 
         assertEquals(
             TrustResult.Failure(TrustFailure.PersistenceFailed),

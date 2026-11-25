@@ -15,14 +15,18 @@ class EmulatorSignerFingerprintTest {
             keystore.load(it, "android".toCharArray())
         }
         val certificate = keystore.getCertificate("lightsdk-dev")
-        val fingerprint = MessageDigest.getInstance("SHA-256").digest(certificate.encoded).toHexString()
+        val fingerprint =
+            MessageDigest.getInstance("SHA-256").digest(certificate.encoded).toHexString()
         assertEquals(fingerprint, LIGHTSDK_DEV_CERT_SHA256)
     }
 
     @Test
     fun inboxHashesUseCanonicalHex() {
         assertEquals(LIGHTSDK_DEV_CERT_SHA256, canonicalSignerFingerprint(LIGHTSDK_DEV_CERT_SHA256))
-        assertEquals(LIGHTSDK_DEV_CERT_SHA256, canonicalSignerFingerprint("  ${LIGHTSDK_DEV_CERT_SHA256.uppercase()}  "))
+        assertEquals(
+            LIGHTSDK_DEV_CERT_SHA256,
+            canonicalSignerFingerprint("  ${LIGHTSDK_DEV_CERT_SHA256.uppercase()}  "),
+        )
         assertNull(canonicalSignerFingerprint("a".repeat(63)))
         assertNull(canonicalSignerFingerprint("g".repeat(64)))
     }

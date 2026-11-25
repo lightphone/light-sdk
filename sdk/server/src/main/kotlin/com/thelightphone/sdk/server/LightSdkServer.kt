@@ -64,7 +64,7 @@ object LightSdkServer {
                     context.packageManager.getPackageInfo(
                         packageName,
                         PackageManager.GET_SIGNING_CERTIFICATES,
-                    ),
+                    )
                 ),
             )
         } catch (_: Exception) {
@@ -129,7 +129,7 @@ object LightSdkServer {
 
     /** Keeps only the installed clients allowed to run under [settings]'s current filter level. */
     fun List<InstalledClient>.filterAllowedInstalledTools(
-        settings: LightSdkServerSettings,
+        settings: LightSdkServerSettings
     ): List<InstalledClient> {
         val clientFilterLevel = settings.clientFilterLevel
         return filter {
