@@ -6,8 +6,6 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(tableName = "push_registrations")
 data class PushRegistration(
@@ -36,7 +34,7 @@ internal interface PushRegistrationDao {
             channel = excluded.channel,
             vapid = excluded.vapid,
             lastRegisteredAt = :now
-        """
+        """,
     )
     suspend fun upsert(
         token: String,
@@ -59,7 +57,9 @@ internal interface PushRegistrationDao {
     @Query("DELETE FROM push_registrations WHERE packageName = :packageName")
     suspend fun deleteByPackage(packageName: String): Int
 
-    @Query("SELECT * FROM push_registrations WHERE packageName = :packageName AND channel = :channel LIMIT 1")
+    @Query(
+        "SELECT * FROM push_registrations WHERE packageName = :packageName AND channel = :channel LIMIT 1",
+    )
     suspend fun findByPackageAndChannel(packageName: String, channel: String): PushRegistration?
 }
 

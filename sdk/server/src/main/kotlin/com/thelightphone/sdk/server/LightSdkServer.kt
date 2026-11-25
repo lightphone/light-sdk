@@ -72,7 +72,7 @@ object LightSdkServer {
                     context.packageManager.getPackageInfo(
                         packageName,
                         PackageManager.GET_SIGNING_CERTIFICATES,
-                    )
+                    ),
                 ),
             )
         } catch (_: Exception) {
@@ -99,24 +99,28 @@ object LightSdkServer {
     }
     var onRevokeToolUid: (Int) -> Unit = {}
 
-    fun notifyToolTrustChanged() { toolEnforcement?.requestReconciliation() }
+    fun notifyToolTrustChanged() {
+        toolEnforcement?.requestReconciliation()
+    }
 
     /**
-     * Allow requires both the fresh decision and (once a [toolEnforcement] controller is
-     * running) its own permit - a client that reconciliation has disabled/purged must not
-     * regain access just because a later ad hoc evaluation says Allow again. Before any
-     * controller exists, [toolEnforcementRequired] decides whether to fail open (legacy/dev
-     * hosts) or closed (hosts that require enforcement to be running before granting access).
+     * Allow requires both the fresh decision and (once a [toolEnforcement] controller is running)
+     * its own permit - a client that reconciliation has disabled/purged must not regain access just
+     * because a later ad hoc evaluation says Allow again. Before any controller exists,
+     * [toolEnforcementRequired] decides whether to fail open (legacy/dev hosts) or closed (hosts
+     * that require enforcement to be running before granting access).
      */
     private fun enforcementAllows(result: ToolEvaluation, packageName: String): Boolean =
-        result.decision == LightInstallDecision.Allow && when {
-            toolEnforcement != null -> toolEnforcement?.permitsAccess(packageName) == true
-            !toolEnforcementRequired -> true
-            else -> {
-                val exception = (result.outcome as? ToolEvaluationOutcome.Bypass)?.exception
-                exception == AdmissionException.AllowAll || exception == AdmissionException.DeveloperHash
+        result.decision == LightInstallDecision.Allow &&
+            when {
+                toolEnforcement != null -> toolEnforcement?.permitsAccess(packageName) == true
+                !toolEnforcementRequired -> true
+                else -> {
+                    val exception = (result.outcome as? ToolEvaluationOutcome.Bypass)?.exception
+                    exception == AdmissionException.AllowAll ||
+                        exception == AdmissionException.DeveloperHash
+                }
             }
-        }
 
     private const val TAG = "LightSdkServer"
     const val SCREEN_OFF_FLAG = "SCREEN_OFF"
@@ -133,7 +137,7 @@ object LightSdkServer {
 
     /** Keeps only the installed clients allowed to run under [settings]'s current filter level. */
     fun List<InstalledClient>.filterAllowedInstalledTools(
-        settings: LightSdkServerSettings
+        settings: LightSdkServerSettings,
     ): List<InstalledClient> {
         val clientFilterLevel = settings.clientFilterLevel
         return filter {
@@ -144,7 +148,10 @@ object LightSdkServer {
 
     /** checks whether a (already installed) package is allowed at [clientFilterLevel] */
     fun isPackageAllowed(clientFilterLevel: ClientFilterLevel, packageMeta: ApkMetadata): Boolean {
-        return enforcementAllows(evaluateTool(clientFilterLevel, packageMeta), packageMeta.packageName)
+        return enforcementAllows(
+            evaluateTool(clientFilterLevel, packageMeta),
+            packageMeta.packageName,
+        )
     }
 
     /**
@@ -157,7 +164,10 @@ object LightSdkServer {
         context: Context,
         callingPackage: String,
     ): Boolean {
-        return enforcementAllows(evaluateTool(clientFilterLevel, context, callingPackage), callingPackage)
+        return enforcementAllows(
+            evaluateTool(clientFilterLevel, context, callingPackage),
+            callingPackage,
+        )
     }
 
     /**
@@ -233,8 +243,8 @@ object LightSdkServer {
     var provideTrustBundleCandidateStaging: (Context) -> TrustBundleCandidateStaging = {
         TrustBundleCandidateStaging(
             FileTrustPersistence(
-                File(it.applicationContext.filesDir, "trust/bundle-candidate.dat").toPath()
-            )
+                File(it.applicationContext.filesDir, "trust/bundle-candidate.dat").toPath(),
+            ),
         )
     }
 

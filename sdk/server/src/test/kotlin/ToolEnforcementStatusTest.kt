@@ -3,10 +3,15 @@ import com.thelightphone.sdk.trust.*
 import kotlin.test.*
 
 class ToolEnforcementStatusTest {
-    private fun result(containment: ToolContainment = ToolContainment.Disabled) = ToolEnforcementResult(
-        "tool", ToolTrustRuntime.unavailable().copy(bundleVersion = 4), containment)
+    private fun result(containment: ToolContainment = ToolContainment.Disabled) =
+        ToolEnforcementResult(
+            "tool",
+            ToolTrustRuntime.unavailable().copy(bundleVersion = 4),
+            containment,
+        )
 
-    @Test fun `new requests immediately hide old results and ignore stale completion and failure`() {
+    @Test
+    fun `new requests immediately hide old results and ignore stale completion and failure`() {
         val status = ToolEnforcementStatus()
         val first = status.request()
         status.complete(first, listOf(result()))
@@ -24,18 +29,23 @@ class ToolEnforcementStatusTest {
         assertTrue(status.snapshot.value.results.isEmpty())
     }
 
-    @Test fun `pre-callback purge failure survives checking and is attached to its attempt`() {
+    @Test
+    fun `pre-callback purge failure survives checking and is attached to its attempt`() {
         val status = ToolEnforcementStatus()
         val revision = status.request()
         status.purgeFinished("tool", "attempt", ToolPurgeOutcome.Failed("Uninstall request failed"))
         status.purgeFinished("tool", "older", ToolPurgeOutcome.Failed("Late callback"))
-        status.complete(revision, listOf(result(ToolContainment.PurgeRequested).copy(purgeAttemptId = "attempt")))
+        status.complete(
+            revision,
+            listOf(result(ToolContainment.PurgeRequested).copy(purgeAttemptId = "attempt")),
+        )
         val failed = status.snapshot.value.results.single()
         assertEquals(ToolContainment.Failed, failed.containment)
         assertEquals(listOf("Uninstall request failed"), failed.failures)
     }
 
-    @Test fun `same-bundle late failure cannot overwrite a newer attempt and skip has its own status`() {
+    @Test
+    fun `same-bundle late failure cannot overwrite a newer attempt and skip has its own status`() {
         val status = ToolEnforcementStatus()
         val pending = result(ToolContainment.PurgeRequested).copy(purgeAttemptId = "new")
         status.complete(status.request(), listOf(pending))
@@ -48,9 +58,20 @@ class ToolEnforcementStatusTest {
         assertEquals("Removal skipped", skipped.describeStatus().state)
     }
 
-    @Test fun `policy text remains visible but failure never claims successful disable or removal`() {
-        val result = result(ToolContainment.Failed).copy(evaluation = ToolTrustRuntime.unavailable().copy(
-            outcome = ToolEvaluationOutcome.PolicyDecision(LightInstallDecision.Kill(BlockAction.Purge, "Unsafe tool"))))
+    @Test
+    fun `policy text remains visible but failure never claims successful disable or removal`() {
+        val result =
+            result(ToolContainment.Failed)
+                .copy(
+                    evaluation =
+                        ToolTrustRuntime.unavailable()
+                            .copy(
+                                outcome =
+                                    ToolEvaluationOutcome.PolicyDecision(
+                                        LightInstallDecision.Kill(BlockAction.Purge, "Unsafe tool"),
+                                    ),
+                            ),
+                )
         val description = result.describeStatus()
         assertEquals("Needs attention", description.state)
         assertEquals("Unsafe tool", description.reason)
@@ -58,13 +79,30 @@ class ToolEnforcementStatusTest {
         assertFalse(description.reason.contains("null"))
     }
 
-    @Test fun `every denial has a readable reason and ownership conflicts explain restoration refusal`() {
+    @Test
+    fun `every denial has a readable reason and ownership conflicts explain restoration refusal`() {
         for (reason in DenyReason.entries) {
-            val description = result().copy(evaluation = ToolTrustRuntime.unavailable().copy(
-                outcome = ToolEvaluationOutcome.PolicyDecision(LightInstallDecision.Deny(reason)))).describeStatus()
+            val description =
+                result()
+                    .copy(
+                        evaluation =
+                            ToolTrustRuntime.unavailable()
+                                .copy(
+                                    outcome =
+                                        ToolEvaluationOutcome.PolicyDecision(
+                                            LightInstallDecision.Deny(reason),
+                                        ),
+                                ),
+                    )
+                    .describeStatus()
             assertTrue(description.reason.isNotBlank())
             assertEquals("Disabled", description.state)
         }
-        assertTrue(result(ToolContainment.OwnershipConflict).describeStatus().attention!!.contains("restored"))
+        assertTrue(
+            result(ToolContainment.OwnershipConflict)
+                .describeStatus()
+                .attention!!
+                .contains("restored"),
+        )
     }
 }

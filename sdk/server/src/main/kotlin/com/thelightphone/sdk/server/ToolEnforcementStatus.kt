@@ -12,6 +12,7 @@ data class ToolEnforcementSnapshot(
 
 internal sealed interface ToolPurgeOutcome {
     data class Failed(val reason: String) : ToolPurgeOutcome
+
     data object Skipped : ToolPurgeOutcome
 }
 
@@ -20,27 +21,36 @@ internal class ToolEnforcementStatus {
     private val current = MutableStateFlow(ToolEnforcementSnapshot())
     val snapshot = current.asStateFlow()
 
-    @Synchronized fun request(): Long {
+    @Synchronized
+    fun request(): Long {
         val revision = current.value.revision + 1
         current.value = ToolEnforcementSnapshot(revision)
         return revision
     }
 
-    @Synchronized fun complete(revision: Long, results: List<ToolEnforcementResult>) {
+    @Synchronized
+    fun complete(revision: Long, results: List<ToolEnforcementResult>) {
         if (revision != current.value.revision) return
         val currentAttempts = results.associate { it.packageName to it.purgeAttemptId }
         finishedPurges.keys.removeAll { (packageName, attemptId) ->
             currentAttempts[packageName] != attemptId
         }
-        current.value = ToolEnforcementSnapshot(revision, checking = false, results = results.map(::withPurgeOutcome))
+        current.value =
+            ToolEnforcementSnapshot(
+                revision,
+                checking = false,
+                results = results.map(::withPurgeOutcome),
+            )
     }
 
-    @Synchronized fun fail(revision: Long) {
+    @Synchronized
+    fun fail(revision: Long) {
         if (revision == current.value.revision)
             current.value = ToolEnforcementSnapshot(revision, checking = false, failed = true)
     }
 
-    @Synchronized fun purgeFinished(packageName: String, attemptId: String, outcome: ToolPurgeOutcome) {
+    @Synchronized
+    fun purgeFinished(packageName: String, attemptId: String, outcome: ToolPurgeOutcome) {
         val before = current.value
         val result = before.results.firstOrNull { it.packageName == packageName }
         if (result?.purgeAttemptId == attemptId || before.checking) {
@@ -54,10 +64,11 @@ internal class ToolEnforcementStatus {
         if (result.containment != ToolContainment.PurgeRequested) return result
         return when (val outcome = finishedPurges[result.packageName to attemptId]) {
             null -> result
-            is ToolPurgeOutcome.Failed -> result.copy(
-                containment = ToolContainment.Failed,
-                failures = result.failures + outcome.reason,
-            )
+            is ToolPurgeOutcome.Failed ->
+                result.copy(
+                    containment = ToolContainment.Failed,
+                    failures = result.failures + outcome.reason,
+                )
             ToolPurgeOutcome.Skipped -> result.copy(containment = ToolContainment.PurgeSkipped)
         }
     }

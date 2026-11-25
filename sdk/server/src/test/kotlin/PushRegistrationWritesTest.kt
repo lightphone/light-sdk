@@ -1,18 +1,19 @@
 import com.thelightphone.sdk.server.PushRegistrationWrites
 import com.thelightphone.sdk.server.ToolResourceRegistry
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
 
 class PushRegistrationWritesTest {
-    @Test fun `revocation cancels registration during endpoint lookup`() = runBlocking {
+    @Test
+    fun `revocation cancels registration during endpoint lookup`() = runBlocking {
         val resources = ToolResourceRegistry()
         val writes = PushRegistrationWrites(resources)
         val lookupStarted = CompletableDeferred<Unit>()
@@ -38,7 +39,8 @@ class PushRegistrationWritesTest {
         assertTrue(rows.isEmpty())
     }
 
-    @Test fun `cleanup waits for an already started write and deletes its row`() = runBlocking {
+    @Test
+    fun `cleanup waits for an already started write and deletes its row`() = runBlocking {
         val writes = PushRegistrationWrites(ToolResourceRegistry())
         val started = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<Unit>()

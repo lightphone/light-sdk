@@ -15,7 +15,9 @@ import java.security.MessageDigest
 
 interface ToolRestrictionStore {
     fun records(): List<OwnedToolRestriction>
+
     fun put(record: OwnedToolRestriction)
+
     fun remove(packageName: String)
 }
 
@@ -23,32 +25,66 @@ class FileToolRestrictionStore(private val path: Path) : ToolRestrictionStore {
     private var available = true
     private var current = read().associateBy { it.packageName }
 
-    @Synchronized override fun records(): List<OwnedToolRestriction> {
+    @Synchronized
+    override fun records(): List<OwnedToolRestriction> {
         check(available) { "Restriction journal unavailable" }
         return current.values.toList()
     }
-    @Synchronized override fun put(record: OwnedToolRestriction) = replace(current + (record.packageName to record))
-    @Synchronized override fun remove(packageName: String) {
+
+    @Synchronized
+    override fun put(record: OwnedToolRestriction) =
+        replace(current + (record.packageName to record))
+
+    @Synchronized
+    override fun remove(packageName: String) {
         check(available) { "Restriction journal unavailable" }
         if (packageName in current) replace(current - packageName)
     }
 
     private fun read(): List<OwnedToolRestriction> {
-        val raw = try { Files.readAllBytes(path) } catch (_: java.nio.file.NoSuchFileException) { return emptyList() }
+        val raw =
+            try {
+                Files.readAllBytes(path)
+            } catch (_: java.nio.file.NoSuchFileException) {
+                return emptyList()
+            }
         require(raw.size >= 40)
         val payload = raw.copyOfRange(32, raw.size)
-        require(MessageDigest.isEqual(raw.copyOfRange(0, 32), MessageDigest.getInstance("SHA-256").digest(payload)))
+        require(
+            MessageDigest.isEqual(
+                raw.copyOfRange(0, 32),
+                MessageDigest.getInstance("SHA-256").digest(payload),
+            ),
+        )
         return DataInputStream(ByteArrayInputStream(payload)).use { input ->
             require(input.readInt() == 0x4c525331) { "Unsupported restriction journal" }
             val count = input.readInt()
             require(count in 0..10_000)
-            val records = List(count) {
-                OwnedToolRestriction(input.readUTF(), input.readInt(), input.readUTF(),
-                    InstallationFingerprint(input.readUTF(), input.readLong(), input.readLong()), input.readBoolean()).also {
-                    require(it.packageName.isNotBlank() && it.ownerToken.isNotBlank() && it.priorEnabledState in setOf(0, 1, 4))
+            val records =
+                List(count) {
+                    OwnedToolRestriction(
+                            input.readUTF(),
+                            input.readInt(),
+                            input.readUTF(),
+                            InstallationFingerprint(
+                                input.readUTF(),
+                                input.readLong(),
+                                input.readLong(),
+                            ),
+                            input.readBoolean(),
+                        )
+                        .also {
+                            require(
+                                it.packageName.isNotBlank() &&
+                                    it.ownerToken.isNotBlank() &&
+                                    it.priorEnabledState in setOf(0, 1, 4),
+                            )
+                        }
                 }
-            }
-            require(input.read() == -1 && records.map { it.packageName }.distinct().size == records.size)
+            require(
+                input.read() == -1 &&
+                    records.map { it.packageName }.distinct().size == records.size,
+            )
             records
         }
     }
@@ -56,18 +92,30 @@ class FileToolRestrictionStore(private val path: Path) : ToolRestrictionStore {
     private fun replace(replacement: Map<String, OwnedToolRestriction>) {
         check(available) { "Restriction journal unavailable" }
         require(replacement.size <= 10_000)
-        val payload = ByteArrayOutputStream().also { bytes ->
-            DataOutputStream(bytes).use { output ->
-                output.writeInt(0x4c525331); output.writeInt(replacement.size)
-                for (record in replacement.values.sortedBy { it.packageName }) {
-                    val fingerprint = requireNotNull(record.installationFingerprint)
-                    require(record.packageName.isNotBlank() && record.ownerToken.isNotBlank() && record.priorEnabledState in setOf(0, 1, 4))
-                    output.writeUTF(record.packageName); output.writeInt(record.priorEnabledState); output.writeUTF(record.ownerToken)
-                    output.writeUTF(fingerprint.baseApkPath); output.writeLong(fingerprint.firstInstallTimeMillis)
-                    output.writeLong(fingerprint.lastUpdateTimeMillis); output.writeBoolean(record.applied)
+        val payload =
+            ByteArrayOutputStream()
+                .also { bytes ->
+                    DataOutputStream(bytes).use { output ->
+                        output.writeInt(0x4c525331)
+                        output.writeInt(replacement.size)
+                        for (record in replacement.values.sortedBy { it.packageName }) {
+                            val fingerprint = requireNotNull(record.installationFingerprint)
+                            require(
+                                record.packageName.isNotBlank() &&
+                                    record.ownerToken.isNotBlank() &&
+                                    record.priorEnabledState in setOf(0, 1, 4),
+                            )
+                            output.writeUTF(record.packageName)
+                            output.writeInt(record.priorEnabledState)
+                            output.writeUTF(record.ownerToken)
+                            output.writeUTF(fingerprint.baseApkPath)
+                            output.writeLong(fingerprint.firstInstallTimeMillis)
+                            output.writeLong(fingerprint.lastUpdateTimeMillis)
+                            output.writeBoolean(record.applied)
+                        }
+                    }
                 }
-            }
-        }.toByteArray()
+                .toByteArray()
         val raw = MessageDigest.getInstance("SHA-256").digest(payload) + payload
         val parent = path.toAbsolutePath().parent
         var temporary: Path? = null
@@ -87,6 +135,8 @@ class FileToolRestrictionStore(private val path: Path) : ToolRestrictionStore {
         } catch (error: Exception) {
             available = false
             throw error
-        } finally { temporary?.let { Files.deleteIfExists(it) } }
+        } finally {
+            temporary?.let { Files.deleteIfExists(it) }
+        }
     }
 }
