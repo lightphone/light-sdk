@@ -10,6 +10,7 @@ import com.thelightphone.sdk.trust.TrustBundleCandidateStaging
 import com.thelightphone.sdk.trust.TrustFailure
 import com.thelightphone.sdk.trust.TrustResult
 import com.thelightphone.sdk.trust.TrustStore
+import io.ktor.http.HttpHeaders
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -41,6 +42,7 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.utils.io.jvm.javaio.copyTo
 import androidx.core.content.edit
 import java.io.File
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.serialization.json.Json
@@ -146,6 +148,14 @@ class EmulatorHttpServer(
         </html>
     """.trimIndent()
 
+    private val trustUploadCredential =
+        if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            File(context.filesDir, "trust/upload-token").takeIf(File::isFile)?.let { file ->
+                runCatching { file.readText().trim() }.getOrNull()
+                    ?.takeIf { it.matches(Regex("[a-f0-9]{64}")) }
+            }
+        } else null
+
     private val server = embeddedServer(Netty, port = PORT) {
         install(ContentNegotiation) { json() }
 
@@ -246,6 +256,20 @@ class EmulatorHttpServer(
 
             // Dev-only: submit a signed trust bundle directly to the emulator's store.
             post("/trust/bundle") {
+                val credential = trustUploadCredential
+                if (credential == null) {
+                    call.respondText("Not found", status = HttpStatusCode.NotFound)
+                    return@post
+                }
+                val authorization = call.request.headers[HttpHeaders.Authorization]
+                if (authorization == null || !MessageDigest.isEqual(
+                        "Bearer $credential".encodeToByteArray(),
+                        authorization.encodeToByteArray(),
+                    )
+                ) {
+                    call.respondText("Unauthorized", status = HttpStatusCode.Unauthorized)
+                    return@post
+                }
                 if (trustStore.state() == null) {
                     call.respondText("Trust store unavailable", status = HttpStatusCode.ServiceUnavailable)
                     return@post
