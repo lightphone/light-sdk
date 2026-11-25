@@ -25,6 +25,11 @@ object EmulatorLocationHelper {
         defaultLocation = newLocation
     }
 
+    /** Ends [callingUid]'s active location subscription, if any - host resource cleanup on disable/purge. */
+    fun revokeUid(callingUid: Int) {
+        activeUidMap.remove(callingUid)
+    }
+
     fun updateCurrentLocation(newLocation: CurrentLocation?): Boolean {
         if (newLocation == null) {
             currentLocation = null

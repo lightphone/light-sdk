@@ -84,6 +84,7 @@ kotlin {
 dependencies {
     testImplementation(libs.kotlin.test)
     implementation(project(":sdk:server"))
+    implementation(project(":sdk:trust-apksig"))
     implementation(project(":sdk:ui"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
