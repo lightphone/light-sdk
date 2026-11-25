@@ -17,11 +17,14 @@ import com.thelightphone.toolmanager.TetherEndpoint
 import com.thelightphone.toolmanager.ToolManagerServiceAndroid
 import com.thelightphone.toolmanager.ToolManagerServiceAndroid.ServerTransport
 import com.thelightphone.toolmanager.TotpToolManagerAuth
-import com.thelightphone.toolmanager.authenticatedIpUrl
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.net.InetAddress
 
@@ -51,6 +54,8 @@ class ToolManagerLifecycleWrapperService : Service() {
 
         @Volatile
         private var activeAuth: TotpToolManagerAuth? = null
+
+        internal val tetherStatus = MutableStateFlow<UsbTetherStatus>(UsbTetherStatus.Disconnected)
 
         fun refreshAuth() {
             activeAuth?.invalidateKeyCache()
@@ -83,28 +88,24 @@ class ToolManagerLifecycleWrapperService : Service() {
     // Collects the tether status in tether mode; cancelled in onDestroy.
     private val scope = MainScope()
 
-    private var latestLink: UsbTetherLink? = null
+    // Latest link state in tether mode, null otherwise.
+    private val latestLink = MutableStateFlow<UsbTetherLink?>(null)
 
-    /**
-     * USB tether status, from the latest link state and whether the tool manager is serving on the
-     * tether IP yet
-     */
-    val tetherStatus: UsbTetherStatus
-        get() {
-            val link = latestLink ?: return UsbTetherStatus.Disconnected
-            val ipUrl = toolManagerService.getTetherEndpoint()?.authenticatedIpUrl
-            return when {
-                link.error != null -> link.error
-                link.usbHostConnected && link.computerJoined && ipUrl != null -> UsbTetherStatus.ComputerConnected(
-                    ipUrl
-                )
-                // a computer that's joined but has nothing to reach yet is still waiting
-                link.usbHostConnected && (link.tetherInterfaceUp || link.computerJoined) -> UsbTetherStatus.WaitingForComputer
-                link.usbHostConnected -> UsbTetherStatus.UsbConnected
-                link.powered -> UsbTetherStatus.ChargingOnly
-                else -> UsbTetherStatus.Disconnected
-            }
+    private fun tetherStatusOf(
+        link: UsbTetherLink?,
+        endpoint: TetherEndpoint?
+    ): UsbTetherStatus = when {
+            link == null -> UsbTetherStatus.Disconnected
+            link.error != null -> link.error
+            link.usbHostConnected && link.computerJoined && endpoint?.ipAddress != null ->
+                UsbTetherStatus.ComputerConnected(endpoint)
+            // a computer that's joined but has nothing to reach yet is still waiting
+            link.usbHostConnected && (link.tetherInterfaceUp || link.computerJoined) -> UsbTetherStatus.WaitingForComputer
+            link.usbHostConnected -> UsbTetherStatus.UsbConnected
+            link.powered -> UsbTetherStatus.ChargingOnly
+            else -> UsbTetherStatus.Disconnected
         }
+
 
     private val autoForegroundCallback = object : Application.ActivityLifecycleCallbacks {
         // if Main activity is resumed, but the service is still running -> bring this activity back
@@ -155,6 +156,13 @@ class ToolManagerLifecycleWrapperService : Service() {
                 ).also { activeAuth = it }
             }
         )
+        val tetherEndpointFlow = toolManagerService.tetherEndpoint
+        tetherStatus.value = tetherStatusOf(latestLink.value, tetherEndpointFlow.value)
+        scope.launch {
+            combine(latestLink, tetherEndpointFlow, ::tetherStatusOf).collect {
+                tetherStatus.value = it
+            }
+        }
         usbTethering = LightSdkServer.provideUsbTethering(this)
         Log.i(TAG, "Tool manager transport: ${if (usbTethering != null) "USB tether" else "Wi-Fi"}")
     }
@@ -173,7 +181,7 @@ class ToolManagerLifecycleWrapperService : Service() {
                 scope.launch {
                     // collectLatest: a newer link cancels a pending re-tether wait.
                     tethering.link.collectLatest { link ->
-                        latestLink = link
+                        latestLink.value = link
                         // A host on the cable but no tethering (maybe after a replug). We own USB
                         // tethering in this mode, even a session left over from a killed process.
                         if (link.usbHostConnected && !link.tetherInterfaceUp && !link.computerJoined && link.error == null) {
@@ -207,7 +215,9 @@ class ToolManagerLifecycleWrapperService : Service() {
         scope.cancel()
         toolManagerService.stop()
         usbTethering?.stop()
-        latestLink = null
+        latestLink.value = null
+        // after scope.cancel(), so the collector can't overwrite it
+        tetherStatus.value = UsbTetherStatus.Disconnected
         activeAuth = null
         Log.d(TAG, "onDestroy: tool manager stopped")
     }
@@ -215,11 +225,21 @@ class ToolManagerLifecycleWrapperService : Service() {
     fun getHttpsUrl(hostOverride: InetAddress? = null, path: String? = null): String? =
         toolManagerService.getHttpsUrl(hostOverride, path)
 
-    /** Where a computer on the USB cable reaches the tool manager, IP address / mDNS entry*/
-    val tetherEndpoint: TetherEndpoint? get() = toolManagerService.getTetherEndpoint()
-
     /** Current code for pairing a browser that opened the URL without a key. */
     val pairingCode: PairingCode? get() = toolManagerService.currentPairingCode()
 
     val isRunning: Boolean get() = toolManagerService.isRunning
 }
+
+// Vanity object just for cleanly exposing global StateFlow
+object ToolManagerUsb {
+    /**
+     * USB tether status of the running tool manager, from its link state and whether it's serving
+     * on the tether IP yet. [UsbTetherStatus.Disconnected] while the service isn't running or is
+     * on Wi-Fi.
+     */
+    @JvmStatic
+    val tetherStatus: StateFlow<UsbTetherStatus> =
+        ToolManagerLifecycleWrapperService.tetherStatus.asStateFlow()
+}
+
