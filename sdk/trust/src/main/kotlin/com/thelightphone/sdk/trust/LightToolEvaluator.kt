@@ -1,5 +1,7 @@
 package com.thelightphone.sdk.trust
 
+import com.thelightphone.sdk.shared.ToolFilterLevel
+
 /** A verified-or-not snapshot of one on-disk APK, ready for policy evaluation. */
 data class ToolArtifact(
     val packageName: String,
@@ -92,7 +94,7 @@ object LightToolEvaluator {
     fun evaluate(
         artifact: ToolArtifact,
         state: TrustState?,
-        level: LightTrustFilterLevel,
+        level: ToolFilterLevel,
         admission: AdmissionRecord? = null,
         developerSignerBypass: Boolean = false,
         emulatorDevelopmentSigner: Boolean = false,
@@ -126,7 +128,7 @@ object LightToolEvaluator {
 
         // Local alias fixing the stamp/statement/APK identity so only filter level and bundle vary
         // below.
-        fun decide(filter: LightTrustFilterLevel, bundle: LightTrustBundle?) =
+        fun decide(filter: ToolFilterLevel, bundle: LightTrustBundle?) =
             LightInstallPolicy.decide(
                 effectiveStamp,
                 statement,
@@ -148,7 +150,7 @@ object LightToolEvaluator {
         val block =
             if (state == null) null
             else
-                decide(LightTrustFilterLevel.AllowLightSignedApks, state.bundle)
+                decide(ToolFilterLevel.AllowLightSignedApks, state.bundle)
                     as? LightInstallDecision.Kill
 
         // A "real" Light-built artifact: trusted stamp, and the statement actually describes this
@@ -165,7 +167,7 @@ object LightToolEvaluator {
             state != null &&
                 structurallyValid &&
                 decide(
-                    LightTrustFilterLevel.AllowLightApprovedApks,
+                    ToolFilterLevel.AllowLightApprovedApks,
                     state.bundle?.copy(block = emptyList()),
                 ) == LightInstallDecision.Allow
 
@@ -173,12 +175,12 @@ object LightToolEvaluator {
         // the narrower emulator-signer carve-out (Signed level only, and never over a block).
         val exception =
             when {
-                level == LightTrustFilterLevel.AllowAllApks -> AdmissionException.AllowAll
+                level == ToolFilterLevel.AllowAllApks -> AdmissionException.AllowAll
                 developerSignerBypass -> AdmissionException.DeveloperHash
                 state != null &&
                     emulatorDevelopmentSigner &&
                     block == null &&
-                    level == LightTrustFilterLevel.AllowLightSignedApks ->
+                    level == ToolFilterLevel.AllowLightSignedApks ->
                     AdmissionException.EmulatorDevelopmentKey
                 else -> null
             }

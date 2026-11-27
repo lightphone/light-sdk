@@ -1,24 +1,9 @@
 package com.thelightphone.sdk.trust
 
+import com.thelightphone.sdk.shared.ToolFilterLevel
 import com.thelightphone.sdk.trust.LightInstallDecision.Allow
 import com.thelightphone.sdk.trust.LightInstallDecision.Deny
 import com.thelightphone.sdk.trust.LightInstallDecision.Kill
-
-/**
- * Local mirror of the Android-owned `ClientFilterLevel`, which this module cannot import:
- * `:sdk:server` is an Android library, and Gradle will not hand an `androidJvm` variant to a `jvm`
- * consumer. `:sdk:server` is expected to depend on this module, so the reverse edge would be a
- * cycle.
- *
- * The constants are named identically so the mapping between them stays a rename-free `when`.
- * Collapsing the two into one enum in `:sdk:shared` is deferred — it touches published API.
- */
-enum class LightTrustFilterLevel {
-    ExcludeAllApks,
-    AllowLightApprovedApks,
-    AllowLightSignedApks,
-    AllowAllApks,
-}
 
 /** Closed so callers assert on *why* an APK was refused and render a stable UI key. */
 enum class DenyReason {
@@ -90,14 +75,14 @@ object LightInstallPolicy {
         apkSha256: () -> String,
         manifestVersionCode: Long,
         bundle: LightTrustBundle?,
-        level: LightTrustFilterLevel,
+        level: ToolFilterLevel,
     ): LightInstallDecision {
         // hashing the APK is the most expensive computation in this method,
         // and it's used for both block and approve logic
         val lazyApkSha256 = lazy(LazyThreadSafetyMode.NONE, apkSha256)
 
         // allowing all apks bypasses every check
-        if (level == LightTrustFilterLevel.AllowAllApks) {
+        if (level == ToolFilterLevel.AllowAllApks) {
             return Allow
         }
 
@@ -135,11 +120,11 @@ object LightInstallPolicy {
         }
 
         return when (level) {
-            LightTrustFilterLevel.AllowLightSignedApks -> Allow
-            LightTrustFilterLevel.ExcludeAllApks -> Deny(DenyReason.FilteredOut)
-            LightTrustFilterLevel.AllowLightApprovedApks ->
+            ToolFilterLevel.AllowLightSignedApks -> Allow
+            ToolFilterLevel.ExcludeAllApks -> Deny(DenyReason.FilteredOut)
+            ToolFilterLevel.AllowLightApprovedApks ->
                 checkApproval(statement, signerSha256, lazyApkSha256, bundle)
-            LightTrustFilterLevel.AllowAllApks -> Allow
+            ToolFilterLevel.AllowAllApks -> Allow
         }
     }
 

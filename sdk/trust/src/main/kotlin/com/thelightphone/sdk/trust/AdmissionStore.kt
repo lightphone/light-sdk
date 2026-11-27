@@ -1,5 +1,6 @@
 package com.thelightphone.sdk.trust
 
+import com.thelightphone.sdk.shared.ToolFilterLevel
 import kotlin.time.Instant
 
 enum class AdmissionException {
@@ -27,7 +28,7 @@ data class AdmissionRecord(
     val toolId: String?,
     val versionCode: Long,
     val admittedUnderBundleVersion: Long?,
-    val admittedUnderLevel: LightTrustFilterLevel,
+    val admittedUnderLevel: ToolFilterLevel,
     val admittedAt: Instant,
     val exception: AdmissionException? = null,
     val installationFingerprint: InstallationFingerprint? = null,

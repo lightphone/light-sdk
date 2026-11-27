@@ -1,5 +1,6 @@
 package com.thelightphone.sdk.trust
 
+import com.thelightphone.sdk.shared.ToolFilterLevel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -16,7 +17,7 @@ import kotlin.test.assertEquals
  */
 class PersistedEnumNamesTest {
     @Test
-    fun `LightTrustFilterLevel constant names are unchanged`() {
+    fun `ToolFilterLevel constant names are unchanged`() {
         assertEquals(
             setOf(
                 "ExcludeAllApks",
@@ -24,7 +25,21 @@ class PersistedEnumNamesTest {
                 "AllowLightSignedApks",
                 "AllowAllApks",
             ),
-            LightTrustFilterLevel.entries.map { it.name }.toSet(),
+            ToolFilterLevel.entries.map { it.name }.toSet(),
+        )
+    }
+
+    /** Hosts persist the filter level by ordinal, so declaration order is part of the format. */
+    @Test
+    fun `ToolFilterLevel declaration order is unchanged`() {
+        assertEquals(
+            listOf(
+                "ExcludeAllApks",
+                "AllowLightApprovedApks",
+                "AllowLightSignedApks",
+                "AllowAllApks",
+            ),
+            ToolFilterLevel.entries.map { it.name },
         )
     }
 

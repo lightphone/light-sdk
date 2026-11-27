@@ -82,6 +82,7 @@ val checkTrustIsolation by
 tasks.named("check") { dependsOn(checkTrustIsolation) }
 
 dependencies {
+    api(project(":sdk:shared"))
     implementation(project(":sdk:digest"))
     implementation(libs.bouncycastle.provider)
     implementation(libs.kotlinx.serialization.json)

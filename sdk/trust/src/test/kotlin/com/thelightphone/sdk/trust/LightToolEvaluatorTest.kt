@@ -1,5 +1,6 @@
 package com.thelightphone.sdk.trust
 
+import com.thelightphone.sdk.shared.ToolFilterLevel
 import kotlin.test.*
 import kotlin.time.Instant
 
@@ -49,7 +50,7 @@ class LightToolEvaluatorTest {
             "example.tool",
             7,
             3,
-            LightTrustFilterLevel.AllowLightSignedApks,
+            ToolFilterLevel.AllowLightSignedApks,
             Instant.fromEpochSeconds(0),
             installationFingerprint = fingerprint,
         )
@@ -57,7 +58,7 @@ class LightToolEvaluatorTest {
     private fun evaluate(
         artifact: ToolArtifact = this.artifact,
         state: TrustState? = this.state,
-        level: LightTrustFilterLevel = LightTrustFilterLevel.AllowLightApprovedApks,
+        level: ToolFilterLevel = ToolFilterLevel.AllowLightApprovedApks,
         admission: AdmissionRecord? = null,
         developer: Boolean = false,
         emulator: Boolean = false,
@@ -65,9 +66,9 @@ class LightToolEvaluatorTest {
 
     @Test
     fun `each filter enforces its intended boundary`() {
-        for (level in LightTrustFilterLevel.entries) {
+        for (level in ToolFilterLevel.entries) {
             assertEquals(
-                level != LightTrustFilterLevel.ExcludeAllApks,
+                level != ToolFilterLevel.ExcludeAllApks,
                 evaluate(level = level).decision == LightInstallDecision.Allow,
             )
         }
@@ -90,7 +91,7 @@ class LightToolEvaluatorTest {
         )
         assertEquals(
             LightInstallDecision.Allow,
-            evaluate(state = unapproved, level = LightTrustFilterLevel.AllowLightSignedApks)
+            evaluate(state = unapproved, level = ToolFilterLevel.AllowLightSignedApks)
                 .decision,
         )
     }
@@ -198,8 +199,8 @@ class LightToolEvaluatorTest {
 
         for ((level, exception) in
             listOf(
-                LightTrustFilterLevel.AllowAllApks to AdmissionException.AllowAll,
-                LightTrustFilterLevel.AllowLightApprovedApks to AdmissionException.DeveloperHash,
+                ToolFilterLevel.AllowAllApks to AdmissionException.AllowAll,
+                ToolFilterLevel.AllowLightApprovedApks to AdmissionException.DeveloperHash,
             )) {
             val result =
                 evaluate(state = blocked, level = level, admission = record, developer = true)
@@ -234,7 +235,7 @@ class LightToolEvaluatorTest {
         assertEquals(LightInstallDecision.Allow, evaluate(state = null, developer = true).decision)
         assertEquals(
             LightInstallDecision.Allow,
-            evaluate(state = null, level = LightTrustFilterLevel.AllowAllApks).decision,
+            evaluate(state = null, level = ToolFilterLevel.AllowAllApks).decision,
         )
     }
 
@@ -246,7 +247,7 @@ class LightToolEvaluatorTest {
             evaluate(
                 artifact = unsigned,
                 emulator = true,
-                level = LightTrustFilterLevel.AllowLightSignedApks,
+                level = ToolFilterLevel.AllowLightSignedApks,
             )
         assertEquals(LightInstallDecision.Allow, result.decision)
         assertFalse(result.approvedByBundle)
@@ -272,7 +273,7 @@ class LightToolEvaluatorTest {
             evaluate(
                     artifact = unsigned,
                     emulator = true,
-                    level = LightTrustFilterLevel.AllowLightSignedApks,
+                    level = ToolFilterLevel.AllowLightSignedApks,
                     state = blocked,
                 )
                 .decision
