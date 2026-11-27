@@ -55,6 +55,7 @@ afterEvaluate {
 dependencies {
     implementation(project(":sdk:digest"))
     api(project(":sdk:shared"))
+    api(project(":sdk:trust"))
     api(libs.light.toolmanager.server)
     api(libs.light.backup)
     // the keyboard settings live in system settings, which the keyboard reads too
