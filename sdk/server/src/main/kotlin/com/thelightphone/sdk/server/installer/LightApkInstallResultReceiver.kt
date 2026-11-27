@@ -15,12 +15,15 @@ class LightApkInstallResultReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+        val status =
+            intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
         val apkPath = intent.getStringExtra(LightApkInstallWorker.KEY_APK_PATH)
 
         when (status) {
             PackageInstaller.STATUS_SUCCESS -> {
+                // Notify the host after installation. This callback does not itself
+                // request trust reconciliation or write an admission record.
                 LightSdkServer.onApkInstalled(apkPath)
                 apkPath?.let { File(it).delete() }
             }
