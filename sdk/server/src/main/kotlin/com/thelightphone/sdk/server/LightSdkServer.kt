@@ -15,28 +15,24 @@ import android.os.Process
 import android.os.UserHandle
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import com.thelightphone.sdk.digest.sha256Hex
 import com.thelightphone.sdk.server.backup.BackupCapableTool
 import com.thelightphone.sdk.server.backup.SmsBackupExclusion
 import com.thelightphone.sdk.server.toolmanager.UsbTethering
+import com.thelightphone.sdk.shared.LightConstants
+import com.thelightphone.sdk.shared.LightResult
+import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.toolmanager.AndroidKeystoreKeyCipher
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.DataView
 import com.thelightphone.toolmanager.KeyCipher
+import com.thelightphone.toolmanager.LocalNetworkInfo
 import com.thelightphone.toolmanager.RootViewSpec
 import com.thelightphone.toolmanager.datatree.BranchDataTree
 import com.thelightphone.toolmanager.datatree.RootDataTree
-import com.thelightphone.sdk.shared.LightConstants
-import com.thelightphone.sdk.shared.LightResult
-import com.thelightphone.sdk.shared.LightServiceMethod
-import com.thelightphone.toolmanager.LocalNetworkInfo
 import java.io.File
-import java.security.MessageDigest
 
-
-data class InstalledClient(
-    val packageInfo: PackageInfo,
-    val sdkVersion: String,
-)
+data class InstalledClient(val packageInfo: PackageInfo, val sdkVersion: String)
 
 enum class ClientCertType {
     Unknown,
@@ -45,7 +41,7 @@ enum class ClientCertType {
     LightSdkSignedUnverified,
 
     // for tools built with SDK, signed by Light, and part of community list
-    LightSdkApproved
+    LightSdkApproved,
 }
 
 object LightSdkServer {
@@ -60,9 +56,7 @@ object LightSdkServer {
             return isSystemApp && isSystemUid
         }
 
-    /**
-     * returns true iff this server version supports tools built with given sdkVersion
-     */
+    /** returns true iff this server version supports tools built with given sdkVersion */
     var isSdkVersionSupported: (sdkVersion: String) -> Boolean = { true }
 
     fun List<InstalledClient>.filterAllowedInstalledTools(
@@ -75,17 +69,14 @@ object LightSdkServer {
         }
     }
 
-    fun isPackageAllowed(
-        clientFilterLevel: ClientFilterLevel,
-        packageMeta: ApkMetadata
-    ): Boolean {
+    fun isPackageAllowed(clientFilterLevel: ClientFilterLevel, packageMeta: ApkMetadata): Boolean {
         return isPackageAllowed(clientFilterLevel) { checkCert(packageMeta) }
     }
 
     fun isPackageAllowed(
         clientFilterLevel: ClientFilterLevel,
         context: Context,
-        callingPackage: String
+        callingPackage: String,
     ): Boolean {
         return isPackageAllowed(clientFilterLevel) { checkCert(context, callingPackage) }
     }
@@ -93,14 +84,14 @@ object LightSdkServer {
     fun isPackageInstallable(
         clientFilterLevel: ClientFilterLevel,
         context: Context,
-        apkFile: File
+        apkFile: File,
     ): Boolean {
         return isPackageAllowed(clientFilterLevel) { checkCertUninstalled(context, apkFile) }
     }
 
     inline fun isPackageAllowed(
         clientFilterLevel: ClientFilterLevel,
-        checkCert: () -> ClientCertType
+        checkCert: () -> ClientCertType,
     ): Boolean {
         return when (clientFilterLevel) {
             ClientFilterLevel.ExcludeAllApks -> false
@@ -109,45 +100,55 @@ object LightSdkServer {
                 checkCert() == ClientCertType.LightSdkApproved
             }
 
-            ClientFilterLevel.AllowLightSignedApks -> when (checkCert()) {
-                ClientCertType.Unknown -> false
-                ClientCertType.LightSdkSignedUnverified, ClientCertType.LightSdkApproved -> true
-            }
+            ClientFilterLevel.AllowLightSignedApks ->
+                when (checkCert()) {
+                    ClientCertType.Unknown -> false
+                    ClientCertType.LightSdkSignedUnverified,
+                    ClientCertType.LightSdkApproved -> true
+                }
         }
     }
 
     fun Context.queryInstalledClients(): List<InstalledClient> {
         val marker = Intent(LightConstants.ACTION_SDK_MARKER)
 
-        val results = packageManager.queryBroadcastReceivers(
-            marker,
-            PackageManager.GET_META_DATA or PackageManager.MATCH_DISABLED_COMPONENTS
-        )
+        val results =
+            packageManager.queryBroadcastReceivers(
+                marker,
+                PackageManager.GET_META_DATA or PackageManager.MATCH_DISABLED_COMPONENTS,
+            )
 
-        return results.map {
-            val packageName = it.activityInfo.packageName
-            val packageInfo: PackageInfo
-            try {
-                packageInfo =
-                    packageManager.getPackageInfo(
-                        packageName,
-                        PackageManager.GET_PERMISSIONS or PackageManager.GET_SIGNING_CERTIFICATES
-                    )
-            } catch (e: PackageManager.NameNotFoundException) {
-                Log.e(TAG, "Could not find SDK package", e)
-                return@map null
-            }
-            val meta = it.activityInfo.metaData ?: run {
-                Log.e(TAG, "SDK client didn't provide metadata: $packageName")
-                return@map null
-            }
-            val sdkVersion = meta.getString(LightConstants.SDK_VERSION_KEY) ?: run {
-                Log.e(TAG, "SDK client didn't provide sdkVersion: $packageName")
-                return@map null
-            }
+        return results
+            .map {
+                val packageName = it.activityInfo.packageName
+                val packageInfo: PackageInfo
+                try {
+                    packageInfo =
+                        packageManager.getPackageInfo(
+                            packageName,
+                            PackageManager.GET_PERMISSIONS or
+                                PackageManager.GET_SIGNING_CERTIFICATES,
+                        )
+                } catch (e: PackageManager.NameNotFoundException) {
+                    Log.e(TAG, "Could not find SDK package", e)
+                    return@map null
+                }
+                val meta =
+                    it.activityInfo.metaData
+                        ?: run {
+                            Log.e(TAG, "SDK client didn't provide metadata: $packageName")
+                            return@map null
+                        }
+                val sdkVersion =
+                    meta.getString(LightConstants.SDK_VERSION_KEY)
+                        ?: run {
+                            Log.e(TAG, "SDK client didn't provide sdkVersion: $packageName")
+                            return@map null
+                        }
 
-            InstalledClient(packageInfo, sdkVersion)
-        }.filterNotNull()
+                InstalledClient(packageInfo, sdkVersion)
+            }
+            .filterNotNull()
     }
 
     fun Context.queryEnabledClients(settings: LightSdkServerSettings): List<InstalledClient> {
@@ -160,9 +161,7 @@ object LightSdkServer {
         File(it.applicationContext.filesDir, "apkInbox")
     }
 
-    var getToolManagerKeyCipher: () -> KeyCipher = {
-        AndroidKeystoreKeyCipher()
-    }
+    var getToolManagerKeyCipher: () -> KeyCipher = { AndroidKeystoreKeyCipher() }
 
     var provideSdkSettings: (Context) -> LightSdkServerSettings = {
         DefaultLightSdkServerSettings(it)
@@ -171,15 +170,15 @@ object LightSdkServer {
     var defaultClientFilterLevel: ClientFilterLevel = ClientFilterLevel.AllowLightApprovedApks
 
     /**
-     * defines the behavior for when the server app should "foreground" itself over other running apps
-     * LightOS is aggressive about this by default. It will foreground itself for all alerts, and whenever
-     * the phone is locked.
+     * defines the behavior for when the server app should "foreground" itself over other running
+     * apps LightOS is aggressive about this by default. It will foreground itself for all alerts,
+     * and whenever the phone is locked.
      */
     var defaultForceFocusLevel: ForceFocusLevel = ForceFocusLevel.Always
 
     /**
-     * return the POST endpoint that the calling tool's application server should use to
-     * get UnifiedPush through Light's server, down to LightOS/emulator, then over to Tool
+     * return the POST endpoint that the calling tool's application server should use to get
+     * UnifiedPush through Light's server, down to LightOS/emulator, then over to Tool
      *
      * Settable from enclosing application!! May be run on any thread
      */
@@ -194,19 +193,20 @@ object LightSdkServer {
      *
      * Settable from enclosing application!! May be run on any thread
      */
-    var customServiceMethodResolver: (callingId: Int, methodId: String, payload: String?) -> LightResult<String> =
+    var customServiceMethodResolver:
+        (callingId: Int, methodId: String, payload: String?) -> LightResult<String> =
         { callingId, methodId, payload ->
             Log.e(TAG, "Service method $methodId not found!")
             LightResult.Error(LightResult.ErrorCode.Unknown, "unknown method: $methodId")
         }
 
     /**
-     * Handle a hardware key event forwarded from a client whose current screen did not consume
-     * it.
+     * Handle a hardware key event forwarded from a client whose current screen did not consume it.
      *
      * Settable from enclosing application!! May be run on any thread
      */
-    var onDeviceKeyEvent: (callingUid: Int, event: LightServiceMethod.DeviceKeyEvent.Request) -> Unit =
+    var onDeviceKeyEvent:
+        (callingUid: Int, event: LightServiceMethod.DeviceKeyEvent.Request) -> Unit =
         { _, event ->
             Log.w(TAG, "Unhandled device key event: $event")
         }
@@ -216,17 +216,17 @@ object LightSdkServer {
      *
      * Settable from enclosing application!! May be run on any thread
      */
-    var onOpenDialer: (callingUid: Int, phoneNumber: String) -> Unit =
-        { _, phoneNumber ->
-            Log.e(TAG, "OpenDialer not configured by server: phoneNumber=$phoneNumber")
-        }
+    var onOpenDialer: (callingUid: Int, phoneNumber: String) -> Unit = { _, phoneNumber ->
+        Log.e(TAG, "OpenDialer not configured by server: phoneNumber=$phoneNumber")
+    }
 
     /**
      * Return the best current location fix available to the server, or empty coordinates
      *
      * Settable from enclosing application!! May be run on any thread
      */
-    var onGetCurrentLocation: (callingUid: Int) -> LightResult<LightServiceMethod.GetCurrentLocation.Response> =
+    var onGetCurrentLocation:
+        (callingUid: Int) -> LightResult<LightServiceMethod.GetCurrentLocation.Response> =
         { _ ->
             Log.e(TAG, "GetCurrentLocation not configured by server")
             LightResult.Error(LightResult.ErrorCode.Unknown, "GetCurrentLocation not configured")
@@ -237,7 +237,8 @@ object LightSdkServer {
      *
      * Settable from enclosing application!! May be run on any thread
      */
-    var onGetDefaultLocation: (callingUid: Int) -> LightResult<LightServiceMethod.GetDefaultLocation.Response> =
+    var onGetDefaultLocation:
+        (callingUid: Int) -> LightResult<LightServiceMethod.GetDefaultLocation.Response> =
         { _ ->
             Log.e(TAG, "GetDefaultLocation not configured by server")
             LightResult.Error(LightResult.ErrorCode.Unknown, "GetDefaultLocation not configured")
@@ -248,28 +249,20 @@ object LightSdkServer {
      *
      * Settable from enclosing application!! May be run on any thread
      */
-    var onRequestLocationUpdates: (callingUid: Int) -> LightResult<Unit> =
-        { _ ->
-            Log.e(TAG, "RequestLocationUpdates not configured by server")
-            LightResult.Error(
-                LightResult.ErrorCode.Unknown,
-                "RequestLocationUpdates not configured"
-            )
-        }
+    var onRequestLocationUpdates: (callingUid: Int) -> LightResult<Unit> = { _ ->
+        Log.e(TAG, "RequestLocationUpdates not configured by server")
+        LightResult.Error(LightResult.ErrorCode.Unknown, "RequestLocationUpdates not configured")
+    }
 
     /**
      * Releases any previously requested location update lease
      *
      * Settable from enclosing application!! May be run on any thread
      */
-    var onReleaseLocationUpdates: (callingUid: Int) -> LightResult<Unit> =
-        { _ ->
-            Log.e(TAG, "ReleaseLocationUpdates not configured by server")
-            LightResult.Error(
-                LightResult.ErrorCode.Unknown,
-                "ReleaseLocationUpdates not configured"
-            )
-        }
+    var onReleaseLocationUpdates: (callingUid: Int) -> LightResult<Unit> = { _ ->
+        Log.e(TAG, "ReleaseLocationUpdates not configured by server")
+        LightResult.Error(LightResult.ErrorCode.Unknown, "ReleaseLocationUpdates not configured")
+    }
 
     /**
      * Whether [LightNotificationListenerService] may bring this tool forward for an alert it
@@ -297,16 +290,18 @@ object LightSdkServer {
         Log.e(TAG, "Server wants to foreground itself but does not know how!")
     }
 
-    var isLightSigned: (callingPackage: String, signatureHash: String) -> Boolean =
-        { _, _ -> false }
-    var isLightApproved: (callingPackage: String, signatureHash: String) -> Boolean =
-        { _, _ -> false }
+    var isLightSigned: (callingPackage: String, signatureHash: String) -> Boolean = { _, _ ->
+        false
+    }
+    var isLightApproved: (callingPackage: String, signatureHash: String) -> Boolean = { _, _ ->
+        false
+    }
 
     var canBeUninstalledByToolManager: (packageName: String) -> Boolean = { false }
 
     /**
-     * Given an android permission id (android.manifest.CAMERA, for example), return whether
-     * this server instance is allowed to grant that permission to the calling package
+     * Given an android permission id (android.manifest.CAMERA, for example), return whether this
+     * server instance is allowed to grant that permission to the calling package
      *
      * Settable from enclosing application!! May be run on any thread
      */
@@ -314,16 +309,17 @@ object LightSdkServer {
         { _, permissionName ->
             // default grantable permissions; enclosing app may override
             setOf(
-                Manifest.permission.CAMERA,
-                Manifest.permission.POST_NOTIFICATIONS,
-                Manifest.permission.READ_MEDIA_AUDIO,
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_CONTACTS,
-                Manifest.permission.RECORD_AUDIO,
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-            ).contains(permissionName)
+                    Manifest.permission.CAMERA,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                    Manifest.permission.READ_MEDIA_AUDIO,
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO,
+                    Manifest.permission.READ_CONTACTS,
+                    Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                )
+                .contains(permissionName)
         }
 
     /**
@@ -336,38 +332,38 @@ object LightSdkServer {
     }
 
     /**
-     * Returns whether or not ToolManager nodes for a given package should be backed up to remote storage
-     * Note that packages passed here have likely already been passed through the `isPackageAllowed` filter
+     * Returns whether or not ToolManager nodes for a given package should be backed up to remote
+     * storage Note that packages passed here have likely already been passed through the
+     * `isPackageAllowed` filter
      */
     var canBackUpFromPackage: (backupCapableTool: BackupCapableTool) -> Boolean = { true }
 
     /**
-     * Directories whose photos should be included in album backups. Files are backed up from
-     * the top level of each directory (no recursion). Empty means photos aren't backed up.
+     * Directories whose photos should be included in album backups. Files are backed up from the
+     * top level of each directory (no recursion). Empty means photos aren't backed up.
      */
     var getAlbumPhotoBackupDirs: () -> List<File> = { emptyList() }
 
     /**
-     * Directories whose videos should be included in album backups. Files are backed up from
-     * the top level of each directory (no recursion). Empty means videos aren't backed up.
+     * Directories whose videos should be included in album backups. Files are backed up from the
+     * top level of each directory (no recursion). Empty means videos aren't backed up.
      */
     var getAlbumVideoBackupDirs: () -> List<File> = { emptyList() }
 
     /**
-     * SMS rows that should be left out of message backups (e.g. placeholder rows the enclosing
-     * app writes for its own bookkeeping). They're also ignored when working out how far back the
-     * first backup needs to go. Null means every SMS is backed up.
+     * SMS rows that should be left out of message backups (e.g. placeholder rows the enclosing app
+     * writes for its own bookkeeping). They're also ignored when working out how far back the first
+     * backup needs to go. Null means every SMS is backed up.
      *
      * Here because LightOS stores some metadata in the sms table using "impossible" timestamps,
      * dont want to back those up
      */
     var getSmsBackupExclusion: () -> SmsBackupExclusion? = { null }
 
-
     /**
-     * Called when the SDK server successfully installs a tool
-     * May be called with a null path if unknown apk was installed
-     * (or we want to notify the server that it should refresh it's apk list)
+     * Called when the SDK server successfully installs a tool May be called with a null path if
+     * unknown apk was installed (or we want to notify the server that it should refresh it's apk
+     * list)
      */
     var onApkInstalled: (apkPath: String?) -> Unit = { apkPath ->
         if (!apkPath.isNullOrBlank()) {
@@ -375,16 +371,14 @@ object LightSdkServer {
         }
     }
 
-    /**
-     * Called when the SDK server successfully uninstalls a tool
-     */
+    /** Called when the SDK server successfully uninstalls a tool */
     var onApkUninstalled: (packageName: String) -> Unit = { packageName ->
         Log.d(TAG, "Successfully uninstalled package: $packageName")
     }
 
     /**
-     * SDK server should have a singleTask Activity to represent the ToolManager's UI
-     * If the ToolManager is running and the server app is active, the ToolManager UI should always show
+     * SDK server should have a singleTask Activity to represent the ToolManager's UI If the
+     * ToolManager is running and the server app is active, the ToolManager UI should always show
      * [path] is an optional deep link into the ToolManager UI (e.g. a specific tool's page).
      */
     var foregroundToolManagerUi: (activityToReplace: Activity, path: String?) -> Unit = { _, _ ->
@@ -411,40 +405,43 @@ object LightSdkServer {
 
     var rootToolManagerDataProvider: () -> RootDataTree = {
         RootDataTree {
-            val stubDataTree = object : BranchDataTree {
-                override suspend fun getChildren(): List<DataView<*>> = emptyList()
-            }
+            val stubDataTree =
+                object : BranchDataTree {
+                    override suspend fun getChildren(): List<DataView<*>> = emptyList()
+                }
             BranchView(RootViewSpec("Empty Root", "emptyRoot"), stubDataTree, forceHide = true)
         }
     }
 
-    /**
-     * Activity to launch when allowing user to grant permission via server app
-     */
+    /** Activity to launch when allowing user to grant permission via server app */
     var permissionActivity: Class<out Activity>? = null
 
-    var grantPermission: (context: Context, packageName: String, permission: String) -> Result<Unit> =
+    var grantPermission:
+        (context: Context, packageName: String, permission: String) -> Result<Unit> =
         { context, packageName, permission ->
             runCatching {
                 // Fine for emulator, can avoid reflection on real system apps
-                val grant = PackageManager::class.java.getMethod(
-                    "grantRuntimePermission",
-                    String::class.java,
-                    String::class.java,
-                    UserHandle::class.java
-                )
+                val grant =
+                    PackageManager::class
+                        .java
+                        .getMethod(
+                            "grantRuntimePermission",
+                            String::class.java,
+                            String::class.java,
+                            UserHandle::class.java,
+                        )
                 grant.invoke(
                     context.packageManager,
                     packageName,
                     permission,
-                    Process.myUserHandle()
+                    Process.myUserHandle(),
                 )
             }
         }
 
     /**
-     * Grants [LightNotificationListenerService] notification listener access and asks the system
-     * to bind it, so tools' alerts can bring them forward and [onActiveNotificationsChanged] is
+     * Grants [LightNotificationListenerService] notification listener access and asks the system to
+     * bind it, so tools' alerts can bring them forward and [onActiveNotificationsChanged] is
      * called. Needs MANAGE_NOTIFICATION_LISTENERS, which the system uid has.
      */
     fun Context.enableNotificationListener() {
@@ -453,38 +450,43 @@ object LightSdkServer {
 
     /**
      * A receiver that will bring the rootActivity (MainActivity in both emulator and real LightOS)
-     * to the foreground with a new intent whenever the device's screen goes off
-     * (unless user has overridden the settings.forceFocusLevel).
-     * If a tool has an alert the user hasn't cleared, that tool is brought forward instead, so the
-     * alert is what shows when the screen turns back on (unless forceFocusLevel is Never).
+     * to the foreground with a new intent whenever the device's screen goes off (unless user has
+     * overridden the settings.forceFocusLevel). If a tool has an alert the user hasn't cleared,
+     * that tool is brought forward instead, so the alert is what shows when the screen turns back
+     * on (unless forceFocusLevel is Never).
      */
     fun Context.registerLockReceiver(
         rootActivityClass: Class<out Activity>,
-        settings: LightSdkServerSettings
+        settings: LightSdkServerSettings,
     ): BroadcastReceiver {
         val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
-        val lockReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                val alertingTool = LightNotificationListenerService.latestAlertingTool()
-                if (alertingTool != null &&
-                    settings.forceFocusLevel != ForceFocusLevel.Never &&
-                    isPackageAllowed(settings.clientFilterLevel, context, alertingTool)
-                ) {
-                    LightNotificationListenerService.resurface(context, alertingTool)
-                    return
-                }
-                val allowForceFocus = when (settings.forceFocusLevel) {
-                    ForceFocusLevel.Always -> true
-                    ForceFocusLevel.AlertsOnly, ForceFocusLevel.Never -> false
-                }
-                if (allowForceFocus && intent.action == Intent.ACTION_SCREEN_OFF) {
-                    val i = Intent(context, rootActivityClass)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        .putExtra(SCREEN_OFF_FLAG, true)
-                    context.startActivity(i)
+        val lockReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    val alertingTool = LightNotificationListenerService.latestAlertingTool()
+                    if (
+                        alertingTool != null &&
+                            settings.forceFocusLevel != ForceFocusLevel.Never &&
+                            isPackageAllowed(settings.clientFilterLevel, context, alertingTool)
+                    ) {
+                        LightNotificationListenerService.resurface(context, alertingTool)
+                        return
+                    }
+                    val allowForceFocus =
+                        when (settings.forceFocusLevel) {
+                            ForceFocusLevel.Always -> true
+                            ForceFocusLevel.AlertsOnly,
+                            ForceFocusLevel.Never -> false
+                        }
+                    if (allowForceFocus && intent.action == Intent.ACTION_SCREEN_OFF) {
+                        val i =
+                            Intent(context, rootActivityClass)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                .putExtra(SCREEN_OFF_FLAG, true)
+                        context.startActivity(i)
+                    }
                 }
             }
-        }
         registerReceiver(lockReceiver, filter)
         return lockReceiver
     }
@@ -493,30 +495,27 @@ object LightSdkServer {
         val packageName: String,
         val versionName: String?,
         val versionCode: Long,
-        val signingCertSha256: List<String>
+        val signingCertSha256: List<String>,
     )
 
     fun readApkMetadata(info: PackageInfo): ApkMetadata {
         val signingInfo = info.signingInfo
-        val signatures: Array<Signature> = if (signingInfo != null) {
-            if (signingInfo.hasMultipleSigners()) {
-                signingInfo.apkContentsSigners
-            } else {
-                signingInfo.signingCertificateHistory
-            }
-        } else emptyArray()
+        val signatures: Array<Signature> =
+            if (signingInfo != null) {
+                if (signingInfo.hasMultipleSigners()) {
+                    signingInfo.apkContentsSigners
+                } else {
+                    signingInfo.signingCertificateHistory
+                }
+            } else emptyArray()
 
-        val sha256Hashes = signatures.map { sig ->
-            MessageDigest.getInstance("SHA-256")
-                .digest(sig.toByteArray())
-                .toHexString()
-        }
+        val sha256Hashes = signatures.map { it.toByteArray().sha256Hex() }
 
         return ApkMetadata(
             packageName = info.packageName,
             versionName = info.versionName,
             versionCode = info.longVersionCode,
-            signingCertSha256 = sha256Hashes
+            signingCertSha256 = sha256Hashes,
         )
     }
 
@@ -524,8 +523,7 @@ object LightSdkServer {
         val pm = packageManager
         val flags = PackageManager.GET_SIGNING_CERTIFICATES
 
-        val info: PackageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, flags)
-            ?: return null
+        val info: PackageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, flags) ?: return null
 
         // Required so the ApplicationInfo resolves correctly (icons, etc.) —
         // not strictly needed just for package name/signatures, but harmless to set.
@@ -540,31 +538,31 @@ object LightSdkServer {
     }
 
     fun checkCert(context: Context, callingPackage: String): ClientCertType {
-        val info = try {
-            context.packageManager.getPackageInfo(
-                callingPackage,
-                PackageManager.GET_SIGNING_CERTIFICATES
-            )
-        } catch (_: PackageManager.NameNotFoundException) {
-            return ClientCertType.Unknown
-        }
+        val info =
+            try {
+                context.packageManager.getPackageInfo(
+                    callingPackage,
+                    PackageManager.GET_SIGNING_CERTIFICATES,
+                )
+            } catch (_: PackageManager.NameNotFoundException) {
+                return ClientCertType.Unknown
+            }
         val packageMeta = readApkMetadata(info)
         return checkCert(packageMeta)
     }
 
     fun checkCert(packageMeta: ApkMetadata): ClientCertType {
-        val lightSignedMatches = packageMeta.signingCertSha256.filter {
-            isLightSigned(packageMeta.packageName, it)
-        }
+        val lightSignedMatches =
+            packageMeta.signingCertSha256.filter { isLightSigned(packageMeta.packageName, it) }
 
         if (lightSignedMatches.isEmpty()) {
             return ClientCertType.Unknown
         }
 
-        val lightApprovedMatches = lightSignedMatches.filter {
-            isLightApproved(packageMeta.packageName, it)
-        }
+        val lightApprovedMatches =
+            lightSignedMatches.filter { isLightApproved(packageMeta.packageName, it) }
 
-        return if (lightApprovedMatches.isEmpty()) ClientCertType.LightSdkSignedUnverified else ClientCertType.LightSdkApproved
+        return if (lightApprovedMatches.isEmpty()) ClientCertType.LightSdkSignedUnverified
+        else ClientCertType.LightSdkApproved
     }
 }
