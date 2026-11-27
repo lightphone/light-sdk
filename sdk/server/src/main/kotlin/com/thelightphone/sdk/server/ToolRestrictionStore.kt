@@ -64,7 +64,7 @@ class FileToolRestrictionStore(private val path: Path) : ToolRestrictionStore {
                 List(count) {
                     OwnedToolRestriction(
                             input.readUTF(),
-                            input.readInt(),
+                            PackageEnabledSetting.fromAndroid(input.readInt()),
                             input.readUTF(),
                             InstallationFingerprint(
                                 input.readUTF(),
@@ -77,7 +77,7 @@ class FileToolRestrictionStore(private val path: Path) : ToolRestrictionStore {
                             require(
                                 it.packageName.isNotBlank() &&
                                     it.ownerToken.isNotBlank() &&
-                                    it.priorEnabledState in setOf(0, 1, 4),
+                                    it.priorEnabledState.canBeRestricted(),
                             )
                         }
                 }
@@ -103,10 +103,10 @@ class FileToolRestrictionStore(private val path: Path) : ToolRestrictionStore {
                             require(
                                 record.packageName.isNotBlank() &&
                                     record.ownerToken.isNotBlank() &&
-                                    record.priorEnabledState in setOf(0, 1, 4),
+                                    record.priorEnabledState.canBeRestricted(),
                             )
                             output.writeUTF(record.packageName)
-                            output.writeInt(record.priorEnabledState)
+                            output.writeInt(record.priorEnabledState.androidValue)
                             output.writeUTF(record.ownerToken)
                             output.writeUTF(fingerprint.baseApkPath)
                             output.writeLong(fingerprint.firstInstallTimeMillis)

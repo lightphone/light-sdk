@@ -30,7 +30,7 @@ class ToolPackageChangeReceiver : BroadcastReceiver() {
                 LightSdkServer.reportError("ToolEnforcement", error, "UID cleanup failed")
             }
         }
-        LightSdkServer.toolTrustRuntime?.cache?.invalidate(packageName)
+        LightSdkServer.toolTrustRuntime.invalidatePackage(packageName)
         if (
             intent.action != Intent.ACTION_PACKAGE_REMOVED &&
                 intent.action != Intent.ACTION_PACKAGE_FULLY_REMOVED
@@ -39,8 +39,8 @@ class ToolPackageChangeReceiver : BroadcastReceiver() {
             return
         }
         val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
-        val outcome = LightSdkServer.toolTrustRuntime?.onPackageRemoved(packageName, replacing)
-        LightSdkServer.toolEnforcement?.onPackageRemoved(packageName, replacing)
+        val outcome = LightSdkServer.toolTrustRuntime.onPackageRemoved(packageName, replacing)
+        LightSdkServer.toolEnforcement.onPackageRemoved(packageName, replacing)
         if (!replacing && outcome != AdmissionRemovalOutcome.Removed) {
             Log.e("ToolTrust", "Could not durably remove admission for $packageName")
         }

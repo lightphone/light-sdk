@@ -21,7 +21,7 @@ class LightToolPurgeWorker(context: Context, parameters: WorkerParameters) :
         val packageName = inputData.getString(PACKAGE) ?: return Result.failure()
         val attemptId = id.toString()
         fun failed(reason: String): Result {
-            LightSdkServer.toolEnforcement?.onPurgeOutcome(
+            LightSdkServer.toolEnforcement.onPurgeOutcome(
                 packageName,
                 attemptId,
                 ToolPurgeOutcome.Failed(reason),
@@ -53,7 +53,7 @@ class LightToolPurgeWorker(context: Context, parameters: WorkerParameters) :
             // matching comment in ToolEnforcementCoordinator.
             val kill = evaluation.decision as? LightInstallDecision.Kill
             if (kill?.action != BlockAction.Purge || evaluation.bundleVersion == null) {
-                LightSdkServer.toolEnforcement?.onPurgeOutcome(
+                LightSdkServer.toolEnforcement.onPurgeOutcome(
                     packageName,
                     attemptId,
                     ToolPurgeOutcome.Skipped,
@@ -117,12 +117,12 @@ class LightToolPurgeResultReceiver : BroadcastReceiver() {
         val status =
             intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         if (status == PackageInstaller.STATUS_SUCCESS) {
-            LightSdkServer.toolTrustRuntime?.onPackageRemoved(packageName, false)
-            LightSdkServer.toolEnforcement?.onPackageRemoved(packageName, false)
+            LightSdkServer.toolTrustRuntime.onPackageRemoved(packageName, false)
+            LightSdkServer.toolEnforcement.onPackageRemoved(packageName, false)
             LightSdkServer.onApkUninstalled(packageName)
         } else {
             intent.getStringExtra(LightToolPurgeWorker.ATTEMPT)?.let { attemptId ->
-                LightSdkServer.toolEnforcement?.onPurgeOutcome(
+                LightSdkServer.toolEnforcement.onPurgeOutcome(
                     packageName,
                     attemptId,
                     ToolPurgeOutcome.Failed("Uninstall failed: status=$status"),

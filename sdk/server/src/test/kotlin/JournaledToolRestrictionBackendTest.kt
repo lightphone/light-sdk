@@ -1,5 +1,11 @@
 import com.thelightphone.sdk.server.*
+import com.thelightphone.sdk.server.PackageEnabledSetting.Default as DEFAULT
+import com.thelightphone.sdk.server.PackageEnabledSetting.Disabled as DISABLED
+import com.thelightphone.sdk.server.PackageEnabledSetting.DisabledUntilUsed as DISABLED_UNTIL_USED
+import com.thelightphone.sdk.server.PackageEnabledSetting.DisabledByUser as DISABLED_USER
+import com.thelightphone.sdk.server.PackageEnabledSetting.Enabled as ENABLED
 import com.thelightphone.sdk.trust.*
+import java.io.DataInputStream
 import java.nio.file.Files
 import kotlin.test.*
 
@@ -25,13 +31,13 @@ class JournaledToolRestrictionBackendTest {
     }
 
     private inner class Platform : ToolRestrictionPlatform {
-        var snapshot = ToolPackageState(0, fingerprint)
+        var snapshot = ToolPackageState(DEFAULT, fingerprint)
         val operations = mutableListOf<String>()
         var failDisable = false
 
         override fun state(packageName: String) = snapshot
 
-        override fun setEnabledState(packageName: String, enabledState: Int) {
+        override fun setEnabledState(packageName: String, enabledState: PackageEnabledSetting) {
             operations += "state:$enabledState"
             if (failDisable) error("platform refused")
             snapshot = snapshot.copy(enabledState = enabledState)
@@ -51,15 +57,25 @@ class JournaledToolRestrictionBackendTest {
         JournaledToolRestrictionBackend(platform, store, {}, {}, {})
 
     @Test
+    fun `unknown Android enabled settings are rejected`() {
+        assertFailsWith<IllegalArgumentException> { PackageEnabledSetting.fromAndroid(-1) }
+    }
+
+    @Test
     fun `applied ownership survives reopen and restores the actual prior state`() {
-        for (prior in listOf(0, 1, 4)) {
+        for ((prior, journalCode) in listOf(DEFAULT to 0, ENABLED to 1, DISABLED_UNTIL_USED to 4)) {
             val directory = Files.createTempDirectory("restriction-journal-")
             val path = directory.resolve("restrictions")
             try {
                 val platform = Platform().apply { snapshot = snapshot.copy(enabledState = prior) }
                 val first = backend(platform, FileToolRestrictionStore(path))
                 first.disable("tool")
-                assertEquals(2, platform.snapshot.enabledState)
+                assertEquals(DISABLED, platform.snapshot.enabledState)
+                DataInputStream(Files.newInputStream(path)).use { input ->
+                    assertEquals(40, input.skipBytes(40)) // Digest, format magic, and record count.
+                    assertEquals("tool", input.readUTF())
+                    assertEquals(journalCode, input.readInt())
+                }
                 val reopened = backend(platform, FileToolRestrictionStore(path))
                 val owned = assertNotNull(reopened.ownedRestriction("tool"))
                 assertEquals(prior, owned.priorEnabledState)
@@ -83,18 +99,18 @@ class JournaledToolRestrictionBackendTest {
         assertTrue(platform.operations.isEmpty())
         store.failWrite = 3
         assertFails { backend(platform, store).disable("tool") }
-        assertEquals(2, platform.snapshot.enabledState)
+        assertEquals(DISABLED, platform.snapshot.enabledState)
         val pending = store.records().single()
         assertFalse(pending.applied)
         assertFalse(backend(platform, store).restrictionStillOwned(pending))
         assertFails { backend(platform, store).restore(pending) }
         assertFails { backend(platform, store).disable("tool") }
-        assertEquals(listOf("state:2"), platform.operations)
+        assertEquals(listOf("state:$DISABLED"), platform.operations)
     }
 
     @Test
     fun `preexisting restrictions are not adopted and later user state or reinstall is not overridden`() {
-        for (prior in listOf(2, 3)) {
+        for (prior in listOf(DISABLED, DISABLED_USER)) {
             val platform = Platform().apply { snapshot = snapshot.copy(enabledState = prior) }
             val store = Store()
             backend(platform, store).disable("tool")
@@ -106,17 +122,17 @@ class JournaledToolRestrictionBackendTest {
         val backend = backend(platform, store)
         backend.disable("tool")
         val owned = store.records().single()
-        platform.snapshot = platform.snapshot.copy(enabledState = 3)
+        platform.snapshot = platform.snapshot.copy(enabledState = DISABLED_USER)
         assertFalse(backend.restrictionStillOwned(owned))
         assertFails { backend.restore(owned) }
         platform.snapshot =
             platform.snapshot.copy(
-                enabledState = 2,
+                enabledState = DISABLED,
                 fingerprint = fingerprint.copy(baseApkPath = "/data/app/new/base.apk"),
             )
         assertFalse(backend.restrictionStillOwned(owned))
         assertFails { backend.restore(owned) }
-        assertEquals(listOf("state:2"), platform.operations)
+        assertEquals(listOf("state:$DISABLED"), platform.operations)
     }
 
     @Test
@@ -124,7 +140,7 @@ class JournaledToolRestrictionBackendTest {
         val directory = Files.createTempDirectory("restriction-corrupt-")
         val path = directory.resolve("records")
         try {
-            val record = OwnedToolRestriction("tool", 0, "owner", fingerprint, true)
+            val record = OwnedToolRestriction("tool", DEFAULT, "owner", fingerprint, true)
             FileToolRestrictionStore(path).put(record)
             val bytes = Files.readAllBytes(path)
             bytes[40] = (bytes[40].toInt() xor 1).toByte()
@@ -142,14 +158,14 @@ class JournaledToolRestrictionBackendTest {
         val store = Store()
         val coordinator = ToolEnforcementCoordinator(backend(platform, store))
         coordinator.reconcileAll(listOf("tool" to ToolTrustRuntime.unavailable()))
-        platform.snapshot = platform.snapshot.copy(enabledState = 3)
+        platform.snapshot = platform.snapshot.copy(enabledState = DISABLED_USER)
         val allowed =
             ToolTrustRuntime.unavailable()
                 .copy(outcome = ToolEvaluationOutcome.PolicyDecision(LightInstallDecision.Allow))
         assertEquals(ToolContainment.Allowed, coordinator.reconcile("tool", allowed).containment)
-        assertEquals(3, platform.snapshot.enabledState)
+        assertEquals(DISABLED_USER, platform.snapshot.enabledState)
         assertTrue(store.records().isEmpty())
-        assertEquals(listOf("stop", "state:2"), platform.operations)
+        assertEquals(listOf("stop", "state:$DISABLED"), platform.operations)
     }
 
     @Test
@@ -167,7 +183,7 @@ class JournaledToolRestrictionBackendTest {
         val result =
             ToolEnforcementCoordinator(backend).reconcile("tool", ToolTrustRuntime.unavailable())
         assertTrue(revoked)
-        assertEquals(listOf("stop", "state:2"), platform.operations)
+        assertEquals(listOf("stop", "state:$DISABLED"), platform.operations)
         assertEquals(ToolContainment.Failed, result.containment)
     }
 }

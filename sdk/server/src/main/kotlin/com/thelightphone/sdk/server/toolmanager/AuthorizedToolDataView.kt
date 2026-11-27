@@ -6,6 +6,19 @@ import com.thelightphone.toolmanager.datatree.*
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.file.Path
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+
+internal suspend fun <T> accessResult(block: suspend () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (error: CancellationException) {
+        currentCoroutineContext().ensureActive()
+        Result.failure(error)
+    } catch (error: Exception) {
+        Result.failure(error)
+    }
 
 /** Wrap only discovered external-tool views; host-owned settings/recovery stay independent. */
 fun authorizedToolDataView(
@@ -45,7 +58,7 @@ fun authorizedToolDataView(
                         path: Path,
                         pageRequest: PageRequest,
                         invalidateCache: Boolean,
-                    ) = runCatching {
+                    ) = accessResult {
                         access {
                             view.provider
                                 .getDirectoryForPath(path, pageRequest, invalidateCache)
@@ -54,7 +67,7 @@ fun authorizedToolDataView(
                     }
 
                     override suspend fun getBytes(filePath: Path): Result<InputStream> =
-                        runCatching {
+                        accessResult {
                             access {
                                 resources.trackInputStream(
                                     packageName,
@@ -66,7 +79,7 @@ fun authorizedToolDataView(
                     override suspend fun getThumbnailBytes(
                         filePath: Path,
                         type: EntryType,
-                    ): Result<InputStream> = runCatching {
+                    ): Result<InputStream> = accessResult {
                         access {
                             resources.trackInputStream(
                                 packageName,
@@ -82,7 +95,7 @@ fun authorizedToolDataView(
                     override suspend fun <T> writeBytes(
                         filePath: Path,
                         block: suspend (OutputStream) -> T,
-                    ): Result<T> = runCatching {
+                    ): Result<T> = accessResult {
                         access {
                             view.provider
                                 .writeBytes(filePath) { output ->
@@ -94,15 +107,15 @@ fun authorizedToolDataView(
                         }
                     }
 
-                    override suspend fun delete(filePath: Path) = runCatching {
+                    override suspend fun delete(filePath: Path) = accessResult {
                         access { view.provider.delete(filePath).getOrThrow() }
                     }
 
-                    override suspend fun rename(filePath: Path, newName: String) = runCatching {
+                    override suspend fun rename(filePath: Path, newName: String) = accessResult {
                         access { view.provider.rename(filePath, newName).getOrThrow() }
                     }
 
-                    override suspend fun getDirectoryMeta(directoryPath: Path) = runCatching {
+                    override suspend fun getDirectoryMeta(directoryPath: Path) = accessResult {
                         access { view.provider.getDirectoryMeta(directoryPath).getOrThrow() }
                     }
 

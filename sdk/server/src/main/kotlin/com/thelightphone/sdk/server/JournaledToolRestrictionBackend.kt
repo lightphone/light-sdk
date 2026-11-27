@@ -3,12 +3,15 @@ package com.thelightphone.sdk.server
 import com.thelightphone.sdk.trust.InstallationFingerprint
 import java.util.UUID
 
-data class ToolPackageState(val enabledState: Int, val fingerprint: InstallationFingerprint)
+data class ToolPackageState(
+    val enabledState: PackageEnabledSetting,
+    val fingerprint: InstallationFingerprint,
+)
 
 interface ToolRestrictionPlatform {
     fun state(packageName: String): ToolPackageState
 
-    fun setEnabledState(packageName: String, enabledState: Int)
+    fun setEnabledState(packageName: String, enabledState: PackageEnabledSetting)
 
     fun stopProcesses(packageName: String)
 
@@ -24,7 +27,7 @@ class JournaledToolRestrictionBackend(
 ) : ToolRestrictionBackend {
     override fun ownedRestriction(packageName: String): OwnedToolRestriction? {
         val record = store.records().singleOrNull { it.packageName == packageName } ?: return null
-        if (platform.state(packageName).enabledState != DISABLED) {
+        if (platform.state(packageName).enabledState != PackageEnabledSetting.Disabled) {
             store.remove(packageName)
             return null
         }
@@ -55,14 +58,13 @@ class JournaledToolRestrictionBackend(
 
     override fun disable(packageName: String) {
         val state = platform.state(packageName)
-        require(state.enabledState in 0..4) { "Unknown enabled state" }
         val existing = ownedRestriction(packageName)
-        if (state.enabledState !in setOf(0, 1, 4)) {
+        if (!state.enabledState.canBeRestricted()) {
             if (existing != null) {
                 check(
                     existing.applied &&
                         existing.installationFingerprint == state.fingerprint &&
-                        state.enabledState == DISABLED,
+                        state.enabledState == PackageEnabledSetting.Disabled,
                 ) {
                     "Restriction ownership is uncertain; preserving disabled state"
                 }
@@ -78,8 +80,11 @@ class JournaledToolRestrictionBackend(
             )
         store.put(pending)
         check(platform.state(packageName) == state) { "Package changed before disabling" }
-        platform.setEnabledState(packageName, DISABLED)
-        check(platform.state(packageName) == state.copy(enabledState = DISABLED)) {
+        platform.setEnabledState(packageName, PackageEnabledSetting.Disabled)
+        check(
+            platform.state(packageName) ==
+                state.copy(enabledState = PackageEnabledSetting.Disabled),
+        ) {
             "Disable did not take effect on the same installation"
         }
         store.put(pending.copy(applied = true))
@@ -89,7 +94,7 @@ class JournaledToolRestrictionBackend(
         val state = platform.state(record.packageName)
         return record.applied &&
             ownedRestriction(record.packageName) == record &&
-            state.enabledState == DISABLED &&
+            state.enabledState == PackageEnabledSetting.Disabled &&
             state.fingerprint == record.installationFingerprint
     }
 
@@ -105,8 +110,4 @@ class JournaledToolRestrictionBackend(
     }
 
     override fun purge(packageName: String) = platform.requestPurge(packageName)
-
-    companion object {
-        const val DISABLED = 2
-    }
 }
