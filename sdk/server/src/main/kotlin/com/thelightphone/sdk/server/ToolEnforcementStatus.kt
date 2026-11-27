@@ -10,7 +10,7 @@ data class ToolEnforcementSnapshot(
     val failed: Boolean = false,
 )
 
-internal sealed interface ToolPurgeOutcome {
+sealed interface ToolPurgeOutcome {
     data class Failed(val reason: String) : ToolPurgeOutcome
 
     data object Skipped : ToolPurgeOutcome

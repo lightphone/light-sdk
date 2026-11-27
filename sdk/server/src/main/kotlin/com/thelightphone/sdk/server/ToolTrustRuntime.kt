@@ -62,9 +62,11 @@ class ToolTrustRuntime(
     val cache: StampCache = InMemoryStampCache(),
     private val developerSignerBypass: (String, String) -> Boolean = { _, _ -> false },
     private val emulatorDevelopmentSigner: (String) -> Boolean = { false },
-) {
-    fun onPackageRemoved(packageName: String, replacing: Boolean): AdmissionRemovalOutcome? {
-        cache.invalidate(packageName)
+) : ToolTrustEvaluation {
+    override fun invalidatePackage(packageName: String) = cache.invalidate(packageName)
+
+    override fun onPackageRemoved(packageName: String, replacing: Boolean): AdmissionRemovalOutcome? {
+        invalidatePackage(packageName)
         return if (replacing) null
         else
             admissionStore?.removeAdmission(packageName)
@@ -79,7 +81,7 @@ class ToolTrustRuntime(
      * [developerSignerBypass] always resolve to Allow, since neither is supposed to depend on the
      * artifact being readable.
      */
-    fun evaluate(meta: LightSdkServer.ApkMetadata, level: ClientFilterLevel): ToolEvaluation =
+    override fun evaluate(meta: LightSdkServer.ApkMetadata, level: ClientFilterLevel): ToolEvaluation =
         try {
             val signer =
                 meta.signingCertSha256.singleOrNull() ?: error("Expected one current signer")
