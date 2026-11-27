@@ -23,6 +23,7 @@ androidx.core:core-splashscreen
 com.thelightphone.lp3keyboard
 com.thelightphone.toolmanager
 com.github.lightphone:light-keyboard
+com.github.lightphone.light-tool-manager
 androidx.room
 androidx.work
 androidx.startup
