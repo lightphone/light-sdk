@@ -1,12 +1,13 @@
 package com.thelightphone.sdk.trust
 
+import com.thelightphone.sdk.shared.ToolFilterLevel
+import com.thelightphone.sdk.shared.ToolFilterLevel.AllowAllApks
+import com.thelightphone.sdk.shared.ToolFilterLevel.AllowLightApprovedApks
+import com.thelightphone.sdk.shared.ToolFilterLevel.AllowLightSignedApks
+import com.thelightphone.sdk.shared.ToolFilterLevel.ExcludeAllApks
 import com.thelightphone.sdk.trust.LightInstallDecision.Allow
 import com.thelightphone.sdk.trust.LightInstallDecision.Deny
 import com.thelightphone.sdk.trust.LightInstallDecision.Kill
-import com.thelightphone.sdk.trust.LightTrustFilterLevel.AllowAllApks
-import com.thelightphone.sdk.trust.LightTrustFilterLevel.AllowLightApprovedApks
-import com.thelightphone.sdk.trust.LightTrustFilterLevel.AllowLightSignedApks
-import com.thelightphone.sdk.trust.LightTrustFilterLevel.ExcludeAllApks
 import kotlin.test.*
 
 class LightInstallPolicyTest {
@@ -60,7 +61,7 @@ class LightInstallPolicyTest {
         apkSha256: () -> String = { fail("hashed the APK when nothing needed the hash") },
         manifestVersionCode: Long = 7,
         bundle: LightTrustBundle? = bundle(),
-        level: LightTrustFilterLevel = AllowLightApprovedApks,
+        level: ToolFilterLevel = AllowLightApprovedApks,
     ) =
         LightInstallPolicy.decide(
             stamp,
@@ -455,7 +456,7 @@ class LightInstallPolicyTest {
                     permutations(entries - chosen).map { listOf(chosen) + it }
                 }
         for (order in permutations(blocks)) {
-            for (level in LightTrustFilterLevel.entries) {
+            for (level in ToolFilterLevel.entries) {
                 val expected =
                     if (level == AllowAllApks) Allow else Kill(BlockAction.Purge, "a-purge")
                 assertEquals(
@@ -529,7 +530,7 @@ class LightInstallPolicyTest {
         for (stamp in stamps) for (statement in statements) for (bundle in bundles) {
             for (signer in listOf(appKey, attackerKey)) for (version in
                 listOf(0L, 7L, Long.MAX_VALUE)) {
-                for (level in LightTrustFilterLevel.entries) {
+                for (level in ToolFilterLevel.entries) {
                     assertNotNull(
                         LightInstallPolicy.decide(
                             stamp,

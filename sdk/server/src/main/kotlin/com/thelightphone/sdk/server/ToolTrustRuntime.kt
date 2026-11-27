@@ -91,7 +91,6 @@ class ToolTrustRuntime(
                 } catch (_: Exception) {
                     null
                 }
-            val trustLevel = LightTrustFilterLevel.valueOf(level.name)
             val developerBypass = developerSignerBypass(meta.packageName, signer)
             val emulatorSigner = emulatorDevelopmentSigner(signer)
 
@@ -126,7 +125,7 @@ class ToolTrustRuntime(
                 LightToolEvaluator.evaluate(
                     artifact = artifact,
                     state = state,
-                    level = trustLevel,
+                    level = level,
                     admission = admission,
                     developerSignerBypass = developerBypass,
                     emulatorDevelopmentSigner = emulatorSigner,
@@ -172,7 +171,7 @@ class ToolTrustRuntime(
                                         ?.id,
                                     meta.versionCode,
                                     state?.version,
-                                    trustLevel,
+                                    level,
                                     Clock.System.now(),
                                     installationFingerprint = artifact.installationFingerprint,
                                 )

@@ -1,5 +1,6 @@
 package com.thelightphone.sdk.trust
 
+import com.thelightphone.sdk.shared.ToolFilterLevel
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
@@ -140,7 +141,7 @@ private fun JsonObject.toAdmissionRecord(): AdmissionRecord {
         toolId = optionalString("toolId"),
         versionCode = requiredLong("versionCode"),
         admittedUnderBundleVersion = optionalLong("admittedUnderBundleVersion"),
-        admittedUnderLevel = LightTrustFilterLevel.valueOf(requiredString("admittedUnderLevel")),
+        admittedUnderLevel = ToolFilterLevel.valueOf(requiredString("admittedUnderLevel")),
         admittedAt =
             Instant.fromEpochSeconds(
                 requiredLong("admittedAtEpochSecond"),

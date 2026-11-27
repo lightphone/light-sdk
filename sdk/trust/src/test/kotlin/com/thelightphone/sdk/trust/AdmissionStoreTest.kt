@@ -1,5 +1,6 @@
 package com.thelightphone.sdk.trust
 
+import com.thelightphone.sdk.shared.ToolFilterLevel
 import java.nio.file.Files
 import kotlin.test.*
 import kotlin.time.Instant
@@ -60,7 +61,7 @@ class AdmissionStoreTest {
             "example.tool",
             1,
             7,
-            LightTrustFilterLevel.AllowLightSignedApks,
+            ToolFilterLevel.AllowLightSignedApks,
             Instant.parse("2026-11-12T00:00:00Z"),
             installationFingerprint = fingerprint,
         )
