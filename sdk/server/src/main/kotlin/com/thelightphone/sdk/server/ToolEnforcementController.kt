@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import com.thelightphone.sdk.server.LightSdkServer.queryInstalledClients
 import com.thelightphone.sdk.trust.InstallationFingerprint
+import com.thelightphone.sdk.trust.ToolEvaluation
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -17,7 +18,7 @@ class ToolEnforcementController(
     private val store: ToolRestrictionStore,
     platform: ToolRestrictionPlatform = AndroidToolRestrictionPlatform(context),
     private val onReconciled: () -> Unit = {},
-) {
+) : ToolEnforcement {
     private val context = context.applicationContext
     private val pending = AtomicBoolean(false)
     private val status = ToolEnforcementStatus()
@@ -81,7 +82,7 @@ class ToolEnforcementController(
         else context.registerReceiver(receiver, filter)
     }
 
-    fun permitsAccess(packageName: String): Boolean {
+    override fun permitsAccess(packageName: String, evaluation: ToolEvaluation): Boolean {
         val observed = snapshot.value
         return !observed.checking &&
             !observed.failed &&
@@ -89,7 +90,7 @@ class ToolEnforcementController(
             snapshot.value.revision == observed.revision
     }
 
-    fun requestReconciliation() {
+    override fun requestReconciliation() {
         status.request()
         pending.set(true)
         executor.execute {
@@ -150,7 +151,7 @@ class ToolEnforcementController(
         }
     }
 
-    fun onPackageRemoved(packageName: String, replacing: Boolean) {
+    override fun onPackageRemoved(packageName: String, replacing: Boolean) {
         executor.execute {
             lastUids[packageName]?.let { uid ->
                 LightSdkServer.clientAuthorizations.revoke(uid)
@@ -209,17 +210,18 @@ class ToolEnforcementController(
         requestReconciliation()
     }
 
-    internal fun onPurgeOutcome(packageName: String, attemptId: String, outcome: ToolPurgeOutcome) {
+    override fun onPurgeOutcome(packageName: String, attemptId: String, outcome: ToolPurgeOutcome) {
         executor.execute { status.purgeFinished(packageName, attemptId, outcome) }
     }
 
     companion object {
+        @Synchronized
         fun start(context: Context, onReconciled: () -> Unit = {}): ToolEnforcementController? {
-            LightSdkServer.toolEnforcement?.let {
+            (LightSdkServer.toolEnforcement as? ToolEnforcementController)?.let {
                 it.requestReconciliation()
                 return it
             }
-            LightSdkServer.toolEnforcementRequired = true
+            LightSdkServer.toolEnforcement = RequiredToolEnforcement
             return try {
                 ToolEnforcementController(
                         context,

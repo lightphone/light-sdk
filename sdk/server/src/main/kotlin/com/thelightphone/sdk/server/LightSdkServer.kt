@@ -39,12 +39,12 @@ object LightSdkServer {
     /** The host opens one store per persistence backend and registers it during startup. */
     var trustStore: TrustStore = UnavailableTrustStore
 
-    /** The host configures the verifier, trust state source, and admission store at startup. */
-    var toolTrustRuntime: ToolTrustRuntime? = null
+    /** The host may configure a verifier, trust state source, and admission store at startup. */
+    @Volatile var toolTrustRuntime: ToolTrustEvaluation = UnavailableToolTrustEvaluation
 
-    /** Evaluates [meta] at [level], using [unavailableOrAllowAll] before runtime registration. */
+    /** Evaluates [meta] at [level] through [toolTrustRuntime]. */
     fun evaluateTool(level: ClientFilterLevel, meta: ApkMetadata): ToolEvaluation =
-        toolTrustRuntime?.evaluate(meta, level) ?: unavailableOrAllowAll(level)
+        toolTrustRuntime.evaluate(meta, level)
 
     /**
      * Looks up [packageName]'s current [PackageInfo] and evaluates it at [level].
@@ -71,20 +71,9 @@ object LightSdkServer {
             unavailableOrAllowAll(level, DenyReason.ArtifactUnavailable)
         }
 
-    private fun unavailableOrAllowAll(
-        level: ClientFilterLevel,
-        reason: DenyReason = DenyReason.TrustUnavailable,
-    ) =
-        if (level == ClientFilterLevel.AllowAllApks) {
-            ToolTrustRuntime.exceptionWithoutArtifact(AdmissionException.AllowAll)
-        } else {
-            ToolTrustRuntime.unavailable(reason)
-        }
-
     val clientAuthorizations = SdkClientAuthorizations()
     val toolResources = ToolResourceRegistry()
-    @Volatile var toolEnforcement: ToolEnforcementController? = null
-    @Volatile var toolEnforcementRequired: Boolean = false
+    @Volatile internal var toolEnforcement: ToolEnforcement = NoToolEnforcement
 
     var onRevokeToolResources: (Context, String) -> Unit = { _, _ ->
         error("Host resource cleanup is not configured")
@@ -92,27 +81,13 @@ object LightSdkServer {
     var onRevokeToolUid: (Int) -> Unit = {}
 
     fun notifyToolTrustChanged() {
-        toolEnforcement?.requestReconciliation()
+        toolEnforcement.requestReconciliation()
     }
 
-    /**
-     * Allow requires both the fresh decision and (once a [toolEnforcement] controller is running)
-     * its own permit - a client that reconciliation has disabled/purged must not regain access just
-     * because a later ad hoc evaluation says Allow again. Before any controller exists,
-     * [toolEnforcementRequired] decides whether to fail open (legacy/dev hosts) or closed (hosts
-     * that require enforcement to be running before granting access).
-     */
+    /** An allowed evaluation still needs a permit from the configured enforcement policy. */
     private fun enforcementAllows(result: ToolEvaluation, packageName: String): Boolean =
         result.decision == LightInstallDecision.Allow &&
-            when {
-                toolEnforcement != null -> toolEnforcement?.permitsAccess(packageName) == true
-                !toolEnforcementRequired -> true
-                else -> {
-                    val exception = (result.outcome as? ToolEvaluationOutcome.Bypass)?.exception
-                    exception == AdmissionException.AllowAll ||
-                        exception == AdmissionException.DeveloperHash
-                }
-            }
+            toolEnforcement.permitsAccess(packageName, result)
 
     private const val TAG = "LightSdkServer"
     const val SCREEN_OFF_FLAG = "SCREEN_OFF"

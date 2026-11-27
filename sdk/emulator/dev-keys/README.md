@@ -1,5 +1,10 @@
 # INSECURE dev trust-bundle key
 
+Tool trust is off by default in the emulator, which uses the **All Tools**
+filter. To test trust bundles or enforcement, turn on **Enable tool trust**
+in Settings and restart the emulator app. Then choose the filter you want to
+test under **Allowed Tools**.
+
 A throwaway Ed25519 keypair, generated purely so the emulator can exercise
 `LightTrustStore.accept()` locally. `EmulatorApplication` pins the public key
 when it opens the store in the emulator build.
