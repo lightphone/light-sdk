@@ -11,6 +11,16 @@ package com.thelightphone.sdk.trust
 class TrustBundleCandidateStaging(private val candidatePersistence: TrustPersistence) {
     @Synchronized fun stage(candidate: SignedTrustBundle) = candidatePersistence.write(candidate)
 
+    @Synchronized
+    fun stageAndSubmit(store: LightTrustStore, candidate: SignedTrustBundle): TrustResult<TrustState> {
+        try {
+            stage(candidate)
+        } catch (_: Exception) {
+            return TrustResult.Failure(TrustFailure.PersistenceFailed)
+        }
+        return submit(store, candidate)
+    }
+
     @Synchronized fun candidate(): SignedTrustBundle? = candidatePersistence.read()
 
     @Synchronized

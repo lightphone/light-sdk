@@ -1,5 +1,6 @@
 package com.thelightphone.sdk.trust
 
+import java.io.IOException
 import java.nio.file.Files
 import java.util.Base64
 import kotlin.test.*
@@ -146,6 +147,29 @@ class TrustBundleCandidateStagingTest {
             Files.deleteIfExists(path)
             Files.deleteIfExists(directory)
         }
+    }
+
+    @Test
+    fun `failed staging write stops submission`() {
+        val store = openStore()
+        var readAttempted = false
+        val staging = TrustBundleCandidateStaging(object : TrustPersistence {
+            override fun read(): SignedTrustBundle? {
+                readAttempted = true
+                return null
+            }
+
+            override fun write(bundle: SignedTrustBundle) {
+                throw IOException("staging write failed")
+            }
+        })
+
+        assertEquals(
+            TrustResult.Failure(TrustFailure.PersistenceFailed),
+            staging.stageAndSubmit(store, fixture("valid")),
+        )
+        assertFalse(readAttempted)
+        assertNull(store.state().version)
     }
 
     @Test

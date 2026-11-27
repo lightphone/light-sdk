@@ -6,6 +6,10 @@ import com.thelightphone.sdk.emulator.EmulatorLocationHelper
 import com.thelightphone.sdk.server.BuildConfig
 import com.thelightphone.sdk.server.LightPushDistributor
 import com.thelightphone.sdk.server.LightPushRegistry
+import com.thelightphone.sdk.trust.LightTrustStore
+import com.thelightphone.sdk.trust.TrustBundleCandidateStaging
+import com.thelightphone.sdk.trust.TrustFailure
+import com.thelightphone.sdk.trust.TrustResult
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -40,6 +44,7 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -50,7 +55,11 @@ import kotlinx.serialization.json.put
 /**
  * A place to dump otherwise cloud-based features.
  */
-class EmulatorHttpServer(private val context: Context) {
+class EmulatorHttpServer(
+    private val context: Context,
+    private val trustStore: LightTrustStore?,
+    private val trustBundleCandidateStaging: TrustBundleCandidateStaging,
+) {
 
     companion object {
         private const val TAG = "EmulatorHttpServer"
@@ -233,6 +242,64 @@ class EmulatorHttpServer(private val context: Context) {
                         status = HttpStatusCode.Conflict
                     )
                 }
+            }
+
+            // Dev-only endpoint that submits a signed trust bundle directly to the emulator's
+            // LightTrustStore.
+            post("/trust/bundle") {
+                val store = trustStore
+                if (store == null) {
+                    call.respondText("Trust store unavailable", status = HttpStatusCode.ServiceUnavailable)
+                    return@post
+                }
+                val request = readTrustBundleUpload(call.receiveChannel())
+                if (request == null) {
+                    call.respondText("Trust bundle upload is too large", status = HttpStatusCode.PayloadTooLarge)
+                    return@post
+                }
+                val candidate = try {
+                    parseTrustBundleUpload(request)
+                } catch (e: IllegalArgumentException) {
+                    call.respondText(e.message ?: "Invalid candidate", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                when (val result = trustBundleCandidateStaging.stageAndSubmit(store, candidate)) {
+                    is TrustResult.Success -> call.respondText(
+                        buildJsonObject { put("version", result.value.version) }.toString(),
+                        ContentType.Application.Json
+                    )
+                    is TrustResult.Failure -> call.respondText(
+                        buildJsonObject { put("error", result.reason.toString()) }.toString(),
+                        ContentType.Application.Json,
+                        when (result.reason) {
+                            TrustFailure.PersistenceFailed,
+                            is TrustFailure.PersistenceDurabilityUnknown -> HttpStatusCode.InternalServerError
+                            else -> HttpStatusCode.BadRequest
+                        },
+                    )
+                }
+            }
+
+            get("/trust/state") {
+                val state = trustStore?.state()
+                if (state == null) {
+                    call.respondText(
+                        buildJsonObject { put("available", false) }.toString(),
+                        ContentType.Application.Json,
+                        HttpStatusCode.ServiceUnavailable
+                    )
+                    return@get
+                }
+                call.respondText(
+                    buildJsonObject {
+                        put("available", true)
+                        put("version", state.version)
+                        put("trustedStampCerts", buildJsonArray { state.trustedStampCerts.forEach { add(it) } })
+                        put("allowCount", state.bundle?.allow?.size ?: 0)
+                        put("blockCount", state.bundle?.block?.size ?: 0)
+                    }.toString(),
+                    ContentType.Application.Json
+                )
             }
 
             get("/oauth/authorize") {

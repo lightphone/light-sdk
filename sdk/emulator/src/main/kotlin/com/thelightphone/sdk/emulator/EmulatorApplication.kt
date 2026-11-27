@@ -165,7 +165,11 @@ class EmulatorApplication : Application(), Configuration.Provider {
 
             with(EmulatorLocationHelper) { initLocationHelper(this@EmulatorApplication) }
         }
-        EmulatorHttpServer(this).start()
+        EmulatorHttpServer(
+            context = this,
+            trustStore = null,
+            trustBundleCandidateStaging = LightSdkServer.provideTrustBundleCandidateStaging(this),
+        ).start()
 
         val backupScheduleSyncer = BackupScheduleSyncer(this, backupObservablePreferences)
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch { backupScheduleSyncer.run() }
