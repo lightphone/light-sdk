@@ -32,9 +32,14 @@ android {
         }
     }
 
-    val localProps = Properties().apply {
-        rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
-    }
+    val localProps =
+        Properties().apply {
+            rootProject
+                .file("local.properties")
+                .takeIf { it.exists() }
+                ?.inputStream()
+                ?.use { load(it) }
+        }
 
     defaultConfig {
         applicationId = "com.thelightphone.sdk.emulator"
@@ -43,23 +48,25 @@ android {
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "PUSH_DOMAIN", "\"${localProps.getProperty("pushDomain", "")}\"")
-        buildConfigField("String", "MOLLYSOCKET_URI", "\"${localProps.getProperty("mollysocketUri", "")}\"")
+        buildConfigField(
+            "String",
+            "MOLLYSOCKET_URI",
+            "\"${localProps.getProperty("mollysocketUri", "")}\"",
+        )
         // fallback is the shared dev instance, see https://github.com/lightphone/light-oauth-relay
         // please don't use it for your own projects <3, set backupWorkerHost in local.properties
-        buildConfigField("String", "BACKUP_WORKER_HOST", "\"${localProps.getProperty("backupWorkerHost", "light-oauth-relay.dupontgu.workers.dev")}\"")
+        buildConfigField(
+            "String",
+            "BACKUP_WORKER_HOST",
+            "\"${localProps.getProperty("backupWorkerHost", "light-oauth-relay.dupontgu.workers.dev")}\"",
+        )
     }
 
-    buildFeatures {
-        buildConfig = true
-    }
+    buildFeatures { buildConfig = true }
 
     buildTypes {
-        debug {
-            if (hasPlatformKey) signingConfig = signingConfigs.getByName("platform")
-        }
-        release {
-            if (hasPlatformKey) signingConfig = signingConfigs.getByName("platform")
-        }
+        debug { if (hasPlatformKey) signingConfig = signingConfigs.getByName("platform") }
+        release { if (hasPlatformKey) signingConfig = signingConfigs.getByName("platform") }
     }
 
     compileOptions {
@@ -77,13 +84,18 @@ android {
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(rootProject.ext["jvmTarget"] as String))
+        jvmTarget.set(
+            org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(
+                rootProject.ext["jvmTarget"] as String
+            )
+        )
     }
 }
 
 dependencies {
     testImplementation(libs.kotlin.test)
     implementation(project(":sdk:server"))
+    implementation(project(":sdk:trust-apksig"))
     implementation(project(":sdk:ui"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

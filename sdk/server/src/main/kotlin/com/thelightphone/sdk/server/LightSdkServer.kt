@@ -36,6 +36,9 @@ import java.io.File
 data class InstalledClient(val packageInfo: PackageInfo, val sdkVersion: String)
 
 object LightSdkServer {
+    /** The host opens one store per persistence backend and registers it during startup. */
+    var trustStore: TrustStore = UnavailableTrustStore
+
     /** The host may configure a verifier, trust state source, and admission store at startup. */
     @Volatile var toolTrustRuntime: ToolTrustEvaluation = UnavailableToolTrustEvaluation
 
@@ -61,7 +64,7 @@ object LightSdkServer {
                     context.packageManager.getPackageInfo(
                         packageName,
                         PackageManager.GET_SIGNING_CERTIFICATES,
-                    ),
+                    )
                 ),
             )
         } catch (_: Exception) {
@@ -101,7 +104,7 @@ object LightSdkServer {
 
     /** Keeps only the installed clients allowed to run under [settings]'s current filter level. */
     fun List<InstalledClient>.filterAllowedInstalledTools(
-        settings: LightSdkServerSettings,
+        settings: LightSdkServerSettings
     ): List<InstalledClient> {
         val clientFilterLevel = settings.clientFilterLevel
         return filter {
@@ -198,45 +201,6 @@ object LightSdkServer {
 
     var getApkInboxDirectory: (Context) -> File = {
         File(it.applicationContext.filesDir, "apkInbox")
-    }
-
-    var provideTrustPersistence: (Context) -> TrustPersistence = {
-        FileTrustPersistence(File(it.applicationContext.filesDir, "trust/bundle.dat").toPath())
-    }
-
-    var provideTrustBundleCandidateStaging: (Context) -> TrustBundleCandidateStaging = {
-        TrustBundleCandidateStaging(
-            FileTrustPersistence(
-                File(it.applicationContext.filesDir, "trust/bundle-candidate.dat").toPath(),
-            ),
-        )
-    }
-
-    /**
-     * Set this before opening the store to supply the bundle-signing public keys. The default
-     * verifier rejects every bundle with [TrustFailure.InvalidKey].
-     */
-    var provideTrustBundleVerifier: (Context) -> LightTrustBundleVerifier = {
-        LightTrustBundleVerifier(emptyList())
-    }
-
-    /** Set this before opening the store to trust the host's source-stamp certificates. */
-    var provideImagePins: (Context) -> Set<String> = { emptySet() }
-
-    var provideImageBundle: (Context) -> SignedTrustBundle? = { null }
-
-    /**
-     * Open one store per persistence backend and reuse it for the life of the process. Each store
-     * keeps the last accepted version in memory. A second store can use an older version for its
-     * checks and overwrite a newer bundle.
-     */
-    var provideLightTrustStore: (Context) -> TrustResult<LightTrustStore> = {
-        LightTrustStore.open(
-            provideTrustBundleVerifier(it),
-            provideTrustPersistence(it),
-            provideImagePins(it),
-            provideImageBundle(it),
-        )
     }
 
     var getToolManagerKeyCipher: () -> KeyCipher = { AndroidKeystoreKeyCipher() }

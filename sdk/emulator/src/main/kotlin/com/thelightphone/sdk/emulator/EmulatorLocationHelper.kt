@@ -11,11 +11,17 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
-
 object EmulatorLocationHelper {
 
-    data class CurrentLocation(val latitude: Double, val longitude: Double, val accuracyMeters: Double, val timestamp: Instant)
+    data class CurrentLocation(
+        val latitude: Double,
+        val longitude: Double,
+        val accuracyMeters: Double,
+        val timestamp: Instant,
+    )
+
     data class Location(val latitude: Double, val longitude: Double)
+
     private val requestInterval = 1.minutes
     private val activeUidMap = ConcurrentHashMap<Int, Instant>()
     @Volatile private var currentLocation: CurrentLocation? = null
@@ -25,11 +31,23 @@ object EmulatorLocationHelper {
         defaultLocation = newLocation
     }
 
+    /**
+     * Ends [callingUid]'s active location subscription, if any - host resource cleanup on
+     * disable/purge.
+     */
+    fun revokeUid(callingUid: Int) {
+        activeUidMap.remove(callingUid)
+    }
+
     fun updateCurrentLocation(newLocation: CurrentLocation?): Boolean {
         if (newLocation == null) {
             currentLocation = null
             return true
-        } else if (activeUidMap.none { (_, lastRequestTime) -> Clock.System.now() - lastRequestTime < requestInterval }) {
+        } else if (
+            activeUidMap.none { (_, lastRequestTime) ->
+                Clock.System.now() - lastRequestTime < requestInterval
+            }
+        ) {
             // if no tools have requested updates in the last minute, updates should fail
             // (simulates LightOS not polling location)
             return false
@@ -40,11 +58,15 @@ object EmulatorLocationHelper {
     }
 
     private fun Context.hasLocationPermission(callingUid: Int): Boolean {
-        val packageName = packageManager.getPackagesForUid(callingUid)?.firstOrNull() ?: return false
+        val packageName =
+            packageManager.getPackagesForUid(callingUid)?.firstOrNull() ?: return false
         return listOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-        ).any { packageManager.checkPermission(it, packageName) == PackageManager.PERMISSION_GRANTED }
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            )
+            .any {
+                packageManager.checkPermission(it, packageName) == PackageManager.PERMISSION_GRANTED
+            }
     }
 
     fun LightSdkServer.initLocationHelper(context: Context) {
@@ -93,4 +115,3 @@ object EmulatorLocationHelper {
         }
     }
 }
-

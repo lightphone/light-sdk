@@ -1,7 +1,7 @@
 package com.thelightphone.sdk.trust
 
 /**
- * Stages a complete bytes-and-signature pair separately from [LightTrustStore]'s accepted state. A
+ * Stages a complete bytes-and-signature pair separately from the [TrustStore]'s accepted state. A
  * submitter supplies the pair it staged so that another writer replacing the staging file cannot
  * change what is submitted on its behalf.
  *
@@ -12,7 +12,7 @@ class TrustBundleCandidateStaging(private val candidatePersistence: TrustPersist
     @Synchronized fun stage(candidate: SignedTrustBundle) = candidatePersistence.write(candidate)
 
     @Synchronized
-    fun stageAndSubmit(store: LightTrustStore, candidate: SignedTrustBundle): TrustResult<TrustState> {
+    fun stageAndSubmit(store: TrustStore, candidate: SignedTrustBundle): TrustResult<TrustState> {
         try {
             stage(candidate)
         } catch (_: Exception) {
@@ -24,7 +24,7 @@ class TrustBundleCandidateStaging(private val candidatePersistence: TrustPersist
     @Synchronized fun candidate(): SignedTrustBundle? = candidatePersistence.read()
 
     @Synchronized
-    fun submit(store: LightTrustStore, expected: SignedTrustBundle): TrustResult<TrustState> {
+    fun submit(store: TrustStore, expected: SignedTrustBundle): TrustResult<TrustState> {
         val candidate =
             try {
                 candidatePersistence.read()

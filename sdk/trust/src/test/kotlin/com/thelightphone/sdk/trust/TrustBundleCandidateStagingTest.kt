@@ -67,6 +67,19 @@ class TrustBundleCandidateStagingTest {
     }
 
     @Test
+    fun `an unavailable store exposes no state and rejects a staged update`() {
+        val store: TrustStore = UnavailableTrustStore
+        val staging = TrustBundleCandidateStaging(Memory())
+        val candidate = fixture("valid")
+
+        assertEquals(
+            TrustResult.Failure(TrustFailure.Unavailable),
+            staging.stageAndSubmit(store, candidate),
+        )
+        assertNull(store.state())
+    }
+
+    @Test
     fun `rejected candidate leaves accepted state untouched`() {
         val accepted = Memory()
         val store = openStore(accepted)
@@ -153,16 +166,19 @@ class TrustBundleCandidateStagingTest {
     fun `failed staging write stops submission`() {
         val store = openStore()
         var readAttempted = false
-        val staging = TrustBundleCandidateStaging(object : TrustPersistence {
-            override fun read(): SignedTrustBundle? {
-                readAttempted = true
-                return null
-            }
+        val staging =
+            TrustBundleCandidateStaging(
+                object : TrustPersistence {
+                    override fun read(): SignedTrustBundle? {
+                        readAttempted = true
+                        return null
+                    }
 
-            override fun write(bundle: SignedTrustBundle) {
-                throw IOException("staging write failed")
-            }
-        })
+                    override fun write(bundle: SignedTrustBundle) {
+                        throw IOException("staging write failed")
+                    }
+                }
+            )
 
         assertEquals(
             TrustResult.Failure(TrustFailure.PersistenceFailed),

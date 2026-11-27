@@ -16,8 +16,12 @@ import com.thelightphone.lp3Keyboard.textentry.TextEntryProtocol
 import com.thelightphone.sdk.emulator.backup.DefaultBackupDependencyProvider
 import com.thelightphone.sdk.emulator.backup.dummyCloudBackupLeafView
 import com.thelightphone.sdk.emulator.http.EmulatorHttpServer
+import com.thelightphone.sdk.server.ClientFilterLevel
 import com.thelightphone.sdk.server.DefaultLightSdkServerSettings
 import com.thelightphone.sdk.server.LightSdkServer
+import com.thelightphone.sdk.server.LightSdkServerSettings
+import com.thelightphone.sdk.server.ToolEnforcementController
+import com.thelightphone.sdk.server.ToolTrustRuntime
 import com.thelightphone.sdk.server.backup.BackupPackageAllowList
 import com.thelightphone.sdk.server.backup.BackupScheduleSyncer
 import com.thelightphone.sdk.server.backup.DefaultBackupSettingsViewModel
@@ -25,8 +29,19 @@ import com.thelightphone.sdk.server.backup.DefaultObservableBackupPreferences
 import com.thelightphone.sdk.server.backup.InternalToolBackupSpec
 import com.thelightphone.sdk.server.backup.webDavBackupLeafView
 import com.thelightphone.sdk.server.toolmanager.developerModeDataView
+import com.thelightphone.sdk.server.toolmanager.getApkInboxSignaturesDirectory
+import com.thelightphone.sdk.server.toolmanager.readSigningKeyHash
 import com.thelightphone.sdk.shared.LightResult
 import com.thelightphone.sdk.shared.LightServiceMethod
+import com.thelightphone.sdk.trust.AdmissionStore
+import com.thelightphone.sdk.trust.FileAdmissionPersistence
+import com.thelightphone.sdk.trust.FileTrustPersistence
+import com.thelightphone.sdk.trust.LightTrustBundleVerifier
+import com.thelightphone.sdk.trust.LightTrustStore
+import com.thelightphone.sdk.trust.TrustBundleCandidateStaging
+import com.thelightphone.sdk.trust.TrustResult
+import com.thelightphone.sdk.trust.UnavailableTrustStore
+import com.thelightphone.sdk.trust.apksig.ApkSigStampVerifier
 import com.thelightphone.sdk.ui.LightModalManager
 import com.thelightphone.toolmanager.BranchView
 import com.thelightphone.toolmanager.DiscoveredToolsBranchProvider
@@ -34,12 +49,28 @@ import com.thelightphone.toolmanager.Logger
 import com.thelightphone.toolmanager.RootViewSpec
 import com.thelightphone.toolmanager.datatree.RootDataTree
 import com.thelightphone.toolmanager.datatree.StaticBranchProvider
+import java.io.File
+import java.util.Base64
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+// SHA-256 fingerprint of sdk/keys/lightsdk-dev.jks (alias: lightsdk-dev).
+internal const val LIGHTSDK_DEV_CERT_SHA256 =
+    "b9c33e29b0ccad2bff11acab55f65a3c517ef4bc92cd9c77785366fa353d5f28"
+
+// Base64 DER SubjectPublicKeyInfo of sdk/emulator/dev-keys/INSECURE-trust-bundle-public.pem.
+// Throwaway, emulator-only trust bundle key; see that directory's README.
+internal const val EMULATOR_DEV_TRUST_BUNDLE_PUBLIC_KEY =
+    "MCowBQYDK2VwAyEAzOvW4GDLmhLQuFHyo+r6xrvQGxyAyZgabdwOAg3PSBc="
+
+private val SIGNER_FINGERPRINT = Regex("[0-9a-f]{64}")
+
+internal fun canonicalSignerFingerprint(value: String): String? =
+    value.trim().lowercase().takeIf(SIGNER_FINGERPRINT::matches)
 
 private const val BACKUP_ROOT_PATH = "backup"
 
@@ -62,7 +93,26 @@ class EmulatorApplication : Application(), Configuration.Provider {
         DefaultObservableBackupPreferences(backupSharedPrefs)
     }
 
-    val settings by lazy { DefaultLightSdkServerSettings(this) }
+    private val emulatorPreferences by lazy { getSharedPreferences("emulator", MODE_PRIVATE) }
+
+    internal var enableToolTrustOnRestart: Boolean
+        get() = emulatorPreferences.getBoolean("enable_tool_trust", false)
+        set(value) {
+            emulatorPreferences.edit().putBoolean("enable_tool_trust", value).apply()
+        }
+
+    internal val toolTrustEnabled by lazy { enableToolTrustOnRestart }
+
+    val settings: LightSdkServerSettings by lazy {
+        val stored = DefaultLightSdkServerSettings(this)
+        object : LightSdkServerSettings by stored {
+            override var clientFilterLevel: ClientFilterLevel
+                get() = if (toolTrustEnabled) stored.clientFilterLevel else ClientFilterLevel.AllowAllApks
+                set(value) {
+                    stored.clientFilterLevel = value
+                }
+        }
+    }
 
     private val backupDependencyProvider by lazy {
         val cipher = LightSdkServer.getToolManagerKeyCipher()
@@ -70,6 +120,21 @@ class EmulatorApplication : Application(), Configuration.Provider {
     }
 
     private val backupPackageAllowList by lazy { BackupPackageAllowList(backupSharedPrefs) }
+
+    // SHA-256 signer certs that should always be treated as Light-signed for this emulator -
+    // the dev cert plus any hash a developer has dropped into the apk inbox signatures dir.
+    @Volatile private var validSignatures: List<String> = listOf(LIGHTSDK_DEV_CERT_SHA256)
+
+    private val trustStoreResult by lazy {
+        LightTrustStore.open(
+            verifier =
+                LightTrustBundleVerifier(
+                    listOf(Base64.getDecoder().decode(EMULATOR_DEV_TRUST_BUNDLE_PUBLIC_KEY))
+                ),
+            persistence = FileTrustPersistence(File(filesDir, "trust/bundle.dat").toPath()),
+            imagePins = emptySet(),
+        )
+    }
 
     val backupSettingsViewModel by lazy {
         object :
@@ -104,6 +169,8 @@ class EmulatorApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // Capture the process mode before any settings screen can change the saved preference.
+        val enableToolTrust = toolTrustEnabled
         val mollySocketUriString = BuildConfig.MOLLYSOCKET_URI
         with(LightSdkServer) {
             registerLockReceiver(MainActivity::class.java, settings)
@@ -122,6 +189,12 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 "$pushDomain/push/$token"
             }
             provideSdkSettings = { settings }
+            if (enableToolTrust) configureToolTrust()
+            onRevokeToolResources = { context, packageName ->
+                val uid = context.packageManager.getApplicationInfo(packageName, 0).uid
+                EmulatorLocationHelper.revokeUid(uid)
+            }
+            onRevokeToolUid = EmulatorLocationHelper::revokeUid
             permissionActivity = LightSdkPermissionActivity::class.java
             onDeviceKeyEvent = { _, request -> handleDeviceKeyEvent(request) }
             getKeyboardPackage = ::installedLp3Keyboard
@@ -138,8 +211,14 @@ class EmulatorApplication : Application(), Configuration.Provider {
             }
             rootToolManagerDataProvider = ::buildToolManagerRoot
             canBeUninstalledByToolManager = { true }
-            onApkUninstalled = { _installedToolsRefreshCount.value++ }
+            onApkUninstalled = {
+                updateValidSignatures()
+                notifyToolTrustChanged()
+                _installedToolsRefreshCount.value++
+            }
             onApkInstalled = {
+                updateValidSignatures()
+                notifyToolTrustChanged()
                 backupSettingsViewModel.refreshAllowList()
                 _installedToolsRefreshCount.value++
             }
@@ -165,14 +244,48 @@ class EmulatorApplication : Application(), Configuration.Provider {
 
             with(EmulatorLocationHelper) { initLocationHelper(this@EmulatorApplication) }
         }
+        updateValidSignatures()
+        if (enableToolTrust) {
+            ToolEnforcementController.start(this) { _installedToolsRefreshCount.value++ }
+        }
         EmulatorHttpServer(
-            context = this,
-            trustStore = null,
-            trustBundleCandidateStaging = LightSdkServer.provideTrustBundleCandidateStaging(this),
-        ).start()
+                context = this,
+                trustStore = LightSdkServer.trustStore,
+                trustBundleCandidateStaging =
+                    TrustBundleCandidateStaging(
+                        FileTrustPersistence(File(filesDir, "trust/bundle-candidate.dat").toPath())
+                    ),
+                onTrustChanged = LightSdkServer::notifyToolTrustChanged,
+            )
+            .start()
 
         val backupScheduleSyncer = BackupScheduleSyncer(this, backupObservablePreferences)
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch { backupScheduleSyncer.run() }
+    }
+
+    private fun configureToolTrust() {
+        val store = when (val result = trustStoreResult) {
+            is TrustResult.Success -> {
+                Log.i("LightEmulator", "Trust store opened: ${result.value.state()}")
+                result.value
+            }
+            is TrustResult.Failure -> {
+                Log.e("LightEmulator", "Trust store unavailable: ${result.reason}")
+                UnavailableTrustStore
+            }
+        }
+        LightSdkServer.trustStore = store
+        LightSdkServer.toolTrustRuntime =
+            ToolTrustRuntime(
+                verifier = ApkSigStampVerifier(),
+                trustState = store::state,
+                admissionStore =
+                    AdmissionStore(
+                        FileAdmissionPersistence(File(filesDir, "trust/admission.dat").toPath())
+                    ),
+                developerSignerBypass = { _, signer -> signer in validSignatures },
+                emulatorDevelopmentSigner = { it == LIGHTSDK_DEV_CERT_SHA256 },
+            )
     }
 
     override val workManagerConfiguration: Configuration
@@ -191,6 +304,17 @@ class EmulatorApplication : Application(), Configuration.Provider {
         } catch (e: PackageManager.NameNotFoundException) {
             null
         }
+
+    // refreshes validSignatures from the dev cert plus any signer hash a developer has dropped
+    // into the apk inbox signatures directory (see LightSdkServer.getApkInboxSignaturesDirectory).
+    private fun updateValidSignatures() {
+        val userAdded =
+            LightSdkServer.getApkInboxSignaturesDirectory(this)
+                .listFiles { file -> file.isFile }
+                ?.mapNotNull { it.readSigningKeyHash()?.let(::canonicalSignerFingerprint) }
+                .orEmpty()
+        validSignatures = listOf(LIGHTSDK_DEV_CERT_SHA256) + userAdded
+    }
 
     private val toolManagerLogger =
         object : Logger {
