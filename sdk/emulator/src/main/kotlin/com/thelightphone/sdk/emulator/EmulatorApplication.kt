@@ -16,8 +16,10 @@ import com.thelightphone.lp3Keyboard.textentry.TextEntryProtocol
 import com.thelightphone.sdk.emulator.backup.DefaultBackupDependencyProvider
 import com.thelightphone.sdk.emulator.backup.dummyCloudBackupLeafView
 import com.thelightphone.sdk.emulator.http.EmulatorHttpServer
+import com.thelightphone.sdk.server.ClientFilterLevel
 import com.thelightphone.sdk.server.DefaultLightSdkServerSettings
 import com.thelightphone.sdk.server.LightSdkServer
+import com.thelightphone.sdk.server.LightSdkServerSettings
 import com.thelightphone.sdk.server.ToolEnforcementController
 import com.thelightphone.sdk.server.ToolTrustRuntime
 import com.thelightphone.sdk.server.backup.BackupPackageAllowList
@@ -91,7 +93,26 @@ class EmulatorApplication : Application(), Configuration.Provider {
         DefaultObservableBackupPreferences(backupSharedPrefs)
     }
 
-    val settings by lazy { DefaultLightSdkServerSettings(this) }
+    private val emulatorPreferences by lazy { getSharedPreferences("emulator", MODE_PRIVATE) }
+
+    internal var enableToolTrustOnRestart: Boolean
+        get() = emulatorPreferences.getBoolean("enable_tool_trust", false)
+        set(value) {
+            emulatorPreferences.edit().putBoolean("enable_tool_trust", value).apply()
+        }
+
+    internal val toolTrustEnabled by lazy { enableToolTrustOnRestart }
+
+    val settings: LightSdkServerSettings by lazy {
+        val stored = DefaultLightSdkServerSettings(this)
+        object : LightSdkServerSettings by stored {
+            override var clientFilterLevel: ClientFilterLevel
+                get() = if (toolTrustEnabled) stored.clientFilterLevel else ClientFilterLevel.AllowAllApks
+                set(value) {
+                    stored.clientFilterLevel = value
+                }
+        }
+    }
 
     private val backupDependencyProvider by lazy {
         val cipher = LightSdkServer.getToolManagerKeyCipher()
@@ -148,6 +169,8 @@ class EmulatorApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // Capture the process mode before any settings screen can change the saved preference.
+        val enableToolTrust = toolTrustEnabled
         val mollySocketUriString = BuildConfig.MOLLYSOCKET_URI
         with(LightSdkServer) {
             registerLockReceiver(MainActivity::class.java, settings)
@@ -166,18 +189,7 @@ class EmulatorApplication : Application(), Configuration.Provider {
                 "$pushDomain/push/$token"
             }
             provideSdkSettings = { settings }
-            trustStore = (trustStoreResult as? TrustResult.Success)?.value ?: UnavailableTrustStore
-            toolTrustRuntime =
-                ToolTrustRuntime(
-                    verifier = ApkSigStampVerifier(),
-                    trustState = trustStore::state,
-                    admissionStore =
-                        AdmissionStore(
-                            FileAdmissionPersistence(File(filesDir, "trust/admission.dat").toPath())
-                        ),
-                    developerSignerBypass = { _, signer -> signer in validSignatures },
-                    emulatorDevelopmentSigner = { it == LIGHTSDK_DEV_CERT_SHA256 },
-                )
+            if (enableToolTrust) configureToolTrust()
             onRevokeToolResources = { context, packageName ->
                 val uid = context.packageManager.getApplicationInfo(packageName, 0).uid
                 EmulatorLocationHelper.revokeUid(uid)
@@ -233,13 +245,9 @@ class EmulatorApplication : Application(), Configuration.Provider {
             with(EmulatorLocationHelper) { initLocationHelper(this@EmulatorApplication) }
         }
         updateValidSignatures()
-        when (val result = trustStoreResult) {
-            is TrustResult.Success ->
-                Log.i("LightEmulator", "Trust store opened: ${result.value.state()}")
-            is TrustResult.Failure ->
-                Log.e("LightEmulator", "Trust store unavailable: ${result.reason}")
+        if (enableToolTrust) {
+            ToolEnforcementController.start(this) { _installedToolsRefreshCount.value++ }
         }
-        ToolEnforcementController.start(this) { _installedToolsRefreshCount.value++ }
         EmulatorHttpServer(
                 context = this,
                 trustStore = LightSdkServer.trustStore,
@@ -253,6 +261,31 @@ class EmulatorApplication : Application(), Configuration.Provider {
 
         val backupScheduleSyncer = BackupScheduleSyncer(this, backupObservablePreferences)
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch { backupScheduleSyncer.run() }
+    }
+
+    private fun configureToolTrust() {
+        val store = when (val result = trustStoreResult) {
+            is TrustResult.Success -> {
+                Log.i("LightEmulator", "Trust store opened: ${result.value.state()}")
+                result.value
+            }
+            is TrustResult.Failure -> {
+                Log.e("LightEmulator", "Trust store unavailable: ${result.reason}")
+                UnavailableTrustStore
+            }
+        }
+        LightSdkServer.trustStore = store
+        LightSdkServer.toolTrustRuntime =
+            ToolTrustRuntime(
+                verifier = ApkSigStampVerifier(),
+                trustState = store::state,
+                admissionStore =
+                    AdmissionStore(
+                        FileAdmissionPersistence(File(filesDir, "trust/admission.dat").toPath())
+                    ),
+                developerSignerBypass = { _, signer -> signer in validSignatures },
+                emulatorDevelopmentSigner = { it == LIGHTSDK_DEV_CERT_SHA256 },
+            )
     }
 
     override val workManagerConfiguration: Configuration

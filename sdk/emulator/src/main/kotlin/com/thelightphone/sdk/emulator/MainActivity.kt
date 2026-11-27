@@ -131,6 +131,7 @@ class MainActivity : ComponentActivity() {
             }
 
             is Nav.Settings -> {
+                val emulator = application as EmulatorApplication
                 val emulatorSettingsAudio = object : EmulatorSettingsAudio {
                     override fun setRingerVolume(normalized: Float) =
                         lightAudioManager.setRingerVolume(normalized)
@@ -142,6 +143,9 @@ class MainActivity : ComponentActivity() {
                     emulatorSettingsAudio,
                     navSnapshot,
                     backupSettingsViewModel,
+                    toolTrustEnabled = emulator.toolTrustEnabled,
+                    toolTrustOnRestart = emulator.enableToolTrustOnRestart,
+                    onToolTrustOnRestartChanged = { emulator.enableToolTrustOnRestart = it },
                 ) {
                     EmulatorNavController.navigateTo(Nav.Toolbox)
                 }

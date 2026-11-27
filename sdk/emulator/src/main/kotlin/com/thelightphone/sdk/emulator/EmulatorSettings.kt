@@ -7,12 +7,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.thelightphone.sdk.emulator.backup.BackupSettings
@@ -66,9 +68,13 @@ fun EmulatorSettings(
     emulatorSettingsAudio: EmulatorSettingsAudio,
     startingNav: Nav.Settings,
     backupSettingsViewModel: BackupSettingsViewModel,
+    toolTrustEnabled: Boolean = false,
+    toolTrustOnRestart: Boolean = toolTrustEnabled,
+    onToolTrustOnRestartChanged: (Boolean) -> Unit = {},
     onRootBackPressed: () -> Unit,
 ) {
     var nav by remember { mutableStateOf(startingNav.startingScreen) }
+    var trustOnRestart by remember(toolTrustOnRestart) { mutableStateOf(toolTrustOnRestart) }
     val subscreenBackPressed = startingNav.backButtonOverride ?: { nav = EmulatorSettingsNav.Root }
     val rowPadding = Modifier.padding(1f.gridUnitsAsDp())
     Surface(Modifier.fillMaxSize()) {
@@ -85,8 +91,30 @@ fun EmulatorSettings(
                         modifier = Modifier.padding(bottom = 1f.gridUnitsAsDp()),
                     )
                     Row(
+                        Modifier.fillMaxWidth().then(rowPadding),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            LightText("Enable tool trust", variant = LightTextVariant.Copy)
+                            LightText(
+                                if (trustOnRestart != toolTrustEnabled) "Restart emulator app to apply"
+                                else "Verify and enforce tool trust",
+                                variant = LightTextVariant.Superfine,
+                            )
+                        }
+                        Switch(
+                            checked = trustOnRestart,
+                            onCheckedChange = {
+                                trustOnRestart = it
+                                onToolTrustOnRestartChanged(it)
+                            },
+                        )
+                    }
+                    Row(
                         Modifier.fillMaxWidth()
-                            .clickable { nav = EmulatorSettingsNav.FilterLevel }
+                            .clickable(enabled = toolTrustEnabled) {
+                                nav = EmulatorSettingsNav.FilterLevel
+                            }
                             .then(rowPadding)
                     ) {
                         Column {
@@ -134,8 +162,23 @@ fun EmulatorSettings(
                 }
             }
 
-            EmulatorSettingsNav.FilterLevel ->
+            EmulatorSettingsNav.FilterLevel -> if (toolTrustEnabled) {
                 ClientFilterLevelSettings(settings, subscreenBackPressed)
+            } else {
+                Surface(Modifier.fillMaxSize()) {
+                    Column {
+                        LightTopBar(
+                            leftButton = LightIcon(icon = LightIcons.BACK, onClick = subscreenBackPressed),
+                            center = LightTopBarCenter.Text("Allowed Tools"),
+                        )
+                        LightText(
+                            "Enable tool trust in Settings to change which tools are allowed.",
+                            variant = LightTextVariant.Copy,
+                            modifier = rowPadding,
+                        )
+                    }
+                }
+            }
 
             EmulatorSettingsNav.ForceFocus ->
                 ForceFocusLevelSettings(settings, subscreenBackPressed)
