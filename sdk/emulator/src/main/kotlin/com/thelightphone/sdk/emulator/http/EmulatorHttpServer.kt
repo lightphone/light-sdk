@@ -244,8 +244,8 @@ class EmulatorHttpServer(
                 }
             }
 
-            // dev-only: push a signed trust bundle candidate straight into the emulator's
-            // LightTrustStore, bypassing any real transport (09b's HTTP path is not this).
+            // Dev-only endpoint that submits a signed trust bundle directly to the emulator's
+            // LightTrustStore.
             post("/trust/bundle") {
                 val store = trustStore
                 if (store == null) {
