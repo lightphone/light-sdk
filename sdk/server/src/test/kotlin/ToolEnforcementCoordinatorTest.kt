@@ -27,7 +27,10 @@ class ToolEnforcementCoordinatorTest {
         override fun disable(packageName: String) {
             events += "disable"
             if (failDisable) error("permission denied")
-            if (owned == null) owned = OwnedToolRestriction(packageName, 0, "owner")
+            if (owned == null) {
+                owned =
+                    OwnedToolRestriction(packageName, PackageEnabledSetting.Default, "owner")
+            }
         }
 
         override fun restrictionStillOwned(record: OwnedToolRestriction) =

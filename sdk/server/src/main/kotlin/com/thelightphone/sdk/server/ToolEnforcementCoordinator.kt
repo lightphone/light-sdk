@@ -7,7 +7,7 @@ import com.thelightphone.sdk.trust.ToolEvaluation
 
 data class OwnedToolRestriction(
     val packageName: String,
-    val priorEnabledState: Int,
+    val priorEnabledState: PackageEnabledSetting,
     val ownerToken: String,
     val installationFingerprint: InstallationFingerprint? = null,
     val applied: Boolean = false,

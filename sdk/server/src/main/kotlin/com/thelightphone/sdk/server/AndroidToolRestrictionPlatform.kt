@@ -35,15 +35,17 @@ class AndroidToolRestrictionPlatform(context: Context) : ToolRestrictionPlatform
         val app = requireNotNull(info.applicationInfo)
         require(app.splitSourceDirs.isNullOrEmpty()) { "Split APK binding is unsupported" }
         return ToolPackageState(
-            context.packageManager.getApplicationEnabledSetting(packageName),
+            PackageEnabledSetting.fromAndroid(
+                context.packageManager.getApplicationEnabledSetting(packageName),
+            ),
             InstallationFingerprint(app.sourceDir, info.firstInstallTime, info.lastUpdateTime),
         )
     }
 
-    override fun setEnabledState(packageName: String, enabledState: Int) {
+    override fun setEnabledState(packageName: String, enabledState: PackageEnabledSetting) {
         requireExternalTool(packageName)
         // Flags 0 retain Android's normal process-kill behavior when disabling.
-        context.packageManager.setApplicationEnabledSetting(packageName, enabledState, 0)
+        context.packageManager.setApplicationEnabledSetting(packageName, enabledState.androidValue, 0)
     }
 
     override fun stopProcesses(packageName: String) {
