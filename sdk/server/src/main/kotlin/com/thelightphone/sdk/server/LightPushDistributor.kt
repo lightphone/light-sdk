@@ -5,9 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 class LightPushDistributor : BroadcastReceiver() {
@@ -20,27 +23,39 @@ class LightPushDistributor : BroadcastReceiver() {
         private const val ACTION_MESSAGE_ACK = "org.unifiedpush.android.distributor.MESSAGE_ACK"
 
         private const val ACTION_NEW_ENDPOINT = "org.unifiedpush.android.connector.NEW_ENDPOINT"
-        private const val ACTION_REGISTRATION_FAILED = "org.unifiedpush.android.connector.REGISTRATION_FAILED"
+        private const val ACTION_REGISTRATION_FAILED =
+            "org.unifiedpush.android.connector.REGISTRATION_FAILED"
         private const val ACTION_UNREGISTERED = "org.unifiedpush.android.connector.UNREGISTERED"
         private const val ACTION_MESSAGE = "org.unifiedpush.android.connector.MESSAGE"
 
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+        private fun isAllowed(context: Context, packageName: String): Boolean =
+            LightSdkServer.isPackageAllowed(
+                LightSdkServer.provideSdkSettings(context).clientFilterLevel,
+                context,
+                packageName,
+            )
+
         fun sendMessage(context: Context, packageName: String, token: String, message: ByteArray) {
-            val intent = Intent(ACTION_MESSAGE).apply {
-                setPackage(packageName)
-                putExtra("token", token)
-                putExtra("bytesMessage", message)
-            }
+            if (!isAllowed(context, packageName)) return
+            val intent =
+                Intent(ACTION_MESSAGE).apply {
+                    setPackage(packageName)
+                    putExtra("token", token)
+                    putExtra("bytesMessage", message)
+                }
             context.sendBroadcast(intent)
         }
 
         fun sendLocalMessage(context: Context, packageName: String, message: ByteArray) {
             scope.launch {
-                val registration = LightPushRegistry.findLocal(context, packageName) ?: run {
-                    Log.w(TAG, "No local channel registration for given package")
-                    return@launch
-                }
+                val registration =
+                    LightPushRegistry.findLocal(context, packageName)
+                        ?: run {
+                            Log.w(TAG, "No local channel registration for given package")
+                            return@launch
+                        }
                 sendMessage(context, packageName, registration.token, message)
             }
         }
@@ -55,7 +70,9 @@ class LightPushDistributor : BroadcastReceiver() {
         when (intent.action) {
             ACTION_REGISTER -> runAsync { handleRegister(context, intent, callerPackage) }
             ACTION_UNREGISTER -> runAsync { handleUnregister(context, intent, callerPackage) }
-            ACTION_MESSAGE_ACK -> { /* no-op for now */ }
+            ACTION_MESSAGE_ACK -> {
+                /* no-op for now */
+            }
             else -> Log.w(TAG, "Unknown action: ${intent.action}")
         }
     }
@@ -65,10 +82,14 @@ class LightPushDistributor : BroadcastReceiver() {
     private fun resolveCallerPackage(intent: Intent): String? {
         // API 34+: OS-verified sender package, set by the broadcasting framework.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            sentFromPackage?.let { return it }
+            sentFromPackage?.let {
+                return it
+            }
         }
         // Fallback for older OS versions: PendingIntent creator
-        return intent.getParcelableExtra("pi", android.app.PendingIntent::class.java)?.creatorPackage
+        return intent
+            .getParcelableExtra("pi", android.app.PendingIntent::class.java)
+            ?.creatorPackage
     }
 
     private fun runAsync(block: suspend () -> Unit) {
@@ -98,6 +119,23 @@ class LightPushDistributor : BroadcastReceiver() {
             return
         }
 
+        try {
+            LightSdkServer.toolResources.withResource(callerPackage) {
+                if (!isAllowed(context, callerPackage))
+                    throw SecurityException("Push registration refused")
+                registerWhileAllowed(context, intent, callerPackage, token)
+            }
+        } catch (_: SecurityException) {
+            sendRegistrationFailed(context, callerPackage, token)
+        }
+    }
+
+    private suspend fun registerWhileAllowed(
+        context: Context,
+        intent: Intent,
+        callerPackage: String,
+        token: String,
+    ) {
         val channel = intent.getStringExtra("message")
         val vapid = intent.getStringExtra("vapid")
 
@@ -112,10 +150,17 @@ class LightPushDistributor : BroadcastReceiver() {
         }
 
         // TODO move everything here into a worker?
-        val endpoint = existing?.endpoint ?: runCatching {
-            LightSdkServer.pushEndpointFetcher.invoke(callerPackage, token, vapid)
-        }.getOrNull()
+        val endpoint =
+            existing?.endpoint
+                ?: try {
+                    LightSdkServer.pushEndpointFetcher.invoke(callerPackage, token, vapid)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
 
+        currentCoroutineContext().ensureActive()
         if (endpoint == null) {
             Log.e(TAG, "Failed to fetch endpoint for token=${token.forLog()}")
             sendRegistrationFailed(context, callerPackage, token)
@@ -129,20 +174,22 @@ class LightPushDistributor : BroadcastReceiver() {
             Log.i(TAG, "Re-registered with token ${token.forLog()} (channel=$channel)")
         }
 
-        val response = Intent(ACTION_NEW_ENDPOINT).apply {
-            setPackage(callerPackage)
-            putExtra("token", token)
-            putExtra("endpoint", endpoint)
-        }
+        val response =
+            Intent(ACTION_NEW_ENDPOINT).apply {
+                setPackage(callerPackage)
+                putExtra("token", token)
+                putExtra("endpoint", endpoint)
+            }
         context.sendBroadcast(response)
     }
 
     private fun sendRegistrationFailed(context: Context, packageName: String?, token: String?) {
         if (packageName == null) return
-        val response = Intent(ACTION_REGISTRATION_FAILED).apply {
-            setPackage(packageName)
-            if (token != null) putExtra("token", token)
-        }
+        val response =
+            Intent(ACTION_REGISTRATION_FAILED).apply {
+                setPackage(packageName)
+                if (token != null) putExtra("token", token)
+            }
         context.sendBroadcast(response)
     }
 
@@ -165,18 +212,21 @@ class LightPushDistributor : BroadcastReceiver() {
         }
 
         if (registration.packageName != callerPackage) {
-            Log.w(TAG, "Unregister rejected: token ${token.forLog()} does not belong to caller; dropping")
+            Log.w(
+                TAG,
+                "Unregister rejected: token ${token.forLog()} does not belong to caller; dropping",
+            )
             return
         }
 
         LightPushRegistry.remove(context, token)
         Log.i(TAG, "Unregistered token ${token.forLog()}")
 
-        val response = Intent(ACTION_UNREGISTERED).apply {
-            setPackage(callerPackage)
-            putExtra("token", token)
-        }
+        val response =
+            Intent(ACTION_UNREGISTERED).apply {
+                setPackage(callerPackage)
+                putExtra("token", token)
+            }
         context.sendBroadcast(response)
     }
-
 }
