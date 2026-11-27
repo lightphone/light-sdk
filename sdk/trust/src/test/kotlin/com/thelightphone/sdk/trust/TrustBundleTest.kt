@@ -1,5 +1,7 @@
 package com.thelightphone.sdk.trust
 
+import java.io.IOException
+import java.nio.file.Files
 import java.security.KeyFactory
 import java.security.Signature
 import java.security.spec.PKCS8EncodedKeySpec
@@ -350,6 +352,40 @@ class TrustBundleTest {
         memory.fail = false
         success(store.accept(next))
         assertEquals(43, store.state().version)
+    }
+
+    @Test
+    fun `a post-replacement failure keeps the live and reopened version floors aligned`() {
+        val directory = Files.createTempDirectory("trust-durability-test")
+        val path = directory.resolve("bundle.dat")
+        val disk = FileTrustPersistence(path)
+        val old = signed(validText().replace("\"version\": 42", "\"version\": 41"))
+        val next = fixture("valid")
+        try {
+            disk.write(old)
+            val persistence = object : TrustPersistence by disk {
+                override fun write(bundle: SignedTrustBundle) {
+                    disk.write(bundle)
+                    throw TrustWriteDurabilityUnknown(IOException("dir sync failed"))
+                }
+            }
+            val store = success(LightTrustStore.open(verifier(), persistence, emptySet()))
+
+            assertEquals(TrustFailure.PersistenceDurabilityUnknown(42), failure(store.accept(next)))
+
+            val reopened = success(LightTrustStore.open(verifier(), disk, emptySet()))
+            assertEquals(42L, reopened.state().version)
+            assertEquals(reopened.state(), store.state())
+            assertEquals(TrustFailure.VersionNotNewer(41, 42), failure(store.accept(old)))
+
+            disk.write(old)
+            val opening = LightTrustStore.open(verifier(), persistence, emptySet(), imageBundle = next)
+            assertEquals(TrustFailure.PersistenceDurabilityUnknown(42), failure(opening))
+            assertEquals(reopened.state(), success(LightTrustStore.open(verifier(), disk, emptySet())).state())
+        } finally {
+            Files.deleteIfExists(path)
+            Files.deleteIfExists(directory)
+        }
     }
 
     @Test
